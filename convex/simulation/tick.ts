@@ -86,6 +86,8 @@ function buildCitizenPrompt(agent: AgentDoc, city: CityStateDoc, nearbyActions: 
   const plotStatus = plotBuildingCount === 0
     ? "empty land"
     : `${plotBuildingCount} building${plotBuildingCount > 1 ? "s" : ""} (${slotsLeft} slots free)`;
+  const isLive = city.simMode === "live";
+  const buildCap = isLive ? 12 : 4;
 
   return `You are ${agent.name}, a citizen of KingdomCity. You think for yourself.
 
@@ -103,11 +105,11 @@ The city today:
 - Treasury: $${city.treasury}, Happiness: ${city.happiness}, Crime: ${city.crimeRate}
 - Tax rates: residential ${Math.round(city.taxRates.residential * 100)}%, commercial ${Math.round(city.taxRates.commercial * 100)}%, industrial ${Math.round(city.taxRates.industrial * 100)}%
 - Mayor's latest decree: "${city.activeDecree?.title ?? "none"}"
-- Builds in progress: ${city.activeBuildCount}/4${city.activeBuildCount >= 4 ? " — FULL! No new builds can start until current ones finish. Building takes a LONG time." : ""}
+- Builds in progress: ${city.activeBuildCount}/${buildCap}${city.activeBuildCount >= buildCap ? " — FULL! No new builds can start until current ones finish." : ""}
 - Recent neighbor activity: "${nearbyActions}"
 
 Speak your mind. Be authentic. You can:
-- REQUEST_BUILD: ask the mayor to approve a building (describe what + why)${city.activeBuildCount >= 4 ? "\n  ⚠️ Building capacity is FULL (4/4). DO NOT request a build right now — it will be denied. Do something else instead." : slotsLeft <= 0 ? "\n  ⚠️ Your plot is FULL (8/8 buildings). You cannot build more." : `\n  You have ${slotsLeft} open slot${slotsLeft > 1 ? "s" : ""} on your plot. Think about what would complement your existing buildings!`}
+- REQUEST_BUILD: ask the mayor to approve a building (describe what + why)${city.activeBuildCount >= buildCap ? `\n  ⚠️ Building capacity is FULL (${buildCap}/${buildCap}). DO NOT request a build right now — it will be denied.` : slotsLeft <= 0 ? "\n  ⚠️ Your plot is FULL (8/8 buildings). You cannot build more." : `\n  You have ${slotsLeft} open slot${slotsLeft > 1 ? "s" : ""} on your plot.${isLive ? " The city is BOOMING — now is the perfect time to build! Think big!" : " Think about what would complement your existing buildings!"}`}
 - PROTEST: publicly voice discontent (say why)
 - PETITION: formally ask the mayor to change something
 - PRAISE: commend something good
@@ -167,7 +169,9 @@ function buildMayorPrompt(
   petitions: string,
   buildRequests: string
 ): string {
-  const slotsAvailable = Math.max(0, 4 - city.activeBuildCount);
+  const isLive = city.simMode === "live";
+  const buildCap = isLive ? 12 : 4;
+  const slotsAvailable = Math.max(0, buildCap - city.activeBuildCount);
   const treasuryWarning = city.treasury < 2000
     ? `\n⚠️ TREASURY CRITICAL: Only $${city.treasury} left! Treasury CANNOT go below 0. If expenses exceed income, emergency austerity kicks in. Consider raising taxes or cutting budget.`
     : "";
@@ -179,8 +183,7 @@ City state:
 - Treasury: $${city.treasury} (income: $${income}/tick, expenses: $${expenses}/tick, net: $${income - expenses}/tick)
 - Happiness: ${city.happiness}/100, Crime: ${city.crimeRate}/100, Pollution: ${city.pollutionLevel}/100
 - Approval rating: ${city.approvalRating}/100
-- Builds in progress: ${city.activeBuildCount}/4 — ${slotsAvailable} slots available
-  IMPORTANT: Each build takes a LONG time (1-3 minutes). Build slots are precious.${city.activeBuildCount >= 4 ? "\n  🚫 ALL BUILD SLOTS FULL. You MUST deny all build requests this tick." : ""}
+- Builds in progress: ${city.activeBuildCount}/${buildCap} — ${slotsAvailable} slots available${city.activeBuildCount >= buildCap ? "\n  🚫 ALL BUILD SLOTS FULL. You MUST deny all build requests this tick." : isLive ? "\n  🏗️ The city is in GROWTH MODE! Approve as many builds as possible — fill those slots!" : "\n  Each build takes 1-3 minutes. Build slots are precious. Be selective."}
   Think strategically: what does the city NEED most? Revenue buildings (commercial, industrial, luxury) or population/happiness (residential, civic, entertainment)?
   ECONOMICS: Buildings generate base income automatically. Taxes add citizen revenue on top. But maintenance grows QUADRATICALLY — more buildings = exponentially higher costs. You MUST balance growth with fiscal discipline.
 - Current tax rates: res ${Math.round(city.taxRates.residential * 100)}%, com ${Math.round(city.taxRates.commercial * 100)}%, ind ${Math.round(city.taxRates.industrial * 100)}%, lux ${Math.round(city.taxRates.luxury * 100)}%
@@ -196,7 +199,7 @@ Pending build requests:
 ${buildRequests || "None."}
 
 You must decide:
-1. APPROVE or DENY each build request (you have ${slotsAvailable} slots available — be selective! Prioritize what the city needs most)
+1. APPROVE or DENY each build request (you have ${slotsAvailable} slots available${isLive ? " — approve generously! The city needs rapid growth!" : " — be selective! Prioritize what the city needs most"})
 2. Optionally adjust tax rates (small increments, ±0.02 max per tick) — you NEED revenue from buildings!
 3. Optionally adjust budget allocation
 4. Optionally issue a decree (temporary policy, 5-15 ticks)
@@ -245,13 +248,15 @@ export async function callMayor(
   try {
     const parsed = JSON.parse(extractJSON(text)) as MayorDecision;
 
-    // HARD CAP: enforce 4-build limit in code
+    // HARD CAP: enforce build limit in code
+    const isLiveMode = city.simMode === "live";
+    const cap = isLiveMode ? 12 : 4;
     if (Array.isArray(parsed.build_approvals)) {
-      let remainingSlots = 4 - city.activeBuildCount;
+      let remainingSlots = cap - city.activeBuildCount;
       for (const approval of parsed.build_approvals) {
         if (remainingSlots <= 0) {
           approval.approved = false;
-          approval.reason = "Build queue full (4/4)";
+          approval.reason = `Build queue full (${cap}/${cap})`;
         } else if (approval.approved) {
           remainingSlots--;
         }
@@ -419,14 +424,14 @@ export const run = internalAction({
       0, 100
     );
 
-    // Step 3: Citizen actions (~10 per tick via activity roll)
+    // Step 3: Citizen actions
     const citizens = agents.filter((a) => a.role === "citizen" && a.isActive);
     const isLive = city.simMode === "live";
-    const activeRate = isLive ? 0.4 : 0.25;
-    const activeCap = isLive ? 16 : 12;
-    const activeThisTick = citizens
-      .filter(() => Math.random() < activeRate)
-      .slice(0, activeCap);
+    const liveBuildCap = 12;
+    // Live mode: ALL citizens active. Overnight: ~25% sample, cap 12.
+    const activeThisTick = isLive
+      ? citizens
+      : citizens.filter(() => Math.random() < 0.25).slice(0, 12);
 
     const citizenResults: Array<{ agent: AgentDoc; action: CitizenAction }> = [];
     const buildRequests: Array<{ agent: AgentDoc; action: CitizenAction }> = [];
@@ -466,7 +471,7 @@ export const run = internalAction({
             // Plot full — convert to chat
             result.action.action = "CHAT";
             result.action.message = result.action.message || "My plot is fully developed!";
-          } else if (city.activeBuildCount + buildRequests.length < 4) {
+          } else if (city.activeBuildCount + buildRequests.length < (isLive ? liveBuildCap : 4)) {
             buildRequests.push(result);
           } else {
             // Capacity full — convert to a chat about waiting
@@ -521,7 +526,7 @@ export const run = internalAction({
     // Apply build approvals — fire actual geometry pipeline
     let newBuildsApproved = 0;
     for (const approval of mayorDecision.build_approvals) {
-      if (approval.approved && city.activeBuildCount + newBuildsApproved < 4) {
+      if (approval.approved && city.activeBuildCount + newBuildsApproved < (isLive ? 12 : 4)) {
         const req = buildRequests.find((r) => r.agent.plotIndex === approval.agentPlot);
         if (req && req.action.build_description) {
           console.log(`[tick ${tickNumber}] BUILD APPROVED: ${req.agent.name} → "${req.action.build_description}"`);
