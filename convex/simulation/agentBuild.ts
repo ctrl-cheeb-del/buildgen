@@ -13,6 +13,43 @@ import { Mistral } from "@mistralai/mistralai";
 import { withRetry } from "./mistral-retry";
 
 /**
+ * Call Bedrock Claude for text-only prompts (no images).
+ * Reuses the same BedrockRuntimeClient + InvokeModelCommand pattern as the
+ * image-based call at line ~203, but without image content blocks.
+ */
+async function callBedrockText(
+  prompt: string,
+  maxTokens = 8192,
+): Promise<string> {
+  const client = new BedrockRuntimeClient({
+    region: process.env.AWS_DEFAULT_REGION || "us-west-2",
+    credentials: {
+      accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
+      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+      sessionToken: process.env.AWS_SESSION_TOKEN,
+    },
+  });
+
+  const body = JSON.stringify({
+    anthropic_version: "bedrock-2023-05-31",
+    max_tokens: maxTokens,
+    messages: [{ role: "user", content: [{ type: "text", text: prompt }] }],
+  });
+
+  const command = new InvokeModelCommand({
+    modelId: "us.anthropic.claude-opus-4-6-v1",
+    contentType: "application/json",
+    body: new TextEncoder().encode(body),
+  });
+
+  const response = await client.send(command);
+  const result = JSON.parse(new TextDecoder().decode(response.body));
+  const text: string | undefined = result.content?.[0]?.text;
+  if (!text) throw new Error("Bedrock Claude Opus 4.6 returned no content");
+  return text;
+}
+
+/**
  * Agent building action: reuses the existing pipeline.generateBuilding logic
  * but bypasses auth (agents aren't real users) and updates simulation state.
  */
@@ -274,7 +311,8 @@ Generate the code now for "${buildDescription}".`;
 });
 
 /**
- * Evaluate generated code quality with Mistral Small, improve with Mistral Large if needed.
+ * Evaluate generated code quality with Mistral Small (cheap scoring),
+ * improve with Bedrock Claude Opus 4.6 if needed.
  * Returns the best code after up to 2 improvement iterations.
  */
 async function evaluateAndImprove(
@@ -296,8 +334,8 @@ async function evaluateAndImprove(
       return currentCode;
     }
 
-    console.log(`[agentBuild] Score ${score} < 6.0, improving...`);
-    currentCode = await improveAgentBuildCode(mistral, currentCode, buildDescription, score);
+    console.log(`[agentBuild] Score ${score} < 6.0, improving via Bedrock Claude Opus 4.6...`);
+    currentCode = await improveAgentBuildCode(currentCode, buildDescription, score);
   }
 
   return currentCode;
@@ -346,7 +384,6 @@ Reply with ONLY a JSON object: {"score": N, "reason": "brief explanation"}`;
 }
 
 async function improveAgentBuildCode(
-  mistral: Mistral,
   code: string,
   buildDescription: string,
   currentScore: number,
@@ -367,15 +404,7 @@ Return ONLY the improved JavaScript function body (no markdown fences, no explan
 The code must create a THREE.Group and return it.`;
 
   try {
-    const response = await mistral.chat.complete({
-      model: "mistral-large-latest",
-      messages: [{ role: "user", content: prompt }],
-      maxTokens: 4000,
-      temperature: 0.5,
-    });
-
-    const text = response?.choices?.[0]?.message?.content;
-    if (!text || typeof text !== "string") return code;
+    const text = await callBedrockText(prompt, 8192);
 
     const codeMatch = text.match(/```(?:javascript|js)?\s*\n([\s\S]*?)```/);
     const improved = codeMatch ? codeMatch[1].trim() : text.trim();
@@ -387,16 +416,17 @@ The code must create a THREE.Group and return it.`;
       return code;
     }
 
-    console.log(`[agentBuild] Improved code (${improved.length} chars)`);
+    console.log(`[agentBuild] Improved code via Bedrock (${improved.length} chars)`);
     return improved;
-  } catch {
+  } catch (err) {
+    console.warn(`[agentBuild] Bedrock improve failed, keeping original:`, err);
     return code;
   }
 }
 
 /**
  * Takes existing procedural geometry code and adapts it for a new building description
- * using a lightweight LLM call (Sonnet instead of Opus).
+ * using Bedrock Claude Opus 4.6 (text-only, no images needed).
  */
 async function adaptExistingCode(
   proceduralCode: string,
@@ -420,30 +450,7 @@ Existing code:
 ${proceduralCode}
 \`\`\``;
 
-  const mistral = new Mistral({ apiKey: process.env.MISTRAL_API_KEY });
-
-  // Retry once on timeout
-  let text: string | undefined;
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      const response = await mistral.chat.complete({
-        model: "mistral-large-latest",
-        messages: [{ role: "user", content: adaptPrompt }],
-        maxTokens: 4000,
-      });
-      text = response?.choices?.[0]?.message?.content as string | undefined;
-      if (text) break;
-    } catch (err) {
-      if (attempt === 0) {
-        console.warn(`[agentBuild] adaptExistingCode attempt ${attempt + 1} failed, retrying...`);
-        continue;
-      }
-      throw err;
-    }
-  }
-
-  if (!text || typeof text !== "string")
-    throw new Error("Mistral returned no content for code adaptation");
+  const text = await callBedrockText(adaptPrompt, 8192);
 
   // Extract code — handle both fenced and raw responses
   const codeMatch = text.match(/```(?:javascript|js)?\s*\n([\s\S]*?)```/);
@@ -456,6 +463,6 @@ ${proceduralCode}
     return proceduralCode;
   }
 
-  console.log(`[agentBuild] Adapted code (${code.length} chars)`);
+  console.log(`[agentBuild] Adapted code via Bedrock (${code.length} chars)`);
   return code;
 }

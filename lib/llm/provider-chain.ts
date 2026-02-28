@@ -1,4 +1,3 @@
-import { Mistral } from "@mistralai/mistralai";
 import {
   BedrockRuntimeClient,
   InvokeModelCommand,
@@ -6,14 +5,6 @@ import {
   type ContentBlock,
   type Message,
 } from "@aws-sdk/client-bedrock-runtime";
-
-let _mistral: Mistral | null = null;
-function getMistral(): Mistral {
-  if (!_mistral) {
-    _mistral = new Mistral({ apiKey: process.env.MISTRAL_API_KEY });
-  }
-  return _mistral;
-}
 
 let _bedrock: BedrockRuntimeClient | null = null;
 function getBedrock(): BedrockRuntimeClient {
@@ -171,30 +162,6 @@ export const providers: Provider[] = [
     name: "OpenRouter (Claude Opus 4.6)",
     call: (prompt, imageUrls) =>
       callOpenRouter("anthropic/claude-opus-4-6", prompt, imageUrls),
-  },
-  {
-    name: "Mistral (direct)",
-    call: async (prompt, imageUrls) => {
-      const imageContent = imageUrls.map((url) => ({
-        type: "image_url" as const,
-        imageUrl: url,
-      }));
-
-      const response = await getMistral().chat.complete({
-        model: "mistral-large-latest",
-        messages: [
-          {
-            role: "user",
-            content: [...imageContent, { type: "text" as const, text: prompt }],
-          },
-        ],
-      });
-
-      const text = response?.choices?.[0]?.message?.content;
-      if (!text || typeof text !== "string")
-        throw new Error("Mistral returned no content");
-      return text;
-    },
   },
   {
     name: "OpenRouter (Mistral Large)",
