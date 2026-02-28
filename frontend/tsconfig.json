@@ -8,6 +8,7 @@
     ],
     "allowJs": true,
     "skipLibCheck": true,
+    "types": ["node", "react", "react-dom", "three", "webxr"],
     "strict": true,
     "noEmit": true,
     "esModuleInterop": true,
@@ -17,7 +18,6 @@
     "isolatedModules": true,
     "jsx": "react-jsx",
     "incremental": true,
-    "types": ["react", "react-dom", "node", "three"],
     "plugins": [
       {
         "name": "next"
