@@ -62,6 +62,7 @@ export function useIteration() {
   const pauseRef = useRef(false);
   const isRunningRef = useRef(false);
   const maxIterRef = useRef(3000);
+  const abortRef = useRef<AbortController | null>(null);
   const updateBuildingCode = useMutation(api.buildings.updateProceduralCode);
 
   const setMaxIterations = useCallback((n: number) => {
@@ -76,6 +77,7 @@ export function useIteration() {
       isRunningRef.current = true;
       stopRef.current = false;
       pauseRef.current = false;
+      abortRef.current = new AbortController();
 
       const store = usePipelineStore.getState();
       store.setActive(true);
@@ -137,6 +139,7 @@ export function useIteration() {
                 renderScreenshots: screenshots,
                 currentCode: code,
               }),
+              signal: abortRef.current?.signal,
             });
 
             if (!stepRes.ok) {
@@ -191,14 +194,23 @@ export function useIteration() {
 
             store.setNodeStatus("improve", "done");
 
+            // Check stop before writing to Convex (building may have been deleted)
+            if (stopRef.current) break;
+
             // Step 4: Update building in Convex
             setState((prev) => ({ ...prev, currentStep: "updating" }));
             store.setNodeStatus("update", "active", "Saving to map...");
 
-            await updateBuildingCode({
-              buildingId: opts.buildingId as Id<"buildings">,
-              proceduralCode: newCode,
-            });
+            try {
+              await updateBuildingCode({
+                buildingId: opts.buildingId as Id<"buildings">,
+                proceduralCode: newCode,
+              });
+            } catch (updateErr) {
+              // Building may have been deleted — don't treat as fatal
+              if (stopRef.current) break;
+              throw updateErr;
+            }
 
             store.setNodeStatus("update", "done");
 
@@ -232,10 +244,12 @@ export function useIteration() {
               );
               code = best.code;
 
-              await updateBuildingCode({
-                buildingId: opts.buildingId as Id<"buildings">,
-                proceduralCode: best.code,
-              });
+              if (!stopRef.current) {
+                await updateBuildingCode({
+                  buildingId: opts.buildingId as Id<"buildings">,
+                  proceduralCode: best.code,
+                });
+              }
 
               setState((prev) => ({ ...prev, currentCode: best.code }));
               break;
@@ -247,6 +261,10 @@ export function useIteration() {
               store.setPaused(true);
             }
           } catch (err) {
+            // AbortError means user clicked stop — not a real error
+            if (err instanceof DOMException && err.name === "AbortError") {
+              break;
+            }
             const msg = err instanceof Error ? err.message : String(err);
             setState((prev) => ({ ...prev, error: msg }));
             store.setError(msg);
@@ -256,11 +274,16 @@ export function useIteration() {
           }
         }
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        setState((prev) => ({ ...prev, error: msg }));
-        usePipelineStore.getState().setError(msg);
+        if (err instanceof DOMException && err.name === "AbortError") {
+          // User stopped — not an error
+        } else {
+          const msg = err instanceof Error ? err.message : String(err);
+          setState((prev) => ({ ...prev, error: msg }));
+          usePipelineStore.getState().setError(msg);
+        }
       } finally {
         isRunningRef.current = false;
+        abortRef.current = null;
         usePipelineStore.getState().setActive(false);
         setState((prev) => ({
           ...prev,
@@ -275,6 +298,9 @@ export function useIteration() {
   const stop = useCallback(() => {
     stopRef.current = true;
     pauseRef.current = false;
+    // Abort any in-flight fetch immediately
+    abortRef.current?.abort();
+    abortRef.current = null;
     usePipelineStore.getState().setPaused(false);
   }, []);
 

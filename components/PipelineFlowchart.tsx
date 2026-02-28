@@ -635,8 +635,8 @@ export default function PipelineFlowchart({
           </svg>
         </div>
 
-        {/* Inline controls when active + expanded */}
-        {isActive && !isMinimized && (
+        {/* Inline controls when active (always visible, even minimized) */}
+        {isActive && (
           <div className="flex items-center gap-0.5 animate-fade-in">
             <button
               onClick={onTogglePause}
