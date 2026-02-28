@@ -2,7 +2,9 @@ import Replicate from "replicate";
 import sharp from "sharp";
 import type { MultiViewImages } from "./types";
 
-const replicate = new Replicate();
+const replicate = new Replicate({
+  auth: process.env.REPLICATE_API_TOKEN,
+});
 
 /**
  * Generate a 2x2 grid of building elevation views using Replicate,
@@ -32,7 +34,8 @@ Each view should:
     input: {
       prompt,
       aspect_ratio: "1:1",
-      num_outputs: 1,
+      resolution: "2K",
+      output_format: "png",
     },
   });
 
