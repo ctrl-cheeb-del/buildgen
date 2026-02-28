@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import mapboxgl from "mapbox-gl";
+import { buildGroundPlanes, disposeGroundPlanes } from "./ground-planes";
 
 /**
  * Three.js custom layer for Mapbox GL JS.
@@ -15,6 +16,7 @@ export class ThreeJSMapboxLayer implements mapboxgl.CustomLayerInterface {
   private scene!: THREE.Scene;
   private renderer!: THREE.WebGLRenderer;
   private map!: mapboxgl.Map;
+  private groundGroup: THREE.Group | null = null;
 
   private modelOrigin: [number, number];
   private modelTransform!: {
@@ -55,17 +57,25 @@ export class ThreeJSMapboxLayer implements mapboxgl.CustomLayerInterface {
     this.camera = new THREE.Camera();
     this.scene = new THREE.Scene();
 
-    // Lighting
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+    // Lighting — stronger to compensate for lack of environment maps in shared context
+    const ambientLight = new THREE.AmbientLight(0xffffff, 1.0);
     this.scene.add(ambientLight);
 
-    const directionalLight1 = new THREE.DirectionalLight(0xffffff, 0.8);
+    const directionalLight1 = new THREE.DirectionalLight(0xffffff, 1.2);
     directionalLight1.position.set(100, 200, 100);
     this.scene.add(directionalLight1);
 
-    const directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.3);
+    const directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.5);
     directionalLight2.position.set(-100, 150, -50);
     this.scene.add(directionalLight2);
+
+    const directionalLight3 = new THREE.DirectionalLight(0xffffff, 0.3);
+    directionalLight3.position.set(0, -100, 100);
+    this.scene.add(directionalLight3);
+
+    // Textured ground planes (roads, pavements, plots)
+    this.groundGroup = buildGroundPlanes();
+    this.scene.add(this.groundGroup);
 
     // Renderer: reuse Mapbox's GL context
     this.renderer = new THREE.WebGLRenderer({
@@ -103,10 +113,19 @@ export class ThreeJSMapboxLayer implements mapboxgl.CustomLayerInterface {
       .multiply(modelMatrix);
 
     this.renderer.resetState();
+
+    // Fix GL state for shared Mapbox context — ensure depth test works correctly
+    gl.enable(gl.DEPTH_TEST);
+    gl.depthFunc(gl.LEQUAL);
+
     this.renderer.render(this.scene, this.camera);
   }
 
   onRemove() {
+    if (this.groundGroup) {
+      disposeGroundPlanes(this.groundGroup);
+      this.groundGroup = null;
+    }
     this.scene.traverse((object) => {
       if (object instanceof THREE.Mesh) {
         object.geometry.dispose();
@@ -122,6 +141,19 @@ export class ThreeJSMapboxLayer implements mapboxgl.CustomLayerInterface {
   }
 
   addGroup(group: THREE.Group) {
+    // Force DoubleSide on all materials — the negative Y scale in the model
+    // matrix inverts triangle winding, which culls front faces by default.
+    group.traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        if (Array.isArray(child.material)) {
+          child.material.forEach((m) => {
+            m.side = THREE.DoubleSide;
+          });
+        } else if (child.material) {
+          child.material.side = THREE.DoubleSide;
+        }
+      }
+    });
     this.scene.add(group);
     this.map?.triggerRepaint();
   }

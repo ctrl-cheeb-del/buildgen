@@ -37,14 +37,24 @@ export async function loadGLB(url: string): Promise<THREE.Group> {
   gltf.scene.position.z -= center.z;
   gltf.scene.position.y -= newBox.min.y;
 
-  // Apply a default material if the model has none
+  // Ensure all meshes have materials with DoubleSide rendering
   gltf.scene.traverse((child) => {
-    if (child instanceof THREE.Mesh && !child.material) {
-      child.material = new THREE.MeshPhysicalMaterial({
-        color: 0xcccccc,
-        roughness: 0.7,
-        metalness: 0.1,
-      });
+    if (child instanceof THREE.Mesh) {
+      if (!child.material) {
+        child.material = new THREE.MeshStandardMaterial({
+          color: 0xcccccc,
+          roughness: 0.7,
+          metalness: 0.1,
+          side: THREE.DoubleSide,
+        });
+      } else {
+        const mats = Array.isArray(child.material)
+          ? child.material
+          : [child.material];
+        mats.forEach((m) => {
+          m.side = THREE.DoubleSide;
+        });
+      }
     }
   });
 
