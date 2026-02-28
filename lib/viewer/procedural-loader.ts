@@ -1,12 +1,5 @@
 import * as THREE from "three";
-<<<<<<< HEAD
-import {
-  PLOT_SIZE_M,
-  PAVEMENT_WIDTH_M,
-} from "../grid/grid-constants";
 import { mergeBuildingGeometry } from "./building-merge";
-=======
->>>>>>> 7b7a3f6abc18d6cc1affe8cc21237e7cf9ff4c79
 
 /** Maximum footprint — half the grass area so buildings don't fill the entire plot */
 const MAX_FOOTPRINT = 54;
