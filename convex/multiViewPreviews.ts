@@ -109,6 +109,23 @@ export const getUrlsByBuildingName = query({
   },
 });
 
+export const deleteAll = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const all = await ctx.db.query("multiViewPreviews").collect();
+    for (const doc of all) {
+      // Delete associated storage files
+      await ctx.storage.delete(doc.frontStorageId);
+      await ctx.storage.delete(doc.rightStorageId);
+      await ctx.storage.delete(doc.backStorageId);
+      await ctx.storage.delete(doc.leftStorageId);
+      await ctx.storage.delete(doc.gridStorageId);
+      await ctx.db.delete(doc._id);
+    }
+    return { deleted: all.length };
+  },
+});
+
 export const getUrls = query({
   args: { id: v.id("multiViewPreviews") },
   returns: v.union(

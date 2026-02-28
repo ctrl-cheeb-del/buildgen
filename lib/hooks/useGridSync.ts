@@ -19,6 +19,7 @@ export function useGridSync() {
   const { user } = useUser();
   const plots = useQuery(api.plots.getPlots);
   const buildings = useQuery(api.buildings.getAllBuildings);
+  const agents = useQuery(api.simulation.agents.getAll);
   const initializePlots = useMutation(api.plots.initializePlots);
   const initialized = useRef(false);
 
@@ -34,8 +35,9 @@ export function useGridSync() {
   }, [plots, initializePlots]);
 
   // Sync buildings from Convex to Zustand/Three.js
-  const { addBuilding, removeBuilding, updateTransform, layer } = useWorldStore();
+  const { addBuilding, removeBuilding, replaceGeometry, updateTransform, layer } = useWorldStore();
   const syncedIds = useRef(new Set<string>());
+  const syncedCodes = useRef(new Map<string, string>());
   const localPendingUpdates = useRef(new Map<string, number>());
 
   useEffect(() => {
@@ -43,11 +45,25 @@ export function useGridSync() {
 
     const convexIds = new Set(buildings.map((b) => b._id as string));
 
-    // Add new buildings
+    // Add new buildings or update existing ones
     for (const b of buildings) {
       const id = b._id as string;
 
       if (syncedIds.current.has(id)) {
+        // Check if proceduralCode changed (iteration improvement)
+        const prevCode = syncedCodes.current.get(id);
+        if (prevCode !== undefined && prevCode !== b.proceduralCode) {
+          console.log(`[GridSync] Code changed for ${id}, reloading geometry`);
+          try {
+            const newGroup = loadProceduralGeometry(b.proceduralCode);
+            applyBuildingTextures(newGroup);
+            replaceGeometry(id, newGroup);
+            syncedCodes.current.set(id, b.proceduralCode);
+          } catch (err) {
+            console.error(`[GridSync] Failed to reload geometry for ${id}:`, err);
+          }
+        }
+
         // Check for transform updates from Convex (other users' changes)
         const pendingTs = localPendingUpdates.current.get(id);
         if (pendingTs && Date.now() - pendingTs < 500) {
@@ -99,6 +115,7 @@ export function useGridSync() {
           group
         );
         syncedIds.current.add(id);
+        syncedCodes.current.set(id, b.proceduralCode);
       } catch (err) {
         console.error(`[GridSync] Failed to load building ${id}:`, err);
       }
@@ -109,6 +126,7 @@ export function useGridSync() {
       if (!convexIds.has(id)) {
         removeBuilding(id);
         syncedIds.current.delete(id);
+        syncedCodes.current.delete(id);
       }
     }
   }, [buildings, layer, addBuilding, removeBuilding, updateTransform]);
@@ -127,7 +145,7 @@ export function useGridSync() {
     const userId = user?.id;
     const generatingIndices = new Set(
       plots
-        .filter((p) => p.status === "generating" && p.ownerId === userId)
+        .filter((p) => p.status === "generating" && (p.ownerId === userId || p.isAgentOwned))
         .map((p) => p.index)
     );
 
@@ -220,20 +238,35 @@ export function useGridSync() {
     };
   }, []);
 
-  // Generate plot states for GeoJSON
+  // Generate plot states with building names and agent info
   const plotStates: PlotState[] = useMemo(() => {
     if (!plots) return [];
-    return plots.map((p) => ({
-      index: p.index,
-      col: p.col,
-      row: p.row,
-      status: p.status,
-      ownerId: p.ownerId ?? undefined,
-      ownerName: p.ownerName ?? undefined,
-      ownerUsername: p.ownerUsername ?? undefined,
-      ownerAvatar: p.ownerAvatar ?? undefined,
-    }));
-  }, [plots]);
+    return plots.map((p) => {
+      const plotBuildings = (buildings ?? []).filter(
+        (b) => b.plotIndex === p.index
+      );
+      const agent = (agents ?? []).find((a) => a.plotIndex === p.index);
+
+      return {
+        index: p.index,
+        col: p.col,
+        row: p.row,
+        status: p.status,
+        ownerId: p.ownerId ?? undefined,
+        ownerName: p.ownerName ?? undefined,
+        ownerUsername: p.ownerUsername ?? undefined,
+        ownerAvatar: p.ownerAvatar ?? undefined,
+        pipelineStep: p.pipelineStep ?? undefined,
+        pipelineMultiViewUrl: p.pipelineMultiViewUrl ?? undefined,
+        isAgentOwned: p.isAgentOwned ?? undefined,
+        agentName: agent?.name,
+        buildingPrompts:
+          plotBuildings.length > 0
+            ? plotBuildings.map((b) => b.prompt)
+            : undefined,
+      };
+    });
+  }, [plots, buildings, agents]);
 
   return {
     plots,

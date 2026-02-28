@@ -24,6 +24,7 @@ interface WorldState {
   setOwnedBuildingIds: (ids: Set<string>) => void;
   setIsDragging: (dragging: boolean) => void;
   addBuilding: (building: WorldBuilding, modelGroup: THREE.Group) => void;
+  replaceGeometry: (id: string, newModelGroup: THREE.Group) => void;
   removeBuilding: (id: string) => void;
   selectBuilding: (id: string | null) => void;
   updateTransform: (
@@ -106,6 +107,35 @@ export const useWorldStore = create<WorldState>((set, get) => ({
       containers: newContainers,
       selectedId: building.id,
     });
+  },
+
+  replaceGeometry: (id, newModelGroup) => {
+    const state = get();
+    const container = state.containers.get(id);
+    if (!container) return;
+
+    // Dispose old meshes inside the container
+    const toRemove: THREE.Object3D[] = [];
+    for (const child of container.children) {
+      child.traverse((obj) => {
+        if (obj instanceof THREE.Mesh) {
+          obj.geometry.dispose();
+          if (Array.isArray(obj.material)) {
+            obj.material.forEach((m) => m.dispose());
+          } else {
+            obj.material.dispose();
+          }
+        }
+      });
+      toRemove.push(child);
+    }
+    for (const child of toRemove) {
+      container.remove(child);
+    }
+
+    // Add new geometry
+    container.add(newModelGroup);
+    state.layer?.repaint();
   },
 
   removeBuilding: (id) => {

@@ -1,11 +1,7 @@
 import * as THREE from "three";
-import {
-  PLOT_SIZE_M,
-  PAVEMENT_WIDTH_M,
-} from "../grid/grid-constants";
 
-/** Maximum footprint a single building can occupy — half the inner (grass) plot area */
-const MAX_FOOTPRINT = (PLOT_SIZE_M - 2 * PAVEMENT_WIDTH_M) / 2; // 54m
+/** Maximum footprint per building — fits the 3x3 sub-grid cells (36m spacing, leave gaps) */
+const MAX_FOOTPRINT = 30;
 
 /**
  * Normalize a group so its XZ footprint fits within MAX_FOOTPRINT and

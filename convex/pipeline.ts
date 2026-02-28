@@ -44,7 +44,7 @@ async function fetchReplicateImage(buildingName: string): Promise<Buffer> {
       input: {
         prompt,
         aspect_ratio: "1:1",
-        resolution: "2K",
+        resolution: "1K",
         output_format: "png",
       },
     });
@@ -411,6 +411,10 @@ export const generateBuilding = action({
 
     try {
       // 2. Generate multi-view grid image via Replicate
+      await ctx.runMutation(internal.plots.setPipelineStepInternal, {
+        plotIndex,
+        step: "generating-views",
+      });
       console.log(`[Pipeline] Generating views for "${buildingName}"...`);
       const imageBuffer = await fetchReplicateImage(buildingName);
       console.log(
@@ -425,6 +429,12 @@ export const generateBuilding = action({
       const storageId = await ctx.storage.store(blob);
       const gridUrl = await ctx.storage.getUrl(storageId);
       console.log("[Pipeline] Uploaded grid image to storage");
+
+      await ctx.runMutation(internal.plots.setPipelineStepInternal, {
+        plotIndex,
+        step: "generating-code",
+        multiViewUrl: gridUrl ?? undefined,
+      });
 
       // 5. Call LLM for geometry code with 4 separate view images
       const imagesBase64 = [views.front, views.right, views.back, views.left];
@@ -442,6 +452,11 @@ export const generateBuilding = action({
       const code = codeMatch ? codeMatch[1].trim() : llmResponse.trim();
       if (!code) throw new Error("LLM returned no usable geometry code");
       console.log(`[Pipeline] Got geometry code (${code.length} chars)`);
+
+      await ctx.runMutation(internal.plots.setPipelineStepInternal, {
+        plotIndex,
+        step: "placing",
+      });
 
       // 6. Create building
       await ctx.runMutation(internal.buildings.createBuildingInternal, {

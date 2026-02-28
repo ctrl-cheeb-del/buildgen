@@ -1,3 +1,8 @@
+export interface IterationConfig {
+  maxIterations?: number;
+  qualityTarget?: number;
+}
+
 export interface ToolDeps {
   setCarMode: (on: boolean) => void;
   setFPMode: (on: boolean) => void;
@@ -41,15 +46,24 @@ export function executeTool(
           error: "No plot claimed. Click an empty plot on the map first!",
         });
       }
+      const iterationConfig: IterationConfig = {};
+      if (typeof args.max_iterations === "number") {
+        iterationConfig.maxIterations = args.max_iterations;
+      }
+      if (typeof args.quality_target === "number") {
+        iterationConfig.qualityTarget = args.quality_target;
+      }
       // Fire and forget — pipeline runs in background
       deps.runPipeline(description, deps.myPlotIndex);
       deps.addStatusMessage(
-        `Generating "${description}"...`,
+        `Generating "${description}"${iterationConfig.maxIterations != null ? ` (${iterationConfig.maxIterations} iterations)` : ""}...`,
         toolName
       );
       return JSON.stringify({
         success: true,
         building: description,
+        maxIterations: iterationConfig.maxIterations,
+        qualityTarget: iterationConfig.qualityTarget,
         message: "Building generation started!",
       });
     }

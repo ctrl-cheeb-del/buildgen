@@ -13,6 +13,19 @@ import type * as cars from "../cars.js";
 import type * as multiViewPreviews from "../multiViewPreviews.js";
 import type * as pipeline from "../pipeline.js";
 import type * as plots from "../plots.js";
+import type * as simulation__buildingHelpers from "../simulation/_buildingHelpers.js";
+import type * as simulation__electionHelpers from "../simulation/_electionHelpers.js";
+import type * as simulation__plotHelpers from "../simulation/_plotHelpers.js";
+import type * as simulation__simBuildHelpers from "../simulation/_simBuildHelpers.js";
+import type * as simulation__tickLogHelpers from "../simulation/_tickLogHelpers.js";
+import type * as simulation_agentBuild from "../simulation/agentBuild.js";
+import type * as simulation_agentMessages from "../simulation/agentMessages.js";
+import type * as simulation_agents from "../simulation/agents.js";
+import type * as simulation_cityState from "../simulation/cityState.js";
+import type * as simulation_control from "../simulation/control.js";
+import type * as simulation_initialize from "../simulation/initialize.js";
+import type * as simulation_start from "../simulation/start.js";
+import type * as simulation_tick from "../simulation/tick.js";
 
 import type {
   ApiFromModules,
@@ -26,6 +39,19 @@ declare const fullApi: ApiFromModules<{
   multiViewPreviews: typeof multiViewPreviews;
   pipeline: typeof pipeline;
   plots: typeof plots;
+  "simulation/_buildingHelpers": typeof simulation__buildingHelpers;
+  "simulation/_electionHelpers": typeof simulation__electionHelpers;
+  "simulation/_plotHelpers": typeof simulation__plotHelpers;
+  "simulation/_simBuildHelpers": typeof simulation__simBuildHelpers;
+  "simulation/_tickLogHelpers": typeof simulation__tickLogHelpers;
+  "simulation/agentBuild": typeof simulation_agentBuild;
+  "simulation/agentMessages": typeof simulation_agentMessages;
+  "simulation/agents": typeof simulation_agents;
+  "simulation/cityState": typeof simulation_cityState;
+  "simulation/control": typeof simulation_control;
+  "simulation/initialize": typeof simulation_initialize;
+  "simulation/start": typeof simulation_start;
+  "simulation/tick": typeof simulation_tick;
 }>;
 
 /**
