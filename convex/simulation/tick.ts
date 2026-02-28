@@ -434,9 +434,9 @@ export const run = internalAction({
     const citizens = agents.filter((a) => a.role === "citizen" && a.isActive);
     const isLive = city.simMode === "live";
     const liveBuildCap = 12;
-    // Live mode: ALL citizens active. Overnight: ~25% sample, cap 12.
+    // Live mode: ~75% of citizens (cap 20). Overnight: ~25% sample, cap 12.
     const activeThisTick = isLive
-      ? citizens
+      ? citizens.filter(() => Math.random() < 0.75).slice(0, 20)
       : citizens.filter(() => Math.random() < 0.25).slice(0, 12);
 
     const citizenResults: Array<{ agent: AgentDoc; action: CitizenAction }> = [];
@@ -449,24 +449,36 @@ export const run = internalAction({
       plotBuildingCounts[b.plotIndex] = (plotBuildingCounts[b.plotIndex] ?? 0) + 1;
     }
 
+    // Process agents in batches of 8 to avoid Mistral rate limits
+    const BATCH_SIZE = 8;
     if (activeThisTick.length > 0) {
-      const results = await Promise.all(
-        activeThisTick.map(async (agent) => {
-          try {
-            const nearby = citizens
-              .filter((c) => Math.abs(c.plotIndex - agent.plotIndex) <= 8 && c._id !== agent._id)
-              .slice(0, 3)
-              .map((c) => c.lastAction ? `${c.name}: ${c.lastAction}` : `${c.name} is quiet`)
-              .join("; ");
+      const allResults: Array<{ agent: AgentDoc; action: CitizenAction }> = [];
+      for (let i = 0; i < activeThisTick.length; i += BATCH_SIZE) {
+        const batch = activeThisTick.slice(i, i + BATCH_SIZE);
+        const batchResults = await Promise.all(
+          batch.map(async (agent) => {
+            try {
+              const nearby = citizens
+                .filter((c) => Math.abs(c.plotIndex - agent.plotIndex) <= 8 && c._id !== agent._id)
+                .slice(0, 3)
+                .map((c) => c.lastAction ? `${c.name}: ${c.lastAction}` : `${c.name} is quiet`)
+                .join("; ");
 
-            const action = await callCitizenAgent(mistral, agent, city, nearby || "All quiet", plotBuildingCounts[agent.plotIndex] ?? 0);
-            return { agent, action };
-          } catch (e) {
-            console.error(`[tick ${tickNumber}] Agent ${agent.name} failed:`, e);
-            return { agent, action: { action: "IDLE" as const, message: "", target: "public" } };
-          }
-        })
-      );
+              const action = await callCitizenAgent(mistral, agent, city, nearby || "All quiet", plotBuildingCounts[agent.plotIndex] ?? 0);
+              return { agent, action };
+            } catch (e) {
+              console.error(`[tick ${tickNumber}] Agent ${agent.name} failed:`, e);
+              return { agent, action: { action: "IDLE" as const, message: "", target: "public" } };
+            }
+          })
+        );
+        allResults.push(...batchResults);
+        // Small delay between batches to respect rate limits
+        if (i + BATCH_SIZE < activeThisTick.length) {
+          await new Promise((r) => setTimeout(r, 1000));
+        }
+      }
+      const results = allResults;
 
       for (const result of results) {
         citizenResults.push(result);
