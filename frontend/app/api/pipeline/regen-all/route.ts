@@ -1,24 +1,120 @@
 import { NextResponse } from "next/server";
+import { ConvexHttpClient } from "convex/browser";
+import { api } from "@/convex/_generated/api";
 import { callWithFallback } from "@/lib/llm/provider-chain";
 
-export async function POST(request: Request) {
-  try {
-    const { buildingName, views } = await request.json();
+const convex = new ConvexHttpClient(
+  process.env.NEXT_PUBLIC_CONVEX_URL as string
+);
 
-    if (!buildingName || !views) {
-      return NextResponse.json(
-        { error: "buildingName and views are required" },
-        { status: 400 }
-      );
-    }
+/**
+ * POST /api/pipeline/regen-all
+ *
+ * Regenerates procedural code for all existing buildings using the
+ * current geometry prompt (which now includes texture annotations).
+ * Re-uses cached multi-view images from Convex for each building.
+ *
+ * Returns a streaming log of progress.
+ */
+export async function POST() {
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream({
+    async start(controller) {
+      function log(msg: string) {
+        controller.enqueue(encoder.encode(msg + "\n"));
+      }
 
-    const imageUrls: string[] = [];
-    for (const view of ["front", "right", "back", "left"] as const) {
-      const url = views[view];
-      if (url) imageUrls.push(url);
-    }
+      try {
+        const buildings = await convex.query(api.buildings.getAllBuildings);
+        log(`Found ${buildings.length} buildings to regenerate`);
 
-    const prompt = `You are an expert Three.js developer. I'm showing you reference views of a building described as "${buildingName}" (front, right, back, left elevations).
+        let success = 0;
+        let failed = 0;
+
+        for (const b of buildings) {
+          const id = b._id;
+          const name = b.prompt;
+          log(`\n[${success + failed + 1}/${buildings.length}] Regenerating "${name}"...`);
+
+          try {
+            // Fetch cached multi-view images
+            const views = await convex.query(
+              api.multiViewPreviews.getUrlsByBuildingName,
+              { buildingName: name }
+            );
+
+            const imageUrls: string[] = [];
+            if (views) {
+              for (const key of ["front", "right", "back", "left"] as const) {
+                const url = views[key];
+                if (url) imageUrls.push(url);
+              }
+            }
+
+            if (imageUrls.length === 0) {
+              log(`  WARNING: No cached views for "${name}", generating without reference images`);
+            } else {
+              log(`  Using ${imageUrls.length} cached reference images`);
+            }
+
+            // Build the same prompt as the geometry route
+            const prompt = buildGeometryPrompt(name);
+            const text = await callWithFallback(prompt, imageUrls);
+
+            // Extract code from markdown
+            const codeMatch = text.match(
+              /```(?:javascript|js)?\s*\n([\s\S]*?)```/
+            );
+            const code = codeMatch ? codeMatch[1].trim() : text.trim();
+
+            if (!code) {
+              log(`  ERROR: LLM returned no usable code`);
+              failed++;
+              continue;
+            }
+
+            // Verify it mentions textureId
+            const hasTextures = code.includes("textureId");
+            log(
+              `  Code generated (${code.length} chars, textures: ${hasTextures ? "YES" : "NO"})`
+            );
+
+            // Update in Convex
+            await convex.mutation(api.buildings.updateProceduralCode, {
+              buildingId: id,
+              proceduralCode: code,
+            });
+
+            log(`  Updated in Convex`);
+            success++;
+          } catch (err) {
+            log(
+              `  ERROR: ${err instanceof Error ? err.message : String(err)}`
+            );
+            failed++;
+          }
+        }
+
+        log(`\nDone! ${success} succeeded, ${failed} failed out of ${buildings.length}`);
+      } catch (err) {
+        log(`FATAL: ${err instanceof Error ? err.message : String(err)}`);
+      } finally {
+        controller.close();
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/plain; charset=utf-8",
+      "Transfer-Encoding": "chunked",
+    },
+  });
+}
+
+/** Same prompt as geometry/route.ts — kept in sync */
+function buildGeometryPrompt(buildingName: string): string {
+  return `You are an expert Three.js developer. I'm showing you reference views of a building described as "${buildingName}" (front, right, back, left elevations).
 
 Generate JavaScript code that creates a THREE.Group representing this building using procedural geometry.
 
@@ -94,31 +190,4 @@ return group;
 \`\`\`
 
 Generate the code now for "${buildingName}". Study the images closely and make the 3D model match what you see.`;
-
-    const text = await callWithFallback(prompt, imageUrls);
-
-    // Extract code from markdown code blocks
-    const codeMatch = text.match(/```(?:javascript|js)?\s*\n([\s\S]*?)```/);
-    const code = codeMatch ? codeMatch[1].trim() : text.trim();
-
-    if (!code) {
-      throw new Error("LLM returned no usable geometry code");
-    }
-
-    // Validate syntax before sending to client
-    try {
-      new Function("THREE", `"use strict";\n${code}`);
-    } catch (syntaxErr) {
-      console.error("[API/geometry] LLM returned invalid code:", syntaxErr);
-      throw new Error("LLM returned code with syntax errors (likely truncated output)");
-    }
-
-    return NextResponse.json({ code });
-  } catch (err) {
-    console.error("[API/geometry] Error:", err);
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Internal error" },
-      { status: 500 }
-    );
-  }
 }

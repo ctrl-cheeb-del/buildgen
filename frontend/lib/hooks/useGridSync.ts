@@ -5,6 +5,7 @@ import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useWorldStore } from "../stores/world-store";
 import { loadProceduralGeometry } from "../viewer/procedural-loader";
+import { applyBuildingTextures } from "../viewer/building-textures";
 import {
   generateGridGeoJSON,
   getPlotCenter,
@@ -76,6 +77,8 @@ export function useGridSync() {
           : [0, 0, 0];
 
         const group = loadProceduralGeometry(b.proceduralCode);
+        // Apply textures async — group is already in scene, textures pop in when loaded
+        applyBuildingTextures(group);
 
         addBuilding(
           {
