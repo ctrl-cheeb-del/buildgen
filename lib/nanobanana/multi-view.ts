@@ -29,19 +29,30 @@ Each view should:
 - No people, no cars, no surrounding buildings`;
 
   console.log("[MultiView] Calling Replicate for 2x2 grid...");
+  console.log("[MultiView] Prompt:", prompt.slice(0, 120) + "...");
 
-  const output = await replicate.run("google/nano-banana-2", {
-    input: {
-      prompt,
-      aspect_ratio: "1:1",
-      resolution: "2K",
-      output_format: "png",
-    },
-  });
+  let output: unknown;
+  try {
+    output = await replicate.run("google/nano-banana-2", {
+      input: {
+        prompt,
+        aspect_ratio: "1:1",
+        resolution: "2K",
+        output_format: "png",
+      },
+    });
+  } catch (replicateErr) {
+    const msg = replicateErr instanceof Error ? replicateErr.message : String(replicateErr);
+    console.error("[MultiView] Replicate.run() threw:", msg);
+    throw new Error(`Replicate model failed: ${msg || "unknown error (model may be cold-starting, try again)"}`);
+  }
 
   console.log("[MultiView] Raw output type:", typeof output, Array.isArray(output) ? `array[${(output as unknown[]).length}]` : "");
   if (typeof output === "object" && output !== null) {
     console.log("[MultiView] Output keys:", Object.keys(output as object));
+    if (Array.isArray(output) && output.length > 0) {
+      console.log("[MultiView] First element type:", typeof output[0]);
+    }
   }
 
   let imageBuffer: Buffer;
