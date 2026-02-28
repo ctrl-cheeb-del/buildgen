@@ -5,7 +5,19 @@
     "file": "/textures/asphalt.webp",
     "repeat": 6,
     "roughness": 0.92,
-    "metalness": 0
+    "metalness": 0,
+    "normalFile": "/textures/asphalt-normal.webp",
+    "normalScale": 0.8
+  },
+  {
+    "id": "brick-dark",
+    "name": "Dark Brick Wall",
+    "file": "/textures/brick-dark.webp",
+    "repeat": 6,
+    "roughness": 0.85,
+    "metalness": 0,
+    "normalFile": "/textures/brick-dark-normal.webp",
+    "normalScale": 1.3
   },
   {
     "id": "brick-red",
@@ -13,7 +25,19 @@
     "file": "/textures/brick-red.webp",
     "repeat": 6,
     "roughness": 0.85,
-    "metalness": 0
+    "metalness": 0,
+    "normalFile": "/textures/brick-red-normal.webp",
+    "normalScale": 1.4
+  },
+  {
+    "id": "brick-white",
+    "name": "White Brick Wall",
+    "file": "/textures/brick-white.webp",
+    "repeat": 6,
+    "roughness": 0.8,
+    "metalness": 0,
+    "normalFile": "/textures/brick-white-normal.webp",
+    "normalScale": 1.2
   },
   {
     "id": "cobblestone",
@@ -21,7 +45,29 @@
     "file": "/textures/cobblestone.webp",
     "repeat": 6,
     "roughness": 0.9,
-    "metalness": 0
+    "metalness": 0,
+    "normalFile": "/textures/cobblestone-normal.webp",
+    "normalScale": 1.5
+  },
+  {
+    "id": "concrete-exposed",
+    "name": "Exposed Concrete",
+    "file": "/textures/concrete-exposed.webp",
+    "repeat": 4,
+    "roughness": 0.9,
+    "metalness": 0,
+    "normalFile": "/textures/concrete-exposed-normal.webp",
+    "normalScale": 1
+  },
+  {
+    "id": "concrete-precast",
+    "name": "Precast Concrete Panel",
+    "file": "/textures/concrete-precast.webp",
+    "repeat": 3,
+    "roughness": 0.7,
+    "metalness": 0.05,
+    "normalFile": "/textures/concrete-precast-normal.webp",
+    "normalScale": 0.4
   },
   {
     "id": "concrete-smooth",
@@ -29,7 +75,19 @@
     "file": "/textures/concrete-smooth.webp",
     "repeat": 3,
     "roughness": 0.75,
-    "metalness": 0.05
+    "metalness": 0.05,
+    "normalFile": "/textures/concrete-smooth-normal.webp",
+    "normalScale": 0.3
+  },
+  {
+    "id": "copper-patina",
+    "name": "Copper Patina",
+    "file": "/textures/copper-patina.webp",
+    "repeat": 4,
+    "roughness": 0.6,
+    "metalness": 0.5,
+    "normalFile": "/textures/copper-patina-normal.webp",
+    "normalScale": 0.5
   },
   {
     "id": "dirt",
@@ -37,7 +95,25 @@
     "file": "/textures/dirt.webp",
     "repeat": 4,
     "roughness": 0.95,
-    "metalness": 0
+    "metalness": 0,
+    "normalFile": "/textures/dirt-normal.webp",
+    "normalScale": 0.5
+  },
+  {
+    "id": "glass-curtainwall",
+    "name": "Glass Curtain Wall",
+    "file": "/textures/glass-curtainwall.webp",
+    "repeat": 4,
+    "roughness": 0.1,
+    "metalness": 0.5
+  },
+  {
+    "id": "glass-frosted",
+    "name": "Frosted Glass",
+    "file": "/textures/glass-frosted.webp",
+    "repeat": 3,
+    "roughness": 0.4,
+    "metalness": 0.2
   },
   {
     "id": "grass",
@@ -45,7 +121,9 @@
     "file": "/textures/grass.webp",
     "repeat": 4,
     "roughness": 0.95,
-    "metalness": 0
+    "metalness": 0,
+    "normalFile": "/textures/grass-normal.webp",
+    "normalScale": 0.25
   },
   {
     "id": "gravel",
@@ -53,7 +131,9 @@
     "file": "/textures/gravel.webp",
     "repeat": 5,
     "roughness": 0.95,
-    "metalness": 0
+    "metalness": 0,
+    "normalFile": "/textures/gravel-normal.webp",
+    "normalScale": 1
   },
   {
     "id": "metal-grating",
@@ -61,7 +141,19 @@
     "file": "/textures/metal-grating.webp",
     "repeat": 8,
     "roughness": 0.4,
-    "metalness": 0.8
+    "metalness": 0.8,
+    "normalFile": "/textures/metal-grating-normal.webp",
+    "normalScale": 1.2
+  },
+  {
+    "id": "metal-zinc",
+    "name": "Zinc Cladding",
+    "file": "/textures/metal-zinc.webp",
+    "repeat": 4,
+    "roughness": 0.5,
+    "metalness": 0.6,
+    "normalFile": "/textures/metal-zinc-normal.webp",
+    "normalScale": 0.6
   },
   {
     "id": "pavement-slabs",
@@ -69,7 +161,9 @@
     "file": "/textures/pavement-slabs.webp",
     "repeat": 8,
     "roughness": 0.85,
-    "metalness": 0
+    "metalness": 0,
+    "normalFile": "/textures/pavement-slabs-normal.webp",
+    "normalScale": 1.3
   },
   {
     "id": "roof-tiles",
@@ -77,7 +171,9 @@
     "file": "/textures/roof-tiles.webp",
     "repeat": 8,
     "roughness": 0.8,
-    "metalness": 0
+    "metalness": 0,
+    "normalFile": "/textures/roof-tiles-normal.webp",
+    "normalScale": 1.3
   },
   {
     "id": "sand",
@@ -85,7 +181,59 @@
     "file": "/textures/sand.webp",
     "repeat": 4,
     "roughness": 0.98,
-    "metalness": 0
+    "metalness": 0,
+    "normalFile": "/textures/sand-normal.webp",
+    "normalScale": 0.2
+  },
+  {
+    "id": "steel-panel",
+    "name": "Steel Cladding Panel",
+    "file": "/textures/steel-panel.webp",
+    "repeat": 6,
+    "roughness": 0.35,
+    "metalness": 0.7,
+    "normalFile": "/textures/steel-panel-normal.webp",
+    "normalScale": 1
+  },
+  {
+    "id": "stone-ashlar",
+    "name": "Ashlar Stone",
+    "file": "/textures/stone-ashlar.webp",
+    "repeat": 4,
+    "roughness": 0.85,
+    "metalness": 0,
+    "normalFile": "/textures/stone-ashlar-normal.webp",
+    "normalScale": 1
+  },
+  {
+    "id": "stone-granite",
+    "name": "Polished Granite",
+    "file": "/textures/stone-granite.webp",
+    "repeat": 3,
+    "roughness": 0.3,
+    "metalness": 0.1,
+    "normalFile": "/textures/stone-granite-normal.webp",
+    "normalScale": 0.3
+  },
+  {
+    "id": "stucco-white",
+    "name": "White Stucco",
+    "file": "/textures/stucco-white.webp",
+    "repeat": 4,
+    "roughness": 0.85,
+    "metalness": 0,
+    "normalFile": "/textures/stucco-white-normal.webp",
+    "normalScale": 0.4
+  },
+  {
+    "id": "terracotta-panel",
+    "name": "Terracotta Panel",
+    "file": "/textures/terracotta-panel.webp",
+    "repeat": 6,
+    "roughness": 0.75,
+    "metalness": 0,
+    "normalFile": "/textures/terracotta-panel-normal.webp",
+    "normalScale": 0.8
   },
   {
     "id": "wood-decking",
@@ -93,6 +241,28 @@
     "file": "/textures/wood-decking.webp",
     "repeat": 6,
     "roughness": 0.8,
-    "metalness": 0
+    "metalness": 0,
+    "normalFile": "/textures/wood-decking-normal.webp",
+    "normalScale": 0.8
+  },
+  {
+    "id": "wood-plywood",
+    "name": "Plywood Panel",
+    "file": "/textures/wood-plywood.webp",
+    "repeat": 3,
+    "roughness": 0.7,
+    "metalness": 0,
+    "normalFile": "/textures/wood-plywood-normal.webp",
+    "normalScale": 0.3
+  },
+  {
+    "id": "wood-siding",
+    "name": "Wood Clapboard Siding",
+    "file": "/textures/wood-siding.webp",
+    "repeat": 8,
+    "roughness": 0.75,
+    "metalness": 0,
+    "normalFile": "/textures/wood-siding-normal.webp",
+    "normalScale": 0.7
   }
 ]

@@ -141,12 +141,123 @@ interface TextureManifestEntry {
   repeat: number;
   roughness: number;
   metalness: number;
+  normalFile?: string;
+  normalScale?: number;
+}
+
+// ── Sobel normal map generator ──────────────────────────────
+
+async function generateNormalMap(
+  diffusePath: string,
+  outputPath: string,
+  strength: number = 1.0
+): Promise<void> {
+  // Load diffuse texture as raw grayscale pixels
+  const { data, info } = await sharp(diffusePath)
+    .greyscale()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+
+  const w = info.width;
+  const h = info.height;
+
+  // Sample with wrapping (critical for tileable textures)
+  const sample = (x: number, y: number): number =>
+    data[((y % h + h) % h) * w + ((x % w + w) % w)];
+
+  // Compute Sobel gradients → normal map RGB
+  const out = Buffer.alloc(w * h * 3);
+
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      // Sobel X kernel
+      const dX =
+        -sample(x - 1, y - 1) -
+        2 * sample(x - 1, y) -
+        sample(x - 1, y + 1) +
+        sample(x + 1, y - 1) +
+        2 * sample(x + 1, y) +
+        sample(x + 1, y + 1);
+
+      // Sobel Y kernel (Three.js uses OpenGL Y-up: ny = -dY)
+      const dY =
+        -sample(x - 1, y - 1) -
+        2 * sample(x, y - 1) -
+        sample(x + 1, y - 1) +
+        sample(x - 1, y + 1) +
+        2 * sample(x, y + 1) +
+        sample(x + 1, y + 1);
+
+      const nx = dX * strength;
+      const ny = -dY * strength; // OpenGL Y-up convention
+      const nz = 255;
+
+      // Normalize
+      const len = Math.sqrt(nx * nx + ny * ny + nz * nz);
+
+      const i = (y * w + x) * 3;
+      out[i] = Math.round(((nx / len) * 0.5 + 0.5) * 255);     // R
+      out[i + 1] = Math.round(((ny / len) * 0.5 + 0.5) * 255); // G
+      out[i + 2] = Math.round(((nz / len) * 0.5 + 0.5) * 255); // B
+    }
+  }
+
+  await sharp(out, { raw: { width: w, height: h, channels: 3 } })
+    .webp({ quality: 90, nearLossless: true })
+    .toFile(outputPath);
+}
+
+// ── Generate normals only (no Replicate calls) ──────────────
+
+async function generateNormalsOnly(): Promise<void> {
+  console.log("[Normals] Generating normal maps from existing diffuse textures...\n");
+
+  const manifestPath = join(OUT_DIR, "manifest.json");
+  let manifest: TextureManifestEntry[] = [];
+  try {
+    manifest = JSON.parse(await readFile(manifestPath, "utf-8"));
+  } catch {
+    console.error("[Normals] No manifest.json found — run gen:textures first.");
+    process.exit(1);
+  }
+
+  let generated = 0;
+  for (const entry of manifest) {
+    const def = TEXTURE_DEFS.find((d) => d.id === entry.id);
+    if (!def?.normalScale) continue;
+
+    const diffusePath = join(OUT_DIR, `${entry.id}.webp`);
+    const normalPath = join(OUT_DIR, `${entry.id}-normal.webp`);
+
+    try {
+      await generateNormalMap(diffusePath, normalPath, def.normalScale);
+      entry.normalFile = `/textures/${entry.id}-normal.webp`;
+      entry.normalScale = def.normalScale;
+      generated++;
+      const stat = await Bun.file(normalPath).arrayBuffer();
+      console.log(
+        `[Normals] ${entry.id}-normal.webp (${(stat.byteLength / 1024).toFixed(0)} KB)`
+      );
+    } catch (err) {
+      console.error(`[Normals] FAILED "${entry.id}":`, err);
+    }
+  }
+
+  await writeFile(manifestPath, JSON.stringify(manifest, null, 2));
+  console.log(`\n[Normals] Done! ${generated} normal maps generated.`);
+  console.log(`[Normals] Manifest updated → ${manifestPath}`);
 }
 
 // ── Main ──────────────────────────────────────────────────────
 
 async function main() {
   const args = process.argv.slice(2);
+
+  // --normals-only flag: generate normal maps from existing diffuse textures
+  if (args.includes("--normals-only")) {
+    await generateNormalsOnly();
+    return;
+  }
 
   // --list flag
   if (args.includes("--list")) {

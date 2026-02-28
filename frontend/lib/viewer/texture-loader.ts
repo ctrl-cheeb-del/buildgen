@@ -12,6 +12,10 @@ export interface TextureMeta {
   repeat: number;
   roughness: number;
   metalness: number;
+  /** Path to the normal map file, if generated */
+  normalFile?: string;
+  /** Normal map intensity (THREE.Vector2 scale) */
+  normalScale?: number;
 }
 
 // In-memory cache so we never load the same texture twice
@@ -55,6 +59,32 @@ export function loadTileableTexture(
 }
 
 /**
+ * Load a normal map texture and configure it for tiling.
+ * Uses LinearSRGBColorSpace — sRGB gamma would corrupt normal vectors.
+ */
+export function loadTileableNormalMap(
+  src: string,
+  repeat: number
+): THREE.Texture {
+  const key = `normal:${src}`;
+  const cached = cache.get(key);
+  if (cached) return cached;
+
+  const texture = loader.load(src);
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(repeat, repeat);
+  texture.colorSpace = THREE.LinearSRGBColorSpace;
+  texture.generateMipmaps = true;
+  texture.minFilter = THREE.LinearMipmapLinearFilter;
+  texture.magFilter = THREE.LinearFilter;
+  if (maxAnisotropy > 0) texture.anisotropy = maxAnisotropy;
+
+  cache.set(key, texture);
+  return texture;
+}
+
+/**
  * Load a texture from a base64 data URL string.
  * Useful when textures are generated on the fly via the nanobanana API.
  */
@@ -92,17 +122,26 @@ export function loadBase64Texture(
 
 /**
  * Create a MeshPhysicalMaterial with a tileable texture applied.
+ * Applies normal map when normalFile is present in meta.
  */
 export function createTexturedMaterial(
   src: string,
-  meta: Pick<TextureMeta, "repeat" | "roughness" | "metalness">
+  meta: Pick<TextureMeta, "repeat" | "roughness" | "metalness" | "normalFile" | "normalScale">
 ): THREE.MeshPhysicalMaterial {
   const map = loadTileableTexture(src, meta.repeat);
-  return new THREE.MeshPhysicalMaterial({
+  const mat = new THREE.MeshPhysicalMaterial({
     map,
     roughness: meta.roughness,
     metalness: meta.metalness,
   });
+
+  if (meta.normalFile) {
+    mat.normalMap = loadTileableNormalMap(meta.normalFile, meta.repeat);
+    const s = meta.normalScale ?? 1.0;
+    mat.normalScale = new THREE.Vector2(s, s);
+  }
+
+  return mat;
 }
 
 /**

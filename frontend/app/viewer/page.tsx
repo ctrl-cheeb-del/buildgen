@@ -11,6 +11,7 @@ import BuildingPicker from "@/components/viewer/BuildingPicker";
 import ReferencePanel from "@/components/viewer/ReferencePanel";
 import CodePanel from "@/components/viewer/CodePanel";
 import { loadProceduralGeometry } from "@/lib/viewer/procedural-loader";
+import { applyBuildingTextures } from "@/lib/viewer/building-textures";
 import type { GeometryStats } from "@/lib/viewer/geometry-stats";
 import type { MultiViewImages } from "@/lib/types";
 
@@ -48,6 +49,8 @@ function ViewerPage() {
   const loadCode = useCallback(
     (newCode: string): GeometryStats | null => {
       const group = loadProceduralGeometry(newCode);
+      // Apply textures async — group is already in scene, textures pop in when loaded
+      applyBuildingTextures(group);
       const newStats = canvasRef.current?.loadGroup(group) ?? null;
       setCode(newCode);
       return newStats;

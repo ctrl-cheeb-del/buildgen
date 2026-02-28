@@ -48,7 +48,7 @@ async function callBedrock(
 
   const body = JSON.stringify({
     anthropic_version: "bedrock-2023-05-31",
-    max_tokens: 8192,
+    max_tokens: 16384,
     messages: [{ role: "user", content }],
   });
 
@@ -114,9 +114,9 @@ export const providers: Provider[] = [
       callBedrock("us.anthropic.claude-opus-4-6-v1", prompt, imageUrls),
   },
   {
-    name: "Bedrock (Claude Sonnet 4.6)",
+    name: "Bedrock (Claude Sonnet 4.5)",
     call: (prompt, imageUrls) =>
-      callBedrock("us.anthropic.claude-sonnet-4-6", prompt, imageUrls),
+      callBedrock("us.anthropic.claude-sonnet-4-5-20250929-v1:0", prompt, imageUrls),
   },
   {
     name: "OpenRouter (Claude Opus 4.6)",

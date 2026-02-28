@@ -6,7 +6,8 @@
     "dev": "bun run src/index.ts",
     "build": "bun build src/index.ts --outdir dist --target bun",
     "gen:textures": "bun run src/generate-textures.ts",
-    "gen:textures:list": "bun run src/generate-textures.ts --list"
+    "gen:textures:list": "bun run src/generate-textures.ts --list",
+    "gen:normals": "bun run src/generate-textures.ts --normals-only"
   },
   "dependencies": {
     "hono": "^4.7.0",
