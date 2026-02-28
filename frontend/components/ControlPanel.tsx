@@ -34,26 +34,22 @@ export default function ControlPanel() {
 
   const handleOffsetChange = useCallback(
     (axis: 0 | 1 | 2, v: number) => {
-      setOffset((prev) => {
-        const next = [...prev] as [number, number, number];
-        next[axis] = v;
-        if (selectedId) updateTransform(selectedId, { offset: next });
-        return next;
-      });
+      const next = [...offset] as [number, number, number];
+      next[axis] = v;
+      setOffset(next);
+      if (selectedId) updateTransform(selectedId, { offset: next });
     },
-    [selectedId, updateTransform]
+    [offset, selectedId, updateTransform]
   );
 
   const handleRotationChange = useCallback(
     (axis: 0 | 1 | 2, v: number) => {
-      setRotation((prev) => {
-        const next = [...prev] as [number, number, number];
-        next[axis] = v;
-        if (selectedId) updateTransform(selectedId, { rotation: next });
-        return next;
-      });
+      const next = [...rotation] as [number, number, number];
+      next[axis] = v;
+      setRotation(next);
+      if (selectedId) updateTransform(selectedId, { rotation: next });
     },
-    [selectedId, updateTransform]
+    [rotation, selectedId, updateTransform]
   );
 
   const scaleDisplay = Math.pow(10, scale);
