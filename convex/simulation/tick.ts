@@ -548,7 +548,48 @@ export const run = internalAction({
     // Apply build approvals — fire actual geometry pipeline
     let newBuildsApproved = 0;
     const buildCap = isLive ? 12 : 4;
+
+    // Debug: log what the mayor returned vs what we have
+    console.log(`[tick ${tickNumber}] Mayor approvals: ${JSON.stringify(mayorDecision.build_approvals)}`);
+    console.log(`[tick ${tickNumber}] Build request plots: [${buildRequests.map(r => r.agent.plotIndex).join(", ")}]`);
+
+    // In live mode: skip mayor gatekeeping, approve all build requests directly
+    if (isLive && buildRequests.length > 0) {
+      for (const req of buildRequests) {
+        if (city.activeBuildCount + newBuildsApproved >= buildCap) break;
+        if (!req.action.build_description) continue;
+        console.log(`[tick ${tickNumber}] BUILD APPROVED (live): ${req.agent.name} → "${req.action.build_description}"`);
+        newBuildsApproved++;
+
+        const desc = req.action.build_description.toLowerCase();
+        let category = "residential";
+        const catKeywords: Record<string, string[]> = {
+          commercial: ["shop", "market", "store", "cafe", "restaurant", "bar", "bakery", "boutique", "pub", "diner", "tavern", "mall"],
+          industrial: ["factory", "warehouse", "plant", "refinery", "forge", "foundry", "mill", "workshop", "smelter"],
+          office: ["office", "tower", "headquarters", "bank", "corporate", "firm"],
+          civic: ["school", "hospital", "police", "library", "fire station", "courthouse", "city hall", "clinic", "church", "temple", "government"],
+          entertainment: ["park", "stadium", "theater", "theatre", "museum", "gallery", "cinema", "arcade", "garden", "zoo", "arena"],
+          luxury: ["mansion", "penthouse", "resort", "spa", "palace", "casino", "yacht"],
+        };
+        for (const [cat, keywords] of Object.entries(catKeywords)) {
+          if (keywords.some((kw) => desc.includes(kw))) {
+            category = cat;
+            break;
+          }
+        }
+
+        ctx.scheduler.runAfter(0, internal.simulation.agentBuild.run, {
+          plotIndex: req.agent.plotIndex,
+          agentName: req.agent.name,
+          buildDescription: req.action.build_description,
+          category,
+        });
+      }
+    }
+
+    // Overnight mode: use mayor approvals with matching
     for (const approval of mayorDecision.build_approvals) {
+      if (isLive) break; // Already handled above
       if (approval.approved && city.activeBuildCount + newBuildsApproved < buildCap) {
         const req = buildRequests.find((r) => r.agent.plotIndex === approval.agentPlot);
         if (req && req.action.build_description) {
