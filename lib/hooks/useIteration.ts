@@ -122,6 +122,7 @@ export function useIteration() {
             setState((prev) => ({ ...prev, currentStep: "capturing" }));
             store.setNodeStatus("capture", "active", `Iteration ${i + 1}`);
             const screenshots = opts.captureScreenshots(code);
+            store.setCurrentScreenshots(screenshots);
             store.setNodeStatus("capture", "done");
 
             // Step 2: Score via Bedrock

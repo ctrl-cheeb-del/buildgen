@@ -76,6 +76,7 @@ export default function Home() {
   const plotStatus = myPlot?.status;
   const multiViewUrl = myPlot?.pipelineMultiViewUrl;
   const prevPlotStatus = useRef(plotStatus);
+  const isInitialMount = useRef(true);
 
   const handlePlotClick = useCallback(
     async (plotIndex: number) => {
@@ -144,13 +145,14 @@ export default function Home() {
         const newest = myBuildings[myBuildings.length - 1];
         selectBuilding(newest._id as string);
       }
-    } else if (plotStatus === "occupied" && multiViewUrl && prevPlotStatus.current === undefined) {
+    } else if (isInitialMount.current && plotStatus === "occupied" && multiViewUrl) {
       // Page refresh — plot is occupied with multiViewUrl, mark gen steps as done
       setNodeStatus("generate-views", "done");
       setNodeStatus("generate-code", "done");
       setNodeStatus("place-on-map", "done");
     }
 
+    isInitialMount.current = false;
     prevPlotStatus.current = plotStatus;
   }, [pipelineStep, plotStatus, myBuildings, selectBuilding, multiViewUrl]);
 
@@ -347,6 +349,19 @@ export default function Home() {
     isRunning,
     multiViewUrl,
   ]);
+
+  // Cancel iteration if the building being iterated on is deleted
+  useEffect(() => {
+    if (iteration.isIterating && iteration.buildingId && buildings) {
+      const stillExists = buildings.some(
+        (b) => (b._id as string) === iteration.buildingId
+      );
+      if (!stillExists) {
+        console.log("[Iteration] Building deleted, stopping iteration");
+        iteration.stop();
+      }
+    }
+  }, [buildings, iteration]);
 
   // --- Pipeline panel state ---
   const pipelineError = usePipelineStore((s) => s.error);

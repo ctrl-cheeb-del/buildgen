@@ -169,6 +169,7 @@ function NodeDetailPanel({
 }: DetailPanelProps) {
   const latest =
     iterations.length > 0 ? iterations[iterations.length - 1] : null;
+  const currentScreenshots = usePipelineStore((s) => s.currentScreenshots);
 
   const isDone = nodeStatus === "done";
   const isActive = nodeStatus === "active";
@@ -219,39 +220,42 @@ function NodeDetailPanel({
           <div className="text-[10px] text-white/40">Waiting</div>
         ))}
 
-      {/* Capture — show screenshots from latest iteration, or live status */}
+      {/* Capture — show screenshots from current capture or latest iteration */}
       {nodeId === "capture" &&
-        (latest?.screenshots ? (
-          <div>
-            <div className="text-[10px] text-white/50 mb-1.5">
-              Render Screenshots
+        (() => {
+          const shots = currentScreenshots ?? latest?.screenshots ?? null;
+          return shots ? (
+            <div>
+              <div className="text-[10px] text-white/50 mb-1.5">
+                Render Screenshots
+              </div>
+              <div className="grid grid-cols-2 gap-1">
+                {(["front", "right", "back", "left"] as const).map((angle) => (
+                  <div
+                    key={angle}
+                    className="relative aspect-square rounded-lg overflow-hidden bg-black/30"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={shots[angle]}
+                      alt={angle}
+                      className="w-full h-full object-cover"
+                    />
+                    <span className="absolute bottom-0.5 left-0.5 text-[8px] text-white/60 bg-black/40 px-1 rounded">
+                      {angle}
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
-            <div className="grid grid-cols-2 gap-1">
-              {(["front", "right", "back", "left"] as const).map((angle) => (
-                <div
-                  key={angle}
-                  className="relative aspect-square rounded-lg overflow-hidden bg-black/30"
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={latest.screenshots[angle]}
-                    alt={angle}
-                    className="w-full h-full object-cover"
-                  />
-                  <span className="absolute bottom-0.5 left-0.5 text-[8px] text-white/60 bg-black/40 px-1 rounded">
-                    {angle}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : isDone ? (
-          <StatusBadge status="done" text={nodeDetail || "Captured"} />
-        ) : isActive ? (
-          <StatusBadge status="active" text={nodeDetail || "Capturing..."} />
-        ) : (
-          <div className="text-[10px] text-white/40">Waiting</div>
-        ))}
+          ) : isActive ? (
+            <StatusBadge status="active" text={nodeDetail || "Capturing..."} />
+          ) : isDone ? (
+            <StatusBadge status="done" text={nodeDetail || "Captured"} />
+          ) : (
+            <div className="text-[10px] text-white/40">Waiting</div>
+          );
+        })()}
 
       {/* Score — show score card from latest iteration or live latestScore, or status */}
       {nodeId === "score" &&

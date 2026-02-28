@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { ScoreBreakdown, IterationResult } from "@/lib/types";
+import type { ScoreBreakdown, IterationResult, WorkbenchScreenshots } from "@/lib/types";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                               */
@@ -32,6 +32,7 @@ interface PipelineStore {
   iterations: IterationResult[];
   isPaused: boolean;
   error: string | null;
+  currentScreenshots: WorkbenchScreenshots | null;
   // Actions
   setNodeStatus: (
     id: PipelineNodeId,
@@ -48,6 +49,7 @@ interface PipelineStore {
   setError: (e: string | null) => void;
   setActive: (v: boolean) => void;
   setMaxIterations: (n: number) => void;
+  setCurrentScreenshots: (s: WorkbenchScreenshots | null) => void;
 }
 
 /* ------------------------------------------------------------------ */
@@ -77,6 +79,7 @@ export const usePipelineStore = create<PipelineStore>((set) => ({
   iterations: [],
   isPaused: false,
   error: null,
+  currentScreenshots: null,
 
   setNodeStatus: (id, status, detail) =>
     set((state) => ({
@@ -97,10 +100,12 @@ export const usePipelineStore = create<PipelineStore>((set) => ({
       iterations: [],
       isPaused: false,
       error: null,
+      currentScreenshots: null,
     }),
 
   setPaused: (v) => set({ isPaused: v }),
   setError: (e) => set({ error: e }),
   setActive: (v) => set({ isActive: v }),
   setMaxIterations: (n) => set({ maxIterations: n }),
+  setCurrentScreenshots: (s) => set({ currentScreenshots: s }),
 }));
