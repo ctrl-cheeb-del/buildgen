@@ -418,12 +418,20 @@ export default function Home() {
 
   // Replay state
   const city = useQuery(api.simulation.cityState.get);
-  const lastSeenTick = myPlot?.lastSeenTick ?? 0;
+  const liveLastSeenTick = myPlot?.lastSeenTick ?? 0;
   const currentTick = city?.totalTicks ?? 0;
-  const showReplay = isSignedIn && lastSeenTick > 0 && currentTick > lastSeenTick + 2;
   const [replayDismissed, setReplayDismissed] = useState(false);
   const [watchingReplay, setWatchingReplay] = useState(false);
   const updateLastSeenTick = useMutation(api.plots.updateLastSeenTick);
+
+  // Snapshot lastSeenTick on first load to prevent the updateLastSeenTick
+  // effect from overwriting it before the replay UI can render.
+  const initialLastSeenTickRef = useRef<number | null>(null);
+  if (initialLastSeenTickRef.current === null && liveLastSeenTick > 0) {
+    initialLastSeenTickRef.current = liveLastSeenTick;
+  }
+  const snapshotLastSeenTick = initialLastSeenTickRef.current ?? 0;
+  const showReplay = isSignedIn && snapshotLastSeenTick > 0 && currentTick > snapshotLastSeenTick + 2;
 
   // Sim mode switching: live when authenticated user is on page
   const setSimMode = useMutation(api.simulation.control.setSimMode);
@@ -439,18 +447,22 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isSignedIn]);
 
-  // Persist lastSeenTick periodically while user is on page
+  // Persist lastSeenTick periodically while user is on page.
+  // Skip while replay is pending so the snapshot isn't overwritten.
   const lastSavedTickRef = useRef(0);
   useEffect(() => {
+    if (showReplay && !replayDismissed) return;
     if (currentTick > 0 && currentTick > lastSavedTickRef.current) {
       lastSavedTickRef.current = currentTick;
       updateLastSeenTick({ tick: currentTick }).catch(() => {});
     }
-  }, [currentTick, updateLastSeenTick]);
+  }, [currentTick, updateLastSeenTick, showReplay, replayDismissed]);
 
   const handleReplayDismiss = useCallback(async () => {
     setReplayDismissed(true);
     setWatchingReplay(false);
+    // Reset the snapshot so future page returns can detect new ticks
+    initialLastSeenTickRef.current = null;
     if (currentTick > 0) {
       await updateLastSeenTick({ tick: currentTick });
     }
@@ -497,7 +509,7 @@ export default function Home() {
       {/* Replay system */}
       {showReplay && !replayDismissed && !watchingReplay && (
         <ReplayTimeline
-          lastSeenTick={lastSeenTick}
+          lastSeenTick={snapshotLastSeenTick}
           currentTick={currentTick}
           onWatchReplay={() => setWatchingReplay(true)}
           onDismiss={handleReplayDismiss}
@@ -505,7 +517,7 @@ export default function Home() {
       )}
       {watchingReplay && (
         <ReplayPlayback
-          lastSeenTick={lastSeenTick}
+          lastSeenTick={snapshotLastSeenTick}
           currentTick={currentTick}
           onComplete={handleReplayDismiss}
         />
