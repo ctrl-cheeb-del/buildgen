@@ -121,19 +121,19 @@ Generate JavaScript code that creates a THREE.Group representing this building u
 IMPORTANT: The description may be creative or fantastical (e.g. "a beaver-shaped building", "a mushroom tower", "a building that looks like a guitar"). Study the reference images carefully and recreate the unique shape, silhouette, and features you see. The 3D model should clearly look like the subject described — capture its distinctive outline, proportions, and character.
 
 REQUIREMENTS:
-- CRITICAL: Use 1 unit = 1 meter. ALL dimensions (height, width, depth) must match real-world scale. The plot is 100×100 but most buildings should NOT fill it — use realistic footprints:
+- CRITICAL: Use 1 unit = 1 meter. The plot is 50×50 max. Use realistic footprints — do NOT fill the plot:
   FOOTPRINT (width × depth):
-  - Small house / cabin / shed: ~10×8
-  - Regular house / villa: ~15×12
-  - Pub / shop / small restaurant: ~15×12
-  - Church / temple: ~20×35
-  - Townhouse: ~8×15
-  - Mansion / estate: ~30×25
-  - Mid-rise office / apartment block: ~30×25
-  - Tall office tower / skyscraper: ~40×40
-  - Supertall skyscraper: ~60×60 at base
-  - Stadium / arena: ~80×60
-  - Bridge: ~80×15 (long but narrow)
+  - Small house / cabin / shed: ~5×4
+  - Regular house / villa: ~8×6
+  - Pub / shop / small restaurant: ~8×6
+  - Church / temple: ~10×18
+  - Townhouse: ~4×8
+  - Mansion / estate: ~15×12
+  - Mid-rise office / apartment block: ~15×12
+  - Tall office tower / skyscraper: ~20×20
+  - Supertall skyscraper: ~30×30 at base
+  - Stadium / arena: ~40×30
+  - Bridge: ~40×8 (long but narrow)
   HEIGHT:
   - Small house / cabin / shed: 5–10m
   - Regular house / villa / bungalow: 8–15m
@@ -148,7 +148,7 @@ REQUIREMENTS:
 - IMPORTANT: Use THREE.MeshStandardMaterial (NOT MeshPhysicalMaterial). Always set side: THREE.DoubleSide on every material.
 - NO texture loading, NO external files
 - Build the model centered at origin (0,0,0) on XZ, with the base at Y=0 (Y-up)
-- Maximum footprint: ±50 on X and ±50 on Z (100×100 hard limit), but use realistic dimensions — do NOT fill the plot unless the building actually needs it.
+- Maximum footprint: ±25 on X and ±25 on Z (50×50 hard limit). Most buildings should be MUCH smaller than this.
 - Focus on capturing the overall silhouette and distinctive features — make it immediately recognizable as "${buildingName}"
 - Use THREE.Shape + ExtrudeGeometry for organic or curved cross-sections
 - The code must be valid JavaScript that can run in a Function constructor

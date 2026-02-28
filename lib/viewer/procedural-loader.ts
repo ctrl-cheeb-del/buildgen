@@ -1,12 +1,15 @@
 import * as THREE from "three";
+<<<<<<< HEAD
 import {
   PLOT_SIZE_M,
   PAVEMENT_WIDTH_M,
 } from "../grid/grid-constants";
 import { mergeBuildingGeometry } from "./building-merge";
+=======
+>>>>>>> 7b7a3f6abc18d6cc1affe8cc21237e7cf9ff4c79
 
-/** Maximum footprint — full grass area of a plot (120m minus 6m pavement each side) */
-const MAX_FOOTPRINT = PLOT_SIZE_M - 2 * PAVEMENT_WIDTH_M; // 108m
+/** Maximum footprint — half the grass area so buildings don't fill the entire plot */
+const MAX_FOOTPRINT = 54;
 
 /**
  * Normalize a group so its XZ footprint fits within MAX_FOOTPRINT and

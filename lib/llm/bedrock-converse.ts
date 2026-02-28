@@ -13,7 +13,7 @@ import type { ScoreBreakdown } from "@/lib/types";
 
 const MODEL_ID = "us.anthropic.claude-opus-4-6-v1";
 const ITERATION_MODEL_ID = "us.anthropic.claude-opus-4-6-v1";
-const SESSION_TTL_MS = 30 * 60 * 1000; // 30 minutes
+const SESSION_TTL_MS = 4 * 60 * 60 * 1000; // 4 hours
 const MAX_SESSIONS = 50;
 const SCORE_THRESHOLD = 8.0;
 const MAX_TOKENS = 16384;
@@ -47,19 +47,19 @@ const SYSTEM_PROMPT = `You are an expert Three.js developer and 3D building eval
 When shown reference images with a generation prompt, produce JavaScript code that creates a THREE.Group representing the building.
 
 REQUIREMENTS:
-- CRITICAL: Use 1 unit = 1 meter. ALL dimensions must match real-world scale. The plot is 100×100 max but most buildings should NOT fill it.
+- CRITICAL: Use 1 unit = 1 meter. The plot is 50×50 max. Use realistic footprints — do NOT fill the plot.
   FOOTPRINT (width × depth):
-  - Small house / cabin / shed: ~10×8
-  - Regular house / villa: ~15×12
-  - Pub / shop / small restaurant: ~15×12
-  - Church / temple: ~20×35
-  - Townhouse: ~8×15
-  - Mansion / estate: ~30×25
-  - Mid-rise office / apartment block: ~30×25
-  - Tall office tower / skyscraper: ~40×40
-  - Supertall skyscraper: ~60×60 at base
-  - Stadium / arena: ~80×60
-  - Bridge: ~80×15 (long but narrow)
+  - Small house / cabin / shed: ~5×4
+  - Regular house / villa: ~8×6
+  - Pub / shop / small restaurant: ~8×6
+  - Church / temple: ~10×18
+  - Townhouse: ~4×8
+  - Mansion / estate: ~15×12
+  - Mid-rise office / apartment block: ~15×12
+  - Tall office tower / skyscraper: ~20×20
+  - Supertall skyscraper: ~30×30 at base
+  - Stadium / arena: ~40×30
+  - Bridge: ~40×8 (long but narrow)
   HEIGHT:
   - Small house / cabin / shed: 5–10m
   - Regular house / villa / bungalow: 8–15m
@@ -76,7 +76,7 @@ REQUIREMENTS:
 - AVOID Z-FIGHTING: offset decorative panels at least 0.3 units from walls
 - NO texture loading, NO external files
 - Center at origin (0,0,0) on XZ, base at Y=0 (Y-up)
-- Maximum footprint: ±50 on X and ±50 on Z (hard limit), but use realistic dimensions
+- Maximum footprint: ±25 on X and ±25 on Z (50×50 hard limit). Most buildings should be MUCH smaller than this.
 - Use THREE.Shape + ExtrudeGeometry for organic/curved cross-sections
 - Code must be valid JavaScript runnable in a Function constructor
 
@@ -95,7 +95,7 @@ Improvement Instructions:
 - Focus on the lowest-scoring areas first
 - Use THREE.MeshPhysicalMaterial for improvements (allowed in iteration)
 - Building must stay centered at origin, Y-up
-- Base footprint under 100×100
+- Base footprint under 50×50
 - NO texture loading, NO external files
 - Return COMPLETE improved code
 
