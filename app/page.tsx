@@ -12,9 +12,7 @@ import SettingsPanel from "@/components/SettingsPanel";
 import ChatInput from "@/components/chat/ChatInput";
 import ChatMessages from "@/components/chat/ChatMessages";
 import PlotPopups from "@/components/PlotPopups";
-import PipelineFlowchart, {
-  PipelineSummaryPill,
-} from "@/components/PipelineFlowchart";
+import PipelineFlowchart from "@/components/PipelineFlowchart";
 import IsolatedViewer, {
   type IsolatedViewerHandle,
 } from "@/components/workbench/IsolatedViewer";
@@ -453,26 +451,23 @@ export default function Home() {
       {/* Pipeline panel — top-left individual glass pills */}
       {pipelineHasRun && !fpMode && (
         <div className="absolute top-4 left-4 z-10">
-          {isMinimized ? (
-            <PipelineSummaryPill onExpand={() => setMinimized(false)} />
-          ) : (
-            <PipelineFlowchart
-              onMinimize={() => setMinimized(true)}
-              onStop={iteration.stop}
-              onTogglePause={iteration.togglePause}
-              multiViewUrl={multiViewUrl ?? null}
-              iterations={iteration.iterations}
-              selectedBuilding={
-                selectedBuilding
-                  ? {
-                      proceduralCode: selectedBuilding.proceduralCode,
-                      prompt: selectedBuilding.prompt,
-                      plotIndex: selectedBuilding.plotIndex,
-                    }
-                  : null
-              }
-            />
-          )}
+          <PipelineFlowchart
+            isMinimized={isMinimized}
+            onToggleMinimize={() => setMinimized((v) => !v)}
+            onStop={iteration.stop}
+            onTogglePause={iteration.togglePause}
+            multiViewUrl={multiViewUrl ?? null}
+            iterations={iteration.iterations}
+            selectedBuilding={
+              selectedBuilding
+                ? {
+                    proceduralCode: selectedBuilding.proceduralCode,
+                    prompt: selectedBuilding.prompt,
+                    plotIndex: selectedBuilding.plotIndex,
+                  }
+                : null
+            }
+          />
         </div>
       )}
     </div>
