@@ -1,6 +1,8 @@
 import * as THREE from "three";
 import mapboxgl from "mapbox-gl";
 import { buildGroundPlanes, disposeGroundPlanes } from "./ground-planes";
+import { createEnvironmentMap } from "./environment";
+import { initTextureQuality } from "./texture-loader";
 
 /**
  * Three.js custom layer for Mapbox GL JS.
@@ -57,21 +59,37 @@ export class ThreeJSMapboxLayer implements mapboxgl.CustomLayerInterface {
     this.camera = new THREE.Camera();
     this.scene = new THREE.Scene();
 
-    // Lighting — stronger to compensate for lack of environment maps in shared context
-    const ambientLight = new THREE.AmbientLight(0xffffff, 1.0);
-    this.scene.add(ambientLight);
+    // Hemisphere light: warm sky + earth ground bounce (replaces flat white ambient)
+    const hemi = new THREE.HemisphereLight(0x87ceeb, 0x556b2f, 0.6);
+    this.scene.add(hemi);
 
-    const directionalLight1 = new THREE.DirectionalLight(0xffffff, 1.2);
-    directionalLight1.position.set(100, 200, 100);
-    this.scene.add(directionalLight1);
+    // Key light (sun) — warm white, with shadows
+    const sun = new THREE.DirectionalLight(0xfff4e6, 1.6);
+    sun.position.set(100, 200, 100);
+    sun.castShadow = true;
+    sun.shadow.mapSize.width = 2048;
+    sun.shadow.mapSize.height = 2048;
+    sun.shadow.camera.left = -150;
+    sun.shadow.camera.right = 150;
+    sun.shadow.camera.top = 150;
+    sun.shadow.camera.bottom = -150;
+    sun.shadow.camera.near = 1;
+    sun.shadow.camera.far = 500;
+    sun.shadow.bias = -0.0005;
+    sun.shadow.normalBias = 0.02;
+    sun.target.position.set(0, 0, 0);
+    this.scene.add(sun);
+    this.scene.add(sun.target);
 
-    const directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.5);
-    directionalLight2.position.set(-100, 150, -50);
-    this.scene.add(directionalLight2);
+    // Fill light — cooler, opposite side
+    const fill = new THREE.DirectionalLight(0xc4d7ff, 0.4);
+    fill.position.set(-100, 150, -50);
+    this.scene.add(fill);
 
-    const directionalLight3 = new THREE.DirectionalLight(0xffffff, 0.3);
-    directionalLight3.position.set(0, -100, 100);
-    this.scene.add(directionalLight3);
+    // Rim light
+    const rim = new THREE.DirectionalLight(0xffeedd, 0.25);
+    rim.position.set(0, -100, 100);
+    this.scene.add(rim);
 
     // Textured ground planes (roads, pavements, plots)
     this.groundGroup = buildGroundPlanes();
@@ -84,6 +102,14 @@ export class ThreeJSMapboxLayer implements mapboxgl.CustomLayerInterface {
       antialias: true,
     });
     this.renderer.autoClear = false;
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+    // Enable anisotropic filtering for all textures
+    initTextureQuality(this.renderer);
+
+    // PMREM environment map — gives PBR materials realistic reflections
+    this.scene.environment = createEnvironmentMap(this.renderer);
   }
 
   render(gl: WebGLRenderingContext, matrix: number[]) {

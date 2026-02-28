@@ -28,24 +28,43 @@ export function createAxesHelper(): THREE.AxesHelper {
   return new THREE.AxesHelper(20);
 }
 
-/** Standard lighting for the standalone viewer */
+/** Standard lighting for the standalone viewer — cinematic 3-point + hemisphere */
 export function createViewerLights(): THREE.Group {
   const group = new THREE.Group();
 
-  const ambient = new THREE.AmbientLight(0xffffff, 0.8);
-  group.add(ambient);
+  // Hemisphere light: warm sky blue from above, muted earth from below
+  // Replaces flat white ambient for more natural fill
+  const hemi = new THREE.HemisphereLight(0x87ceeb, 0x556b2f, 0.5);
+  group.add(hemi);
 
-  const dir1 = new THREE.DirectionalLight(0xffffff, 1.2);
-  dir1.position.set(100, 200, 100);
-  group.add(dir1);
+  // Key light (sun) — warm white, casts shadows
+  const sun = new THREE.DirectionalLight(0xfff4e6, 1.8);
+  sun.position.set(60, 120, 80);
+  sun.castShadow = true;
+  sun.shadow.mapSize.width = 2048;
+  sun.shadow.mapSize.height = 2048;
+  sun.shadow.camera.left = -60;
+  sun.shadow.camera.right = 60;
+  sun.shadow.camera.top = 60;
+  sun.shadow.camera.bottom = -60;
+  sun.shadow.camera.near = 1;
+  sun.shadow.camera.far = 300;
+  sun.shadow.bias = -0.0005;
+  sun.shadow.normalBias = 0.02;
+  // Target must be in the scene graph or shadows silently fail
+  sun.target.position.set(0, 0, 0);
+  group.add(sun);
+  group.add(sun.target);
 
-  const dir2 = new THREE.DirectionalLight(0xffffff, 0.5);
-  dir2.position.set(-100, 150, -50);
-  group.add(dir2);
+  // Fill light — cooler tone, opposite side, no shadows
+  const fill = new THREE.DirectionalLight(0xc4d7ff, 0.4);
+  fill.position.set(-80, 100, -40);
+  group.add(fill);
 
-  const dir3 = new THREE.DirectionalLight(0xffffff, 0.3);
-  dir3.position.set(0, -100, 100);
-  group.add(dir3);
+  // Rim / back light — subtle warmth for silhouette pop
+  const rim = new THREE.DirectionalLight(0xffeedd, 0.25);
+  rim.position.set(0, 50, -100);
+  group.add(rim);
 
   return group;
 }

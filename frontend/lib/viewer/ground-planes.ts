@@ -79,6 +79,7 @@ export function buildGroundPlanes(): THREE.Group {
     }
 
     const mesh = new THREE.Mesh(geo, clonedMat);
+    mesh.receiveShadow = true;
     // Plane is XY by default — rotate to XZ (flat on ground)
     mesh.rotation.x = -Math.PI / 2;
     // Position: center of the rect

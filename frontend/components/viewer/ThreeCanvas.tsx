@@ -15,6 +15,8 @@ import {
   createAxesHelper,
   createViewerLights,
 } from "@/lib/viewer/scene-helpers";
+import { createEnvironmentMap } from "@/lib/viewer/environment";
+import { initTextureQuality } from "@/lib/viewer/texture-loader";
 import {
   computeGeometryStats,
   type GeometryStats,
@@ -46,6 +48,7 @@ const ThreeCanvas = forwardRef<ThreeCanvasHandle, ThreeCanvasProps>(
 
       const scene = new THREE.Scene();
       scene.background = new THREE.Color(0x1a1a2e);
+      scene.fog = new THREE.FogExp2(0x1a1a2e, 0.0015);
       sceneRef.current = scene;
 
       const camera = new THREE.PerspectiveCamera(
@@ -66,8 +69,16 @@ const ThreeCanvas = forwardRef<ThreeCanvasHandle, ThreeCanvasProps>(
       renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
       renderer.toneMapping = THREE.ACESFilmicToneMapping;
       renderer.toneMappingExposure = 1.2;
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
       container.appendChild(renderer.domElement);
       rendererRef.current = renderer;
+
+      // Enable max anisotropic filtering for sharp textures at angles
+      initTextureQuality(renderer);
+
+      // PMREM environment map — gives all PBR materials subtle reflections
+      scene.environment = createEnvironmentMap(renderer);
 
       const controls = new OrbitControls(camera, renderer.domElement);
       controls.target.set(0, 40, 0);

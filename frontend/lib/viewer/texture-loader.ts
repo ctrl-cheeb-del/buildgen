@@ -19,6 +19,17 @@ const cache = new Map<string, THREE.Texture>();
 
 const loader = new THREE.TextureLoader();
 
+// Resolved lazily on first use — needs a renderer to query
+let maxAnisotropy = 0;
+
+/**
+ * Call once after creating the renderer to enable max anisotropic filtering.
+ * Keeps textures crisp at oblique camera angles.
+ */
+export function initTextureQuality(renderer: THREE.WebGLRenderer): void {
+  maxAnisotropy = renderer.capabilities.getMaxAnisotropy();
+}
+
 /**
  * Load a texture from a URL or base64 data URL and configure it for tiling.
  */
@@ -34,6 +45,10 @@ export function loadTileableTexture(
   texture.wrapT = THREE.RepeatWrapping;
   texture.repeat.set(repeat, repeat);
   texture.colorSpace = THREE.SRGBColorSpace;
+  texture.generateMipmaps = true;
+  texture.minFilter = THREE.LinearMipmapLinearFilter;
+  texture.magFilter = THREE.LinearFilter;
+  if (maxAnisotropy > 0) texture.anisotropy = maxAnisotropy;
 
   cache.set(src, texture);
   return texture;
@@ -61,6 +76,10 @@ export function loadBase64Texture(
       texture.wrapT = THREE.RepeatWrapping;
       texture.repeat.set(repeat, repeat);
       texture.colorSpace = THREE.SRGBColorSpace;
+      texture.generateMipmaps = true;
+      texture.minFilter = THREE.LinearMipmapLinearFilter;
+      texture.magFilter = THREE.LinearFilter;
+      if (maxAnisotropy > 0) texture.anisotropy = maxAnisotropy;
       texture.needsUpdate = true;
 
       cache.set(base64DataUrl, texture);
