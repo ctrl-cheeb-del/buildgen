@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { query, mutation } from "./_generated/server";
+import { query, mutation, internalMutation } from "./_generated/server";
 
 const GRID_COLS = 8;
 const GRID_ROWS = 10;
@@ -186,6 +186,47 @@ export const resetPlot = mutation({
     }
 
     // Reset to claimed (user still owns it, just no buildings generating)
+    await ctx.db.patch(plot._id, { status: "claimed" });
+  },
+});
+
+// --- Internal mutations (callable from Convex actions, skip auth checks) ---
+
+export const markGeneratingInternal = internalMutation({
+  args: { plotIndex: v.number() },
+  handler: async (ctx, { plotIndex }) => {
+    const plots = await ctx.db
+      .query("plots")
+      .withIndex("by_index", (q) => q.eq("index", plotIndex))
+      .collect();
+    const plot = plots[0];
+    if (!plot) throw new Error(`Plot ${plotIndex} not found`);
+    await ctx.db.patch(plot._id, { status: "generating" });
+  },
+});
+
+export const markOccupiedInternal = internalMutation({
+  args: { plotIndex: v.number() },
+  handler: async (ctx, { plotIndex }) => {
+    const plots = await ctx.db
+      .query("plots")
+      .withIndex("by_index", (q) => q.eq("index", plotIndex))
+      .collect();
+    const plot = plots[0];
+    if (!plot) throw new Error(`Plot ${plotIndex} not found`);
+    await ctx.db.patch(plot._id, { status: "occupied" });
+  },
+});
+
+export const resetPlotInternal = internalMutation({
+  args: { plotIndex: v.number() },
+  handler: async (ctx, { plotIndex }) => {
+    const plots = await ctx.db
+      .query("plots")
+      .withIndex("by_index", (q) => q.eq("index", plotIndex))
+      .collect();
+    const plot = plots[0];
+    if (!plot) throw new Error(`Plot ${plotIndex} not found`);
     await ctx.db.patch(plot._id, { status: "claimed" });
   },
 });

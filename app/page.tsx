@@ -1,9 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { useUser } from "@clerk/nextjs";
-import type { MultiViewImages } from "@/lib/types";
 import { api } from "../convex/_generated/api";
 import ThreeMapCanvas from "@/components/ThreeMapCanvas";
 import AuthButton from "@/components/AuthButton";
@@ -29,7 +28,7 @@ import type { Id } from "../convex/_generated/dataModel";
 const TOTAL_PLOTS = GRID_COLS * GRID_ROWS;
 
 export default function Home() {
-  const { isRunning, multiView, steps, runPipeline } = usePipeline();
+  const { isRunning, runPipeline } = usePipeline();
   const { isSignedIn, user } = useUser();
   const { plotStates, buildings, localPendingUpdates } =
     useGridSync();
@@ -64,18 +63,15 @@ export default function Home() {
     (p) => p.status === "occupied" || p.status === "claimed"
   ).length;
 
-  const [cachedViews, setCachedViews] = useState<{
-    views: MultiViewImages;
-    buildingName: string;
-  } | null>(null);
+  // Derive generating state from Convex (persists across refresh) + local state (instant feedback)
+  const isGenerating = isRunning || myPlot?.status === "generating";
 
   const handleGenerate = useCallback(
     (buildingName: string) => {
       if (!myPlot) return;
-      const cached = cachedViews?.views;
-      runPipeline(buildingName, myPlot.index, cached);
+      runPipeline(buildingName, myPlot.index);
     },
-    [runPipeline, cachedViews, myPlot]
+    [runPipeline, myPlot]
   );
 
   const handlePlotClick = useCallback(
@@ -93,17 +89,6 @@ export default function Home() {
     },
     [plotStates, claimPlot]
   );
-
-  const handleSelectCached = useCallback(
-    (views: MultiViewImages, buildingName: string) => {
-      setCachedViews({ views, buildingName });
-    },
-    []
-  );
-
-  const handleClearCached = useCallback(() => {
-    setCachedViews(null);
-  }, []);
 
   const handleDeleteBuilding = useCallback(
     async (buildingId: string) => {
@@ -220,14 +205,14 @@ export default function Home() {
   const addMessage = useChatStore((s) => s.addMessage);
   const removeStatusMessages = useChatStore((s) => s.removeStatusMessages);
 
-  // Clear status messages when pipeline finishes
-  const prevIsRunning = useRef(false);
+  // Clear status messages when generation finishes
+  const prevIsGenerating = useRef(false);
   useEffect(() => {
-    if (prevIsRunning.current && !isRunning) {
+    if (prevIsGenerating.current && !isGenerating) {
       removeStatusMessages();
     }
-    prevIsRunning.current = isRunning;
-  }, [isRunning, removeStatusMessages]);
+    prevIsGenerating.current = isGenerating;
+  }, [isGenerating, removeStatusMessages]);
 
   const chatDeps = useMemo(
     () => ({
@@ -272,9 +257,7 @@ export default function Home() {
         <div className="absolute top-4 right-4 z-10 flex items-center gap-2">
           <AuthButton />
           <SettingsPanel
-            isRunning={isRunning}
-            multiView={multiView}
-            steps={steps}
+            isRunning={isGenerating}
             onGenerate={handleGenerate}
             myPlot={myPlot}
             totalPlots={TOTAL_PLOTS}
@@ -288,9 +271,6 @@ export default function Home() {
             onSelectBuilding={selectBuilding}
             onDeleteBuilding={handleDeleteBuilding}
             isOwnerOfSelected={isOwnerOfSelected}
-            cachedViews={cachedViews}
-            onSelectCached={handleSelectCached}
-            onClearCached={handleClearCached}
           />
         </div>
       )}
@@ -300,7 +280,7 @@ export default function Home() {
 
       {/* Chat UI */}
       <ChatMessages />
-      <ChatInput onSend={sendMessage} isLoading={chatIsLoading} />
+      <ChatInput onSend={sendMessage} isLoading={chatIsLoading} isGenerating={isGenerating} />
     </div>
   );
 }

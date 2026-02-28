@@ -4,8 +4,7 @@ export interface ToolDeps {
   setCharacter: (c: { handle: string; avatarUrl?: string } | null) => void;
   runPipeline: (
     buildingName: string,
-    plotIndex: number,
-    cachedViews?: undefined
+    plotIndex: number
   ) => Promise<void>;
   myPlotIndex: number | null;
   userHandle: string;

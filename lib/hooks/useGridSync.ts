@@ -1,11 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useRef } from "react";
+import * as THREE from "three";
 import { useQuery, useMutation } from "convex/react";
+import { useUser } from "@clerk/nextjs";
 import { api } from "../../convex/_generated/api";
 import { useWorldStore } from "../stores/world-store";
 import { loadProceduralGeometry } from "../viewer/procedural-loader";
 import { applyBuildingTextures } from "../viewer/building-textures";
+import { createLoadingPlaceholder } from "../viewer/loading-placeholder";
 import {
   plotCenterMeters,
   gridIndexToColRow,
@@ -13,6 +16,7 @@ import {
 } from "../grid/grid-geometry";
 
 export function useGridSync() {
+  const { user } = useUser();
   const plots = useQuery(api.plots.getPlots);
   const buildings = useQuery(api.buildings.getAllBuildings);
   const initializePlots = useMutation(api.plots.initializePlots);
@@ -108,6 +112,113 @@ export function useGridSync() {
       }
     }
   }, [buildings, layer, addBuilding, removeBuilding, updateTransform]);
+
+  // ── Loading placeholders for "generating" plots ──────────────
+  const placeholders = useRef(
+    new Map<
+      number,
+      { group: THREE.Group; update: (t: number) => void; dispose: () => void }
+    >()
+  );
+
+  useEffect(() => {
+    if (!plots || !layer) return;
+
+    const userId = user?.id;
+    const generatingIndices = new Set(
+      plots
+        .filter((p) => p.status === "generating" && p.ownerId === userId)
+        .map((p) => p.index)
+    );
+
+    // Candidate positions for auto-placement (must match convex/buildings.ts)
+    const CANDIDATES: [number, number][] = [
+      [0, 0],
+      [-27, -27],
+      [27, -27],
+      [-27, 27],
+      [27, 27],
+    ];
+    const MIN_SPACING = 30;
+
+    // Add placeholders for newly generating plots
+    for (const idx of generatingIndices) {
+      if (placeholders.current.has(idx)) continue;
+
+      const { col, row } = gridIndexToColRow(idx);
+      const [mx, mz] = plotCenterMeters(col, row);
+
+      // Predict free position by checking existing buildings on this plot
+      const occupied = (buildings ?? [])
+        .filter((b) => b.plotIndex === idx)
+        .map((b) => ({
+          x: b.position?.x ?? 0,
+          z: b.position?.z ?? 0,
+        }));
+
+      let freeX = 0;
+      let freeZ = 0;
+      for (const [cx, cz] of CANDIDATES) {
+        const overlaps = occupied.some(
+          (o) => Math.abs(o.x - cx) < MIN_SPACING && Math.abs(o.z - cz) < MIN_SPACING
+        );
+        if (!overlaps) {
+          freeX = cx;
+          freeZ = cz;
+          break;
+        }
+      }
+
+      const placeholder = createLoadingPlaceholder();
+      placeholder.group.position.x = mx + freeX;
+      placeholder.group.position.z = mz + freeZ;
+      layer.addGroup(placeholder.group);
+      placeholders.current.set(idx, placeholder);
+    }
+
+    // Remove placeholders for plots that are no longer generating
+    for (const [idx, ph] of placeholders.current) {
+      if (!generatingIndices.has(idx)) {
+        layer.removeGroup(ph.group);
+        ph.dispose();
+        placeholders.current.delete(idx);
+      }
+    }
+  }, [plots, buildings, layer, user?.id]);
+
+  // Animate active placeholders
+  useEffect(() => {
+    if (!layer) return;
+    const map = placeholders.current;
+
+    let animId = 0;
+    const clock = new THREE.Clock();
+
+    function tick() {
+      animId = requestAnimationFrame(tick);
+      if (map.size === 0) return;
+
+      const elapsed = clock.getElapsedTime();
+      for (const ph of map.values()) {
+        ph.update(elapsed);
+      }
+      layer!.repaint();
+    }
+    tick();
+
+    return () => cancelAnimationFrame(animId);
+  }, [layer]);
+
+  // Cleanup all placeholders on unmount
+  useEffect(() => {
+    const map = placeholders.current;
+    return () => {
+      for (const ph of map.values()) {
+        ph.dispose();
+      }
+      map.clear();
+    };
+  }, []);
 
   // Generate plot states for GeoJSON
   const plotStates: PlotState[] = useMemo(() => {

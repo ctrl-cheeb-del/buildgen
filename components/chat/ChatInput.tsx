@@ -8,9 +8,10 @@ import { useChatStore } from "@/lib/stores/chat-store";
 interface ChatInputProps {
   onSend: (text: string) => void;
   isLoading: boolean;
+  isGenerating?: boolean;
 }
 
-export default function ChatInput({ onSend, isLoading }: ChatInputProps) {
+export default function ChatInput({ onSend, isLoading, isGenerating }: ChatInputProps) {
   const [text, setText] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const carMode = useCarStore((s) => s.carMode);
@@ -18,7 +19,7 @@ export default function ChatInput({ onSend, isLoading }: ChatInputProps) {
   const messages = useChatStore((s) => s.messages);
 
   const statusMessages = messages.filter((m) => m.role === "status");
-  const hasStatus = statusMessages.length > 0;
+  const hasStatus = statusMessages.length > 0 || !!isGenerating;
 
   useEffect(() => {
     if ((carMode || fpMode) && inputRef.current) {
@@ -149,15 +150,22 @@ export default function ChatInput({ onSend, isLoading }: ChatInputProps) {
           </svg>
           {/* Tab content */}
           <div className="absolute inset-0 flex items-center justify-center px-5">
-            {statusMessages.map((msg) => (
-              <div
-                key={msg.id}
-                className="flex items-center gap-2 text-xs text-white/80"
-              >
+            {statusMessages.length > 0 ? (
+              statusMessages.map((msg) => (
+                <div
+                  key={msg.id}
+                  className="flex items-center gap-2 text-xs text-white/80"
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse flex-shrink-0" />
+                  <span className="truncate">{msg.content}</span>
+                </div>
+              ))
+            ) : isGenerating ? (
+              <div className="flex items-center gap-2 text-xs text-white/80">
                 <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse flex-shrink-0" />
-                <span className="truncate">{msg.content}</span>
+                <span className="truncate">Generating building...</span>
               </div>
-            ))}
+            ) : null}
           </div>
         </div>
 
