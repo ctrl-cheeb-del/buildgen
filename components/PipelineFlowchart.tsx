@@ -379,47 +379,53 @@ function NodePill({
 }
 
 /* ------------------------------------------------------------------ */
-/*  LoopBackLine — SVG on the right side (Capture -> Update)            */
+/*  LoopBackLine — solid glowing SVG curve, connected to active node    */
 /* ------------------------------------------------------------------ */
 
 function LoopBackLine({
-  nodeCount,
-  isActive,
+  activeIndex,
 }: {
-  nodeCount: number;
-  isActive: boolean;
+  /** Index of the active node within iteration nodes (0-3), or -1 if none active */
+  activeIndex: number;
 }) {
-  // Each node row = pill(~32px) + connector(~20px) = ~52px, minus last connector
+  // Each row = pill(~32px) + connector(~20px) = ~52px
   const rowH = 52;
-  const totalH = nodeCount * rowH - 20;
-  const pad = 16;
-  const x = 10;
+  const pillCenter = 16; // vertical center of a pill
+  const x = 12;
   const r = 8;
 
-  const top = pad;
-  const bottom = totalH - pad;
+  // The line always starts at the top (Capture = index 0)
+  const top = pillCenter;
+  // It extends down to the active node, or to Update if none active
+  const targetIdx = activeIndex >= 0 ? activeIndex : 3;
+  const bottom = targetIdx * rowH + pillCenter;
+
+  // Don't draw if line would be zero height (active is Capture itself)
+  if (targetIdx === 0) return null;
+
+  const totalH = 4 * rowH;
+  const isAnimating = activeIndex >= 0;
 
   return (
     <svg
-      className="absolute -right-6 top-0 pointer-events-none"
-      width="22"
+      className={`absolute -right-6 top-0 pointer-events-none ${isAnimating ? "animate-loop-glow" : ""}`}
+      width="24"
       height={totalH}
       fill="none"
     >
+      {/* Main solid line from active node up to top, then curve left */}
       <path
         d={`M ${x} ${bottom} L ${x} ${top + r} Q ${x} ${top} ${x - r} ${top}`}
-        stroke="white"
-        strokeOpacity={0.2}
-        strokeWidth={1.5}
-        strokeDasharray={isActive ? "4 3" : "none"}
-        className={isActive ? "animate-dash" : ""}
+        stroke="rgba(96, 165, 250, 0.6)"
+        strokeWidth={2.5}
+        strokeLinecap="round"
         fill="none"
       />
+      {/* Arrow pointing left at top */}
       <path
-        d={`M ${x - r + 4} ${top - 3} L ${x - r} ${top} L ${x - r + 4} ${top + 3}`}
-        stroke="white"
-        strokeOpacity={0.3}
-        strokeWidth={1.5}
+        d={`M ${x - r + 4} ${top - 3.5} L ${x - r} ${top} L ${x - r + 4} ${top + 3.5}`}
+        stroke="rgba(96, 165, 250, 0.7)"
+        strokeWidth={2}
         strokeLinecap="round"
         strokeLinejoin="round"
         fill="none"
@@ -680,10 +686,10 @@ export default function PipelineFlowchart({
   };
 
   const hasIterations = iterationCount > 0;
-  const iterationIsActive = iterNodes.some((n) => n.status === "active");
 
-  // Build a flat list: pill, connector, pill, connector, ... for generation
-  // Then a connector, then iteration section with loop-back
+  // Find which iteration node is currently active (for loop-back line)
+  const activeIterIndex = iterNodes.findIndex((n) => n.status === "active");
+
   return (
     <div className="flex flex-col items-start animate-slide-in-left">
       {/* Controls pill — only when active */}
@@ -725,7 +731,7 @@ export default function PipelineFlowchart({
         </>
       )}
 
-      {/* Generation nodes — flat: pill, connector, pill, connector, pill */}
+      {/* Generation nodes */}
       {genNodes.map((node, i) => (
         <div key={node.id} className="flex flex-col items-start">
           <NodePill
@@ -734,7 +740,6 @@ export default function PipelineFlowchart({
             onToggle={() => toggleNode(node.id)}
             detailProps={{ ...detailProps, nodeId: node.id }}
           />
-          {/* Connector after every gen node (bridges to next or to iter section) */}
           <GlassConnector
             status={
               i < genNodes.length - 1
@@ -746,10 +751,8 @@ export default function PipelineFlowchart({
       ))}
 
       {/* Iteration nodes with loop-back line */}
-      <div className="relative flex flex-col items-start">
-        {hasIterations && (
-          <LoopBackLine nodeCount={4} isActive={iterationIsActive} />
-        )}
+      <div className="relative flex flex-col items-start pr-8">
+        {hasIterations && <LoopBackLine activeIndex={activeIterIndex} />}
 
         {iterNodes.map((node, i) => (
           <div key={node.id} className="flex flex-col items-start">

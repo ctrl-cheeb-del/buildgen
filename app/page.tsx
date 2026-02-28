@@ -397,7 +397,7 @@ export default function Home() {
 
       {/* Pipeline panel — top-left individual glass pills */}
       {pipelineHasRun && !fpMode && (
-        <div className="absolute top-4 left-4 z-10 max-h-[calc(100vh-5rem)] overflow-y-auto scrollbar-hide">
+        <div className="absolute top-4 left-4 z-10">
           {isMinimized ? (
             <PipelineSummaryPill onExpand={() => setMinimized(false)} />
           ) : (

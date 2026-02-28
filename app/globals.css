@@ -50,8 +50,12 @@ body {
 
 /* Pipeline flowchart animations */
 @keyframes nodeGlow {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(96, 165, 250, 0.4); }
-  50% { box-shadow: 0 0 20px 6px rgba(96, 165, 250, 0.25); }
+  0%, 100% { box-shadow: 0 0 4px 2px rgba(96, 165, 250, 0.3); }
+  50% { box-shadow: 0 0 28px 10px rgba(96, 165, 250, 0.45); }
+}
+@keyframes loopGlow {
+  0%, 100% { filter: drop-shadow(0 0 2px rgba(96, 165, 250, 0.3)); opacity: 0.5; }
+  50% { filter: drop-shadow(0 0 8px rgba(96, 165, 250, 0.6)); opacity: 1; }
 }
 @keyframes dashFlow {
   to { stroke-dashoffset: -20; }
@@ -65,6 +69,7 @@ body {
   to { transform: translateX(0); opacity: 1; }
 }
 .animate-glow { animation: nodeGlow 2s ease-in-out infinite; }
+.animate-loop-glow { animation: loopGlow 2s ease-in-out infinite; }
 .animate-dash { animation: dashFlow 0.8s linear infinite; }
 .animate-slide-up { animation: slideUp 0.3s ease-out; }
 .animate-slide-in-right { animation: slideInRight 0.3s ease-out; }
