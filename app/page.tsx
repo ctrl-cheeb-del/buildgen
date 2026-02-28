@@ -232,7 +232,6 @@ export default function Home() {
   const addMessage = useChatStore((s) => s.addMessage);
   const removeStatusMessages = useChatStore((s) => s.removeStatusMessages);
 
-  // Clear status messages when pipeline finishes
   const prevIsRunning = useRef(false);
   useEffect(() => {
     if (prevIsRunning.current && !isRunning) {
