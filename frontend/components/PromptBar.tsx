@@ -3,24 +3,35 @@
 import { useState, useCallback, useEffect } from "react";
 
 interface PromptBarProps {
-  onGenerate: (buildingName: string, lng: number, lat: number) => void;
+  onGenerate: (buildingName: string) => void;
   isRunning: boolean;
   overrideName?: string;
+  nextPlotIndex: number | null;
+  totalPlots: number;
+  filledPlots: number;
 }
 
-export default function PromptBar({ onGenerate, isRunning, overrideName }: PromptBarProps) {
+export default function PromptBar({
+  onGenerate,
+  isRunning,
+  overrideName,
+  nextPlotIndex,
+  totalPlots,
+  filledPlots,
+}: PromptBarProps) {
   const [buildingName, setBuildingName] = useState("");
-  const [lng, setLng] = useState(-73.9857);
-  const [lat, setLat] = useState(40.7484);
+
+  const allFull = nextPlotIndex === null;
 
   useEffect(() => {
     if (overrideName) setBuildingName(overrideName);
   }, [overrideName]);
 
   const handleGenerate = useCallback(() => {
-    if (!buildingName.trim() || isRunning) return;
-    onGenerate(buildingName.trim(), lng, lat);
-  }, [buildingName, lng, lat, isRunning, onGenerate]);
+    if (!buildingName.trim() || isRunning || allFull) return;
+    onGenerate(buildingName.trim());
+    setBuildingName("");
+  }, [buildingName, isRunning, allFull, onGenerate]);
 
   return (
     <div className="space-y-3">
@@ -30,34 +41,31 @@ export default function PromptBar({ onGenerate, isRunning, overrideName }: Promp
           value={buildingName}
           onChange={(e) => setBuildingName(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && handleGenerate()}
-          placeholder="Describe any building... e.g. a beaver-shaped skyscraper"
-          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:border-blue-500 transition-colors"
+          placeholder={
+            allFull
+              ? "All plots full"
+              : "Describe any building... e.g. a beaver-shaped skyscraper"
+          }
+          disabled={allFull}
+          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:border-blue-500 transition-colors disabled:bg-gray-100 disabled:text-gray-400"
         />
         <button
           onClick={handleGenerate}
-          disabled={isRunning || !buildingName.trim()}
+          disabled={isRunning || !buildingName.trim() || allFull}
           className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
         >
           Generate
         </button>
       </div>
-      <div className="flex gap-2">
-        <input
-          type="number"
-          step="any"
-          value={lng}
-          onChange={(e) => setLng(parseFloat(e.target.value) || 0)}
-          placeholder="Longitude"
-          className="flex-1 px-2 py-1.5 border border-gray-300 rounded-md text-xs outline-none focus:border-blue-500"
-        />
-        <input
-          type="number"
-          step="any"
-          value={lat}
-          onChange={(e) => setLat(parseFloat(e.target.value) || 0)}
-          placeholder="Latitude"
-          className="flex-1 px-2 py-1.5 border border-gray-300 rounded-md text-xs outline-none focus:border-blue-500"
-        />
+      <div className="flex items-center justify-between text-xs text-gray-500">
+        <span>
+          {allFull
+            ? "All plots full"
+            : `Building will be placed in Plot #${nextPlotIndex}`}
+        </span>
+        <span>
+          {filledPlots}/{totalPlots} plots filled
+        </span>
       </div>
     </div>
   );

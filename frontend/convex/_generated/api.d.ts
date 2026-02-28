@@ -8,8 +8,9 @@
  * @module
  */
 
+import type * as buildings from "../buildings.js";
 import type * as multiViewPreviews from "../multiViewPreviews.js";
-import type * as myFunctions from "../myFunctions.js";
+import type * as plots from "../plots.js";
 
 import type {
   ApiFromModules,
@@ -18,8 +19,9 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  buildings: typeof buildings;
   multiViewPreviews: typeof multiViewPreviews;
-  myFunctions: typeof myFunctions;
+  plots: typeof plots;
 }>;
 
 /**

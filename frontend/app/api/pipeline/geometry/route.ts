@@ -144,6 +144,7 @@ Generate JavaScript code that creates a THREE.Group representing this building u
 IMPORTANT: The description may be creative or fantastical (e.g. "a beaver-shaped building", "a mushroom tower", "a building that looks like a guitar"). Study the reference images carefully and recreate the unique shape, silhouette, and features you see. The 3D model should clearly look like the subject described — capture its distinctive outline, proportions, and character.
 
 REQUIREMENTS:
+- The building must fit within a 30m x 30m footprint. Keep the base dimensions under 25m x 25m to leave margin.
 - Return ONLY a JavaScript function body that will be wrapped in: function(THREE) { ... return group; }
 - Create a THREE.Group as the root
 - Use THREE.BoxGeometry, THREE.CylinderGeometry, THREE.SphereGeometry, THREE.ExtrudeGeometry, THREE.Shape, THREE.LatheGeometry, etc. — use whatever geometry types best capture the shape

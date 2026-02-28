@@ -36,8 +36,10 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# lockfiles (using bun)
-bun.lock
+# per-package lockfiles (root bun.lock is committed)
+frontend/bun.lock
+nanobanana/bun.lock
+gaussian-splats/bun.lock
 
 # typescript
 *.tsbuildinfo

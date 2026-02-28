@@ -3,9 +3,8 @@
 import { useState, useCallback } from "react";
 import { useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
-import type { MultiViewImages, PipelineStatus, WorldBuilding } from "../types";
-import { loadProceduralGeometry } from "../viewer/procedural-loader";
-import { useWorldStore } from "../stores/world-store";
+import type { MultiViewImages, PipelineStatus } from "../types";
+import { gridIndexToColRow, getPlotCenter } from "../grid/grid-geometry";
 
 interface PipelineState {
   isRunning: boolean;
@@ -44,7 +43,10 @@ export function usePipeline() {
     },
   });
 
-  const { addBuilding, generateId } = useWorldStore();
+  const claimNextEmpty = useMutation(api.plots.claimNextEmpty);
+  const createBuilding = useMutation(api.buildings.createBuilding);
+  const markComplete = useMutation(api.plots.markComplete);
+  const resetPlot = useMutation(api.plots.resetPlot);
   const generateUploadUrl = useMutation(api.multiViewPreviews.generateUploadUrl);
   const savePreview = useMutation(api.multiViewPreviews.save);
 
@@ -73,12 +75,7 @@ export function usePipeline() {
   }, []);
 
   const runPipeline = useCallback(
-    async (
-      buildingName: string,
-      lng: number,
-      lat: number,
-      cachedViews?: MultiViewImages
-    ) => {
+    async (buildingName: string, cachedViews?: MultiViewImages) => {
       if (!buildingName.trim()) return;
 
       setState((prev) => ({
@@ -88,7 +85,18 @@ export function usePipeline() {
       }));
       resetSteps();
 
+      let plotIndex: number | null = null;
+
       try {
+        // Claim next empty plot
+        plotIndex = await claimNextEmpty();
+        if (plotIndex === null) {
+          throw new Error("No empty plots available");
+        }
+
+        const { col, row } = gridIndexToColRow(plotIndex);
+        const [lng, lat] = getPlotCenter(col, row);
+
         let views: MultiViewImages;
 
         if (cachedViews) {
@@ -194,27 +202,31 @@ export function usePipeline() {
         const { code } = (await geoRes.json()) as { code: string };
         setStep("generate", "done", "Code generated");
 
-        // Step 3: Render client-side
-        setStep("render", "running", "Loading geometry...");
+        // Step 3: Store in Convex (rendering happens via useGridSync subscription)
+        setStep("render", "running", "Saving building...");
 
-        const group = loadProceduralGeometry(code);
-        const building: WorldBuilding = {
-          id: generateId(),
-          name: buildingName,
-          lng,
-          lat,
-          path: "A",
-          scale: 1,
-          offset: [0, 0, 0],
-          rotation: [0, 0, 0],
-          visible: true,
+        const buildingId = await createBuilding({
+          plotIndex,
+          prompt: buildingName,
           proceduralCode: code,
-        };
-        addBuilding(building, group);
+          multiViewGrid: views.gridUrl,
+        });
 
-        setStep("render", "done", "Rendered");
+        await markComplete({ plotIndex, buildingId });
+
+        setStep("render", "done", `Placed in Plot #${plotIndex}`);
       } catch (err) {
         console.error("[Pipeline] Error:", err);
+
+        // Rollback the claimed plot so it can be reused
+        if (plotIndex !== null) {
+          try {
+            await resetPlot({ plotIndex });
+          } catch (rollbackErr) {
+            console.error("[Pipeline] Failed to rollback plot:", rollbackErr);
+          }
+        }
+
         setState((prev) => {
           const newSteps = { ...prev.steps };
           for (const key of Object.keys(newSteps)) {
@@ -233,7 +245,7 @@ export function usePipeline() {
         setState((prev) => ({ ...prev, isRunning: false }));
       }
     },
-    [addBuilding, generateId, resetSteps, setStep, generateUploadUrl, savePreview]
+    [claimNextEmpty, createBuilding, markComplete, resetPlot, resetSteps, setStep, generateUploadUrl, savePreview]
   );
 
   return {

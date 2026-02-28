@@ -12,13 +12,13 @@
   "dependencies": {
     "@clerk/clerk-react": "^5.60.0",
     "@clerk/nextjs": "^6.37.3",
+    "@mistralai/mistralai": "^1.0.0",
     "convex": "^1.31.7",
+    "mapbox-gl": "^3.9.4",
     "next": "^16.1.6",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "three": "^0.172.0",
-    "mapbox-gl": "^3.9.4",
-    "@mistralai/mistralai": "^1.0.0",
     "zustand": "^5.0.0"
   },
   "devDependencies": {
@@ -33,7 +33,7 @@
     "eslint": "^9.39.2",
     "eslint-config-next": "^16.1.6",
     "prettier": "^3.8.1",
-    "tailwindcss": "^4.1.18",
+    "tailwindcss": "^4.2.1",
     "typescript": "^5.9.3"
   }
 }

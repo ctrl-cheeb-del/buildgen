@@ -17,12 +17,13 @@
     "isolatedModules": true,
     "jsx": "react-jsx",
     "incremental": true,
-    "types": ["react", "react-dom", "node", "three", "webxr"],
+    "types": ["react", "react-dom", "node", "three"],
     "plugins": [
       {
         "name": "next"
       }
     ],
+    "typeRoots": ["./node_modules/@types"],
     "paths": {
       "@/*": [
         "./*"
