@@ -29,6 +29,18 @@ export default function MapCanvas({
   const onPlotClickRef = useRef(onPlotClick);
   onPlotClickRef.current = onPlotClick;
 
+  // Dismiss plot popups when dragging starts
+  useEffect(() => {
+    let wasDragging = false;
+    const unsub = useWorldStore.subscribe((s) => {
+      if (s.isDragging && !wasDragging) {
+        popupRef.current?.remove();
+      }
+      wasDragging = s.isDragging;
+    });
+    return unsub;
+  }, []);
+
   const initMap = useCallback(() => {
     if (!mapContainer.current || mapRef.current) return;
 
@@ -70,6 +82,7 @@ export default function MapCanvas({
 
     // Click on a plot → show popup
     map.on("click", "plot-fills", (e) => {
+      if (useWorldStore.getState().isDragging) return;
       const feature = e.features?.[0];
       if (!feature) return;
       const props = feature.properties ?? {};
@@ -147,6 +160,10 @@ export default function MapCanvas({
     });
 
     map.on("mousemove", "plot-fills", (e) => {
+      if (useWorldStore.getState().isDragging) {
+        hoverPopup.remove();
+        return;
+      }
       const feature = e.features?.[0];
       if (!feature) return;
       const props = feature.properties ?? {};

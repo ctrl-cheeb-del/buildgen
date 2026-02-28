@@ -143,11 +143,20 @@ export class ThreeJSMapboxLayer implements mapboxgl.CustomLayerInterface {
 
     this.renderer.resetState();
 
-    // Fix GL state for shared Mapbox context — ensure depth test works correctly
+    // Fix GL state for shared Mapbox context
     gl.enable(gl.DEPTH_TEST);
     gl.depthFunc(gl.LEQUAL);
 
+    // The negative Y scale in the model matrix flips triangle winding.
+    // Instead of forcing DoubleSide on every material (which causes
+    // z-fighting between front/back faces), flip the GL front face
+    // so FrontSide rendering works correctly with the inverted winding.
+    gl.frontFace(gl.CW);
+
     this.renderer.render(this.scene, this.camera);
+
+    // Restore default winding for Mapbox's own rendering
+    gl.frontFace(gl.CCW);
   }
 
   onRemove() {
@@ -170,16 +179,21 @@ export class ThreeJSMapboxLayer implements mapboxgl.CustomLayerInterface {
   }
 
   addGroup(group: THREE.Group) {
-    // Force DoubleSide on all materials — the negative Y scale in the model
-    // matrix inverts triangle winding, which culls front faces by default.
+    // Fix z-fighting on transparent materials (glass flush against walls).
+    // Winding is handled by gl.frontFace(CW) in render() — no need for DoubleSide.
     group.traverse((child) => {
       if (child instanceof THREE.Mesh) {
-        if (Array.isArray(child.material)) {
-          child.material.forEach((m) => {
-            m.side = THREE.DoubleSide;
-          });
-        } else if (child.material) {
-          child.material.side = THREE.DoubleSide;
+        const mats = Array.isArray(child.material)
+          ? child.material
+          : [child.material];
+        for (const m of mats) {
+          if (!m) continue;
+          if (m.transparent) {
+            m.depthWrite = false;
+            m.polygonOffset = true;
+            m.polygonOffsetFactor = -1;
+            m.polygonOffsetUnits = -1;
+          }
         }
       }
     });

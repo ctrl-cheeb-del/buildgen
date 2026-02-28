@@ -4,8 +4,8 @@ import {
   PAVEMENT_WIDTH_M,
 } from "../grid/grid-constants";
 
-/** Maximum footprint a single building can occupy — sized so multiple fit on one plot */
-const MAX_FOOTPRINT = (PLOT_SIZE_M - 2 * PAVEMENT_WIDTH_M) / 2; // 26m (half the inner plot)
+/** Maximum footprint a single building can occupy — half the inner (grass) plot area */
+const MAX_FOOTPRINT = (PLOT_SIZE_M - 2 * PAVEMENT_WIDTH_M) / 2; // 54m
 
 /**
  * Normalize a group so its XZ footprint fits within MAX_FOOTPRINT and
@@ -90,9 +90,13 @@ export function loadProceduralGeometry(code: string): THREE.Group {
       return createFallbackGroup();
     }
 
-    // Ensure all materials use DoubleSide rendering + enable shadow casting.
-    // Environment maps are set on scene.environment, so MeshPhysicalMaterial
-    // renders correctly without per-material envMap.
+    // Fix rendering for all materials:
+    // 1. Strip DoubleSide — winding inversion is handled by gl.frontFace(CW)
+    //    in the render loop. DoubleSide causes z-fighting between the front
+    //    and back faces of the same wall (especially visible on glass panels
+    //    placed near opaque walls).
+    // 2. Transparent materials get depthWrite:false + polygonOffset so glass
+    //    panels don't z-fight with the wall behind them.
     group.traverse((child) => {
       if (child instanceof THREE.Mesh && child.material) {
         child.castShadow = true;
@@ -101,7 +105,13 @@ export function loadProceduralGeometry(code: string): THREE.Group {
           ? child.material
           : [child.material];
         for (const mat of mats) {
-          mat.side = THREE.DoubleSide;
+          mat.side = THREE.FrontSide;
+          if (mat.transparent) {
+            mat.depthWrite = false;
+            mat.polygonOffset = true;
+            mat.polygonOffsetFactor = -1;
+            mat.polygonOffsetUnits = -1;
+          }
         }
       }
     });
@@ -122,7 +132,6 @@ function createFallbackGroup(): THREE.Group {
   const mat = new THREE.MeshStandardMaterial({
     color: 0xff4444,
     roughness: 0.5,
-    side: THREE.DoubleSide,
   });
   const mesh = new THREE.Mesh(geo, mat);
   mesh.castShadow = true;
