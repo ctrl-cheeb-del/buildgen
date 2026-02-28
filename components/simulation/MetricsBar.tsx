@@ -64,7 +64,7 @@ export default function MetricsBar() {
 
   return (
     <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 pointer-events-auto">
-      <div className="flex items-center gap-0.5 px-2 py-1 rounded-full bg-white/12 backdrop-blur-2xl border border-white/20 shadow-[inset_0_1px_0_rgba(255,255,255,0.25),inset_0_-1px_0_rgba(0,0,0,0.1),0_4px_24px_rgba(0,0,0,0.25)]">
+      <div className="flex items-center gap-0.5 px-2 py-1 rounded-full bg-black/35 backdrop-blur-2xl border border-white/20 shadow-[inset_0_1px_0_rgba(255,255,255,0.15),inset_0_-1px_0_rgba(0,0,0,0.15),0_4px_24px_rgba(0,0,0,0.35)]">
         {/* Inner highlight gradient for depth */}
         <div className="absolute inset-0 rounded-full bg-gradient-to-b from-white/[0.08] to-transparent pointer-events-none" />
 
