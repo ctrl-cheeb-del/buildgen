@@ -1,5 +1,44 @@
 import { v } from "convex/values";
 import { query, mutation, internalMutation, internalQuery } from "./_generated/server";
+import type { DatabaseReader } from "./_generated/server";
+
+// ── Shared placement helper ──────────────────────────────────────────
+
+const GRID_SPACING = 36;
+const MIN_SPACING = 36; // match grid spacing to prevent overlaps
+const CANDIDATES: [number, number][] = [
+  [-GRID_SPACING, -GRID_SPACING], [0, -GRID_SPACING], [GRID_SPACING, -GRID_SPACING],
+  [-GRID_SPACING,  0],                                 [GRID_SPACING,  0],
+  [-GRID_SPACING,  GRID_SPACING], [0,  GRID_SPACING], [GRID_SPACING,  GRID_SPACING],
+  [0, 0], // center (last resort)
+];
+
+async function findFreePosition(
+  db: DatabaseReader,
+  plotIndex: number,
+): Promise<{ x: number; z: number } | null> {
+  const existing = await db
+    .query("buildings")
+    .withIndex("by_plotIndex", (q) => q.eq("plotIndex", plotIndex))
+    .collect();
+
+  const occupied = existing.map((b) => ({
+    x: b.position?.x ?? 0,
+    z: b.position?.z ?? 0,
+  }));
+
+  for (const [cx, cz] of CANDIDATES) {
+    const overlaps = occupied.some(
+      (o) => Math.abs(o.x - cx) < MIN_SPACING && Math.abs(o.z - cz) < MIN_SPACING
+    );
+    if (!overlaps) {
+      return { x: cx, z: cz };
+    }
+  }
+
+  // All slots full
+  return null;
+}
 
 export const createBuilding = mutation({
   args: {
@@ -12,38 +51,9 @@ export const createBuilding = mutation({
     const identity = await ctx.auth.getUserIdentity();
     const ownerId = identity?.subject ?? "anonymous";
 
-    // Find a free position on the plot using 3x3 sub-grid (perimeter first, center last)
-    // 120m plot, 6m pavement each side → 108m grass. 3x3 grid → 36m cells.
-    const S = 36; // sub-grid spacing
-    const CANDIDATES: [number, number][] = [
-      [-S, -S], [0, -S], [S, -S],  // bottom row
-      [-S,  0],          [S,  0],  // middle sides
-      [-S,  S], [0,  S], [S,  S],  // top row
-      [0,   0],                    // center (last resort)
-    ];
-    const MIN_SPACING = 24;
-
-    const existing = await ctx.db
-      .query("buildings")
-      .withIndex("by_plotIndex", (q) => q.eq("plotIndex", args.plotIndex))
-      .collect();
-
-    const occupied = existing.map((b) => ({
-      x: b.position?.x ?? 0,
-      z: b.position?.z ?? 0,
-    }));
-
-    let freeX = 0;
-    let freeZ = 0;
-    for (const [cx, cz] of CANDIDATES) {
-      const overlaps = occupied.some(
-        (o) => Math.abs(o.x - cx) < MIN_SPACING && Math.abs(o.z - cz) < MIN_SPACING
-      );
-      if (!overlaps) {
-        freeX = cx;
-        freeZ = cz;
-        break;
-      }
+    const pos = await findFreePosition(ctx.db, args.plotIndex);
+    if (!pos) {
+      throw new Error(`Plot ${args.plotIndex} is full — no free building slots`);
     }
 
     return await ctx.db.insert("buildings", {
@@ -52,7 +62,7 @@ export const createBuilding = mutation({
       prompt: args.prompt,
       proceduralCode: args.proceduralCode,
       multiViewGrid: args.multiViewGrid,
-      position: { x: freeX, y: 0, z: freeZ },
+      position: { x: pos.x, y: 0, z: pos.z },
       createdAt: Date.now(),
     });
   },
@@ -67,37 +77,10 @@ export const createBuildingInternal = internalMutation({
     multiViewGrid: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    // Same auto-placement logic as createBuilding (3x3 perimeter grid)
-    const S = 36;
-    const CANDIDATES: [number, number][] = [
-      [-S, -S], [0, -S], [S, -S],
-      [-S,  0],          [S,  0],
-      [-S,  S], [0,  S], [S,  S],
-      [0,   0],
-    ];
-    const MIN_SPACING = 24;
-
-    const existing = await ctx.db
-      .query("buildings")
-      .withIndex("by_plotIndex", (q) => q.eq("plotIndex", args.plotIndex))
-      .collect();
-
-    const occupied = existing.map((b) => ({
-      x: b.position?.x ?? 0,
-      z: b.position?.z ?? 0,
-    }));
-
-    let freeX = 0;
-    let freeZ = 0;
-    for (const [cx, cz] of CANDIDATES) {
-      const overlaps = occupied.some(
-        (o) => Math.abs(o.x - cx) < MIN_SPACING && Math.abs(o.z - cz) < MIN_SPACING
-      );
-      if (!overlaps) {
-        freeX = cx;
-        freeZ = cz;
-        break;
-      }
+    const pos = await findFreePosition(ctx.db, args.plotIndex);
+    if (!pos) {
+      console.warn(`[createBuildingInternal] Plot ${args.plotIndex} is full, skipping`);
+      return null;
     }
 
     return await ctx.db.insert("buildings", {
@@ -106,7 +89,7 @@ export const createBuildingInternal = internalMutation({
       prompt: args.prompt,
       proceduralCode: args.proceduralCode,
       multiViewGrid: args.multiViewGrid,
-      position: { x: freeX, y: 0, z: freeZ },
+      position: { x: pos.x, y: 0, z: pos.z },
       createdAt: Date.now(),
     });
   },
@@ -118,7 +101,7 @@ export const searchSimilarBuildings = internalQuery({
     category: v.optional(v.string()),
   },
   handler: async (ctx, { searchTerm, category }) => {
-    let q = ctx.db
+    const q = ctx.db
       .query("buildings")
       .withSearchIndex("search_prompt", (search) => {
         const s = search.search("prompt", searchTerm);
@@ -189,6 +172,18 @@ export const updateTransform = mutation({
     if (args.rotation !== undefined) patch.rotation = args.rotation;
     if (args.scale !== undefined) patch.scale = args.scale;
     await ctx.db.patch(args.buildingId, patch);
+  },
+});
+
+export const updateProceduralCodeInternal = internalMutation({
+  args: {
+    buildingId: v.id("buildings"),
+    proceduralCode: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.buildingId, {
+      proceduralCode: args.proceduralCode,
+    });
   },
 });
 

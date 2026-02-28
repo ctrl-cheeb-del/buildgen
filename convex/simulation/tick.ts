@@ -41,6 +41,7 @@ interface CityStateDoc {
   totalTicks: number;
   lastTickAt: number;
   isRunning: boolean;
+  simMode?: "overnight" | "live";
   activeBuildCount: number;
   consecutiveBankruptTicks?: number;
   activeDecree?: { title: string; description: string; effect: string; remainingTicks: number } | null;
@@ -420,9 +421,12 @@ export const run = internalAction({
 
     // Step 3: Citizen actions (~10 per tick via activity roll)
     const citizens = agents.filter((a) => a.role === "citizen" && a.isActive);
+    const isLive = city.simMode === "live";
+    const activeRate = isLive ? 0.4 : 0.25;
+    const activeCap = isLive ? 16 : 12;
     const activeThisTick = citizens
-      .filter(() => Math.random() < 0.25) // ~25% chance → ~10 agents
-      .slice(0, 12); // hard cap at 12
+      .filter(() => Math.random() < activeRate)
+      .slice(0, activeCap);
 
     const citizenResults: Array<{ agent: AgentDoc; action: CitizenAction }> = [];
     const buildRequests: Array<{ agent: AgentDoc; action: CitizenAction }> = [];
@@ -821,13 +825,16 @@ export const run = internalAction({
 
     console.log(`[tick ${tickNumber}] Done. ${citizenResults.length} agents acted, ${newBuildsApproved} builds approved. Treasury: ${Math.round(newTreasury)} (income: ${taxRevenue}, expenses: ${totalExpenses}${crisisTreasuryHit ? `, crisis: -${crisisTreasuryHit}` : ""}, inflation: ${inflationMultiplier.toFixed(2)}x)`);
 
-    // Step 6: City collapse check
+    // Step 6: City collapse → bailout (sim never stops)
     if (cityCollapsed) {
-      console.log(`[tick ${tickNumber}] SIMULATION ENDED — city collapsed.`);
+      console.log(`[tick ${tickNumber}] CITY BAILOUT — treasury reset to 5000, bankruptcy cleared, happiness degraded.`);
       await ctx.runMutation(internal.simulation.cityState.update, {
-        patch: { isRunning: false },
+        patch: {
+          treasury: 5000,
+          consecutiveBankruptTicks: 0,
+          happiness: Math.max(10, Math.round(happiness) - 20),
+        },
       });
-      return; // Don't schedule next tick
     }
 
     // Step 7: Election check (regular or forced by bankruptcy)
@@ -836,8 +843,11 @@ export const run = internalAction({
       await ctx.runAction(internal.simulation.tick.runElection, { tickNumber });
     }
 
-    // Step 8: Schedule next tick
-    await ctx.scheduler.runAfter(90000, internal.simulation.tick.run, {});
+    // Step 8: Schedule next tick (re-read simMode for freshest value)
+    const freshCity = await ctx.runQuery(internal.simulation.cityState.getInternal);
+    const currentMode = freshCity?.simMode ?? "overnight";
+    const tickInterval = currentMode === "live" ? 45000 : 300000;
+    await ctx.scheduler.runAfter(tickInterval, internal.simulation.tick.run, {});
   },
 });
 

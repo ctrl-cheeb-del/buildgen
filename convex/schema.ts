@@ -19,6 +19,7 @@ export default defineSchema({
     pipelineStep: v.optional(v.string()),
     pipelineMultiViewUrl: v.optional(v.string()),
     isAgentOwned: v.optional(v.boolean()),
+    lastSeenTick: v.optional(v.number()),
   })
     .index("by_index", ["index"])
     .index("by_ownerId", ["ownerId"]),
@@ -48,6 +49,7 @@ export default defineSchema({
       )
     ),
     createdAt: v.number(),
+    createdAtTick: v.optional(v.number()),
   })
     .index("by_plotIndex", ["plotIndex"])
     .searchIndex("search_prompt", {
@@ -103,6 +105,7 @@ export default defineSchema({
     totalTicks: v.number(),
     lastTickAt: v.number(),
     isRunning: v.boolean(),
+    simMode: v.optional(v.union(v.literal("overnight"), v.literal("live"))),
     activeBuildCount: v.number(),
     consecutiveBankruptTicks: v.optional(v.number()),
     activeDecree: v.optional(

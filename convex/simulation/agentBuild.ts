@@ -231,12 +231,15 @@ Generate the code now for "${buildDescription}".`;
       if (!code) throw new Error("LLM returned no usable geometry code");
       console.log(`[agentBuild] Got geometry code (${code.length} chars)`);
 
+      // 5.5. Evaluate + optionally improve the generated code
+      const evaluatedCode = await evaluateAndImprove(code, buildDescription);
+
       // 6. Create building
       await ctx.runMutation(internal.buildings.createBuildingInternal, {
         plotIndex,
         ownerId: `agent:${agentName}`,
         prompt: buildDescription,
-        proceduralCode: code,
+        proceduralCode: evaluatedCode,
         multiViewGrid: gridUrl ?? undefined,
       });
 
@@ -263,6 +266,118 @@ Generate the code now for "${buildDescription}".`;
     }
   },
 });
+
+/**
+ * Evaluate generated code quality with Mistral Small, improve with Mistral Large if needed.
+ * Returns the best code after up to 2 improvement iterations.
+ */
+async function evaluateAndImprove(
+  code: string,
+  buildDescription: string,
+): Promise<string> {
+  const mistral = new Mistral({ apiKey: process.env.MISTRAL_API_KEY });
+  let currentCode = code;
+
+  for (let i = 0; i < 2; i++) {
+    const score = await evaluateAgentBuildCode(mistral, currentCode, buildDescription);
+    console.log(`[agentBuild] Eval iteration ${i + 1}: score ${score}/10`);
+
+    if (score >= 6.0) {
+      console.log(`[agentBuild] Code quality sufficient (${score} >= 6.0), done.`);
+      return currentCode;
+    }
+
+    console.log(`[agentBuild] Score ${score} < 6.0, improving...`);
+    currentCode = await improveAgentBuildCode(mistral, currentCode, buildDescription, score);
+  }
+
+  return currentCode;
+}
+
+async function evaluateAgentBuildCode(
+  mistral: Mistral,
+  code: string,
+  buildDescription: string,
+): Promise<number> {
+  const prompt = `Score this Three.js procedural building code on a scale of 0-10 for a "${buildDescription}".
+
+Criteria:
+- Architectural accuracy (does it look like the described building?)
+- Code correctness (valid Three.js, no errors)
+- Visual quality (detail level, proportions, materials)
+- Scale appropriateness (reasonable real-world dimensions)
+
+Code:
+\`\`\`javascript
+${code.slice(0, 3000)}
+\`\`\`
+
+Reply with ONLY a JSON object: {"score": N, "reason": "brief explanation"}`;
+
+  try {
+    const response = await mistral.chat.complete({
+      model: "mistral-small-latest",
+      messages: [{ role: "user", content: prompt }],
+      maxTokens: 100,
+      temperature: 0.3,
+    });
+
+    const text = response?.choices?.[0]?.message?.content;
+    if (!text || typeof text !== "string") return 5.0;
+
+    const match = text.match(/\{[\s\S]*\}/);
+    if (!match) return 5.0;
+
+    const parsed = JSON.parse(match[0]);
+    const score = Number(parsed.score);
+    return isNaN(score) ? 5.0 : Math.max(0, Math.min(10, score));
+  } catch {
+    return 5.0;
+  }
+}
+
+async function improveAgentBuildCode(
+  mistral: Mistral,
+  code: string,
+  buildDescription: string,
+  currentScore: number,
+): Promise<string> {
+  const prompt = `This Three.js building code for a "${buildDescription}" scored ${currentScore}/10.
+Improve it to score higher. Focus on:
+- Adding architectural details (windows, doors, roof features)
+- Fixing proportions and scale
+- Better material choices
+- More realistic geometry
+
+Current code:
+\`\`\`javascript
+${code}
+\`\`\`
+
+Return ONLY the improved JavaScript function body (no markdown fences, no explanation).
+The code must create a THREE.Group and return it.`;
+
+  try {
+    const response = await mistral.chat.complete({
+      model: "mistral-large-latest",
+      messages: [{ role: "user", content: prompt }],
+      maxTokens: 4000,
+      temperature: 0.5,
+    });
+
+    const text = response?.choices?.[0]?.message?.content;
+    if (!text || typeof text !== "string") return code;
+
+    const codeMatch = text.match(/```(?:javascript|js)?\s*\n([\s\S]*?)```/);
+    const improved = codeMatch ? codeMatch[1].trim() : text.trim();
+    if (!improved || improved.length < 50) return code;
+
+    console.log(`[agentBuild] Improved code (${improved.length} chars)`);
+    return improved;
+  } catch {
+    return code;
+  }
+}
 
 /**
  * Takes existing procedural geometry code and adapts it for a new building description

@@ -1,6 +1,5 @@
 "use node";
 
-import { v } from "convex/values";
 import { internalAction } from "../_generated/server";
 import { internal } from "../_generated/api";
 import { Mistral } from "@mistralai/mistralai";
@@ -158,7 +157,30 @@ export const run = internalAction({
       mayorTerm: 20,
     });
 
-    console.log(`[init] Created ${agentIds.length} agents, mayor: ${AGENT_NAMES[mayorIdx]}`);
-    return { status: "initialized", agents: agentIds.length, mayor: AGENT_NAMES[mayorIdx] };
+    // Welcome messages at tick 0 for the kingdom feed
+    const mayorName = AGENT_NAMES[mayorIdx];
+    await ctx.runMutation(internal.simulation.agentMessages.create, {
+      senderPlotIndex: selectedPlots[mayorIdx].index,
+      senderName: mayorName,
+      content: `I, ${mayorName}, hereby declare KingdomCity founded! Long may it prosper!`,
+      messageType: "announcement" as const,
+      tickNumber: 0,
+    });
+
+    // Welcome messages for a few citizens
+    const welcomeCount = Math.min(5, agentIds.length);
+    for (let i = 0; i < welcomeCount; i++) {
+      if (i === mayorIdx) continue;
+      await ctx.runMutation(internal.simulation.agentMessages.create, {
+        senderPlotIndex: selectedPlots[i].index,
+        senderName: AGENT_NAMES[i],
+        content: `I've arrived in KingdomCity! Ready to build on plot #${selectedPlots[i].index}.`,
+        messageType: "chat" as const,
+        tickNumber: 0,
+      });
+    }
+
+    console.log(`[init] Created ${agentIds.length} agents, mayor: ${mayorName}`);
+    return { status: "initialized", agents: agentIds.length, mayor: mayorName };
   },
 });

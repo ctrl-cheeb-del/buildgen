@@ -10,6 +10,7 @@
 
 import type * as buildings from "../buildings.js";
 import type * as cars from "../cars.js";
+import type * as crons from "../crons.js";
 import type * as multiViewPreviews from "../multiViewPreviews.js";
 import type * as pipeline from "../pipeline.js";
 import type * as plots from "../plots.js";
@@ -23,7 +24,9 @@ import type * as simulation_agentMessages from "../simulation/agentMessages.js";
 import type * as simulation_agents from "../simulation/agents.js";
 import type * as simulation_cityState from "../simulation/cityState.js";
 import type * as simulation_control from "../simulation/control.js";
+import type * as simulation_ensureRunning from "../simulation/ensureRunning.js";
 import type * as simulation_initialize from "../simulation/initialize.js";
+import type * as simulation_replay from "../simulation/replay.js";
 import type * as simulation_start from "../simulation/start.js";
 import type * as simulation_tick from "../simulation/tick.js";
 
@@ -36,6 +39,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   buildings: typeof buildings;
   cars: typeof cars;
+  crons: typeof crons;
   multiViewPreviews: typeof multiViewPreviews;
   pipeline: typeof pipeline;
   plots: typeof plots;
@@ -49,7 +53,9 @@ declare const fullApi: ApiFromModules<{
   "simulation/agents": typeof simulation_agents;
   "simulation/cityState": typeof simulation_cityState;
   "simulation/control": typeof simulation_control;
+  "simulation/ensureRunning": typeof simulation_ensureRunning;
   "simulation/initialize": typeof simulation_initialize;
+  "simulation/replay": typeof simulation_replay;
   "simulation/start": typeof simulation_start;
   "simulation/tick": typeof simulation_tick;
 }>;

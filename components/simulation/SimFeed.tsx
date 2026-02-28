@@ -233,7 +233,7 @@ export default function SimFeed({
   const currentTick = city?.totalTicks ?? 0;
   const messages = useQuery(
     api.simulation.agentMessages.getRecent,
-    currentTick > 0 ? { afterTick: Math.max(0, currentTick - 20) } : "skip"
+    city ? { afterTick: Math.max(0, currentTick - 20) } : "skip"
   );
   const agents = useQuery(api.simulation.agents.getAll);
 

@@ -20,6 +20,8 @@ import MetricsBar from "@/components/simulation/MetricsBar";
 import SimFeed from "@/components/simulation/SimFeed";
 import AgentDetailPanel from "@/components/simulation/AgentDetailPanel";
 import SimControls from "@/components/simulation/SimControls";
+import ReplayTimeline from "@/components/simulation/ReplayTimeline";
+import ReplayPlayback from "@/components/simulation/ReplayPlayback";
 import { useFPStore } from "@/lib/stores/fp-store";
 import { useCarStore } from "@/lib/stores/car-store";
 import { usePipeline } from "@/lib/hooks/usePipeline";
@@ -289,10 +291,6 @@ export default function Home() {
     ? myBuildings?.find((b) => (b._id as string) === selectedId)
     : null;
 
-  // Generation complete when plot transitions from generating to occupied
-  const generationComplete =
-    plotStatus === "occupied" && prevPlotStatus.current === "generating";
-
   const captureScreenshotsForCode = useCallback(
     (code: string): WorkbenchScreenshots => {
       const viewer = iterationViewerRef.current;
@@ -404,6 +402,55 @@ export default function Home() {
   // Agent detail panel
   const [selectedAgentPlot, setSelectedAgentPlot] = useState<number | null>(null);
 
+  // Sim visibility toggle (sim always runs, just show/hide UI)
+  const [simVisible, setSimVisible] = useState(true);
+
+  // Replay state
+  const city = useQuery(api.simulation.cityState.get);
+  const lastSeenTick = myPlot?.lastSeenTick ?? 0;
+  const currentTick = city?.totalTicks ?? 0;
+  const showReplay = isSignedIn && lastSeenTick > 0 && currentTick > lastSeenTick + 2;
+  const [replayDismissed, setReplayDismissed] = useState(false);
+  const [watchingReplay, setWatchingReplay] = useState(false);
+  const updateLastSeenTick = useMutation(api.plots.updateLastSeenTick);
+
+  // Sim mode switching: live when authenticated user is on page
+  const setSimMode = useMutation(api.simulation.control.setSimMode);
+  useEffect(() => {
+    if (isSignedIn) {
+      setSimMode({ mode: "live" }).catch(() => {});
+    }
+    return () => {
+      if (isSignedIn) {
+        setSimMode({ mode: "overnight" }).catch(() => {});
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSignedIn]);
+
+  // Update lastSeenTick on page unload
+  useEffect(() => {
+    const handleUnload = () => {
+      if (currentTick > 0) {
+        // Use sendBeacon for reliability on unload
+        navigator.sendBeacon?.(
+          "/api/update-last-seen",
+          JSON.stringify({ tick: currentTick })
+        );
+      }
+    };
+    window.addEventListener("beforeunload", handleUnload);
+    return () => window.removeEventListener("beforeunload", handleUnload);
+  }, [currentTick]);
+
+  const handleReplayDismiss = useCallback(async () => {
+    setReplayDismissed(true);
+    setWatchingReplay(false);
+    if (currentTick > 0) {
+      await updateLastSeenTick({ tick: currentTick });
+    }
+  }, [currentTick, updateLastSeenTick]);
+
   return (
     <div className="relative w-screen h-screen overflow-hidden">
       <ThreeMapCanvas />
@@ -426,14 +473,38 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Simulation UI */}
-      {!fpMode && <MetricsBar />}
-      {!fpMode && <SimFeed onAgentClick={setSelectedAgentPlot} />}
-      {!fpMode && <SimControls />}
-      <AgentDetailPanel
-        plotIndex={selectedAgentPlot}
-        onClose={() => setSelectedAgentPlot(null)}
-      />
+      {/* Simulation UI — always-visible controls + togglable details */}
+      {!fpMode && (
+        <SimControls
+          simVisible={simVisible}
+          onToggleSimVisible={() => setSimVisible((v) => !v)}
+        />
+      )}
+      {!fpMode && simVisible && <MetricsBar />}
+      {!fpMode && simVisible && <SimFeed onAgentClick={setSelectedAgentPlot} />}
+      {simVisible && (
+        <AgentDetailPanel
+          plotIndex={selectedAgentPlot}
+          onClose={() => setSelectedAgentPlot(null)}
+        />
+      )}
+
+      {/* Replay system */}
+      {showReplay && !replayDismissed && !watchingReplay && (
+        <ReplayTimeline
+          lastSeenTick={lastSeenTick}
+          currentTick={currentTick}
+          onWatchReplay={() => setWatchingReplay(true)}
+          onDismiss={handleReplayDismiss}
+        />
+      )}
+      {watchingReplay && (
+        <ReplayPlayback
+          lastSeenTick={lastSeenTick}
+          currentTick={currentTick}
+          onComplete={handleReplayDismiss}
+        />
+      )}
 
       {/* Top-right: Auth + Settings gear */}
       {!fpMode && (

@@ -194,6 +194,23 @@ export const resetPlot = mutation({
   },
 });
 
+export const updateLastSeenTick = mutation({
+  args: { tick: v.number() },
+  handler: async (ctx, { tick }) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return;
+
+    const plots = await ctx.db
+      .query("plots")
+      .withIndex("by_ownerId", (q) => q.eq("ownerId", identity.subject))
+      .collect();
+    const plot = plots[0];
+    if (!plot) return;
+
+    await ctx.db.patch(plot._id, { lastSeenTick: tick });
+  },
+});
+
 // --- Internal mutations (callable from Convex actions, skip auth checks) ---
 
 export const setPipelineStepInternal = internalMutation({
