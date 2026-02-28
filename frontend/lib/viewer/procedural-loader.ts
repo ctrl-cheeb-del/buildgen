@@ -64,7 +64,16 @@ export function loadProceduralGeometry(code: string): THREE.Group {
   }
 
   try {
-    const fn = new Function("THREE", `"use strict";\n${code}`);
+    // Strip function wrapper if LLM returned "function(THREE) { ... }" instead of body
+    let cleanCode = code;
+    const wrapperMatch = cleanCode.match(
+      /^(?:function\s*\(THREE\)|(?:\(THREE\)|\bTHREE\b)\s*=>)\s*\{([\s\S]*)\}\s*$/
+    );
+    if (wrapperMatch) {
+      cleanCode = wrapperMatch[1].trim();
+    }
+
+    const fn = new Function("THREE", `"use strict";\n${cleanCode}`);
     const result = fn(THREE);
 
     let group: THREE.Group;

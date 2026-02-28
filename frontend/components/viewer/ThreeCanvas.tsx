@@ -16,16 +16,11 @@ import {
   createViewerLights,
 } from "@/lib/viewer/scene-helpers";
 import {
-  captureMultiAngle,
-  type MultiAngleScreenshots,
-} from "@/lib/viewer/screenshot";
-import {
   computeGeometryStats,
   type GeometryStats,
 } from "@/lib/viewer/geometry-stats";
 
 export interface ThreeCanvasHandle {
-  captureScreenshots: () => MultiAngleScreenshots | null;
   loadGroup: (group: THREE.Group) => GeometryStats | null;
   clear: () => void;
 }
@@ -65,7 +60,7 @@ const ThreeCanvas = forwardRef<ThreeCanvasHandle, ThreeCanvasProps>(
 
       const renderer = new THREE.WebGLRenderer({
         antialias: true,
-        preserveDrawingBuffer: true, // needed for toDataURL
+        preserveDrawingBuffer: true,
       });
       renderer.setSize(container.clientWidth, container.clientHeight);
       renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -168,43 +163,13 @@ const ThreeCanvas = forwardRef<ThreeCanvasHandle, ThreeCanvasProps>(
       [clearBuilding, onStatsUpdate]
     );
 
-    const captureScreenshots =
-      useCallback((): MultiAngleScreenshots | null => {
-        const renderer = rendererRef.current;
-        const scene = sceneRef.current;
-        const camera = cameraRef.current;
-        const building = buildingRef.current;
-        if (!renderer || !scene || !camera || !building) return null;
-
-        const stats = computeGeometryStats(building);
-        const centerY = stats.dimensions.y / 2;
-        const target = new THREE.Vector3(0, centerY, 0);
-        const maxDim = Math.max(
-          stats.dimensions.x,
-          stats.dimensions.y,
-          stats.dimensions.z
-        );
-        const distance = maxDim * 1.5;
-        const height = maxDim * 0.3;
-
-        return captureMultiAngle(
-          renderer,
-          scene,
-          camera,
-          target,
-          distance,
-          height
-        );
-      }, []);
-
     useImperativeHandle(
       ref,
       () => ({
-        captureScreenshots,
         loadGroup,
         clear: clearBuilding,
       }),
-      [captureScreenshots, loadGroup, clearBuilding]
+      [loadGroup, clearBuilding]
     );
 
     return (

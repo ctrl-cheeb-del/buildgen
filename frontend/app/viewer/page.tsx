@@ -10,7 +10,6 @@ import ViewerStats from "@/components/viewer/ViewerStats";
 import BuildingPicker from "@/components/viewer/BuildingPicker";
 import ReferencePanel from "@/components/viewer/ReferencePanel";
 import CodePanel from "@/components/viewer/CodePanel";
-import IteratePanel from "@/components/viewer/IteratePanel";
 import { loadProceduralGeometry } from "@/lib/viewer/procedural-loader";
 import type { GeometryStats } from "@/lib/viewer/geometry-stats";
 import type { MultiViewImages } from "@/lib/types";
@@ -27,30 +26,6 @@ function ViewerPage() {
   const [buildingName, setBuildingName] = useState("");
   const [referenceImages, setReferenceImages] =
     useState<MultiViewImages | null>(null);
-  const [renderScreenshots, setRenderScreenshots] = useState<{
-    front: string;
-    right: string;
-    back: string;
-    left: string;
-  } | null>(null);
-
-  // Iteration state
-  const [isRunning, setIsRunning] = useState(false);
-  const [iterationCount, setIterationCount] = useState(0);
-  const [totalIterations, setTotalIterations] = useState(0);
-  const [lastAnalysis, setLastAnalysis] = useState<string | null>(null);
-
-  // Refs for mutable values used inside the iteration loop (avoids stale closures)
-  const codeRef = useRef(code);
-  const statsRef = useRef(stats);
-  const referenceImagesRef = useRef(referenceImages);
-  const buildingNameRef = useRef(buildingName);
-
-  // Keep refs in sync with state
-  codeRef.current = code;
-  statsRef.current = stats;
-  referenceImagesRef.current = referenceImages;
-  buildingNameRef.current = buildingName;
 
   // Auto-fetch reference images from Convex when building name changes
   const previewUrls = useQuery(
@@ -75,7 +50,6 @@ function ViewerPage() {
       const group = loadProceduralGeometry(newCode);
       const newStats = canvasRef.current?.loadGroup(group) ?? null;
       setCode(newCode);
-      codeRef.current = newCode;
       return newStats;
     },
     []
@@ -85,13 +59,7 @@ function ViewerPage() {
     (building: { name: string; code: string; multiViewGrid?: string }) => {
       setBuildingName(building.name);
       loadCode(building.code);
-
-      // If building has a multi-view grid, try to load reference images
-      // The grid URL is stored but individual views need the cached preview
       setReferenceImages(null);
-      setRenderScreenshots(null);
-      setLastAnalysis(null);
-      setIterationCount(0);
     },
     [loadCode]
   );
@@ -101,9 +69,6 @@ function ViewerPage() {
       setBuildingName("Pasted building");
       loadCode(pastedCode);
       setReferenceImages(null);
-      setRenderScreenshots(null);
-      setLastAnalysis(null);
-      setIterationCount(0);
     },
     [loadCode]
   );
@@ -115,106 +80,6 @@ function ViewerPage() {
     [loadCode]
   );
 
-  // Single iteration: screenshot -> LLM -> new code -> re-render
-  // Uses refs to always read latest state (critical for multi-iteration loops)
-  const runOneIteration = useCallback(
-    async (feedback?: string): Promise<void> => {
-      const canvas = canvasRef.current;
-      const currentCode = codeRef.current;
-      if (!canvas || !currentCode) return;
-
-      // 1. Capture screenshots
-      const screenshots = canvas.captureScreenshots();
-      if (!screenshots) return;
-      setRenderScreenshots(screenshots);
-
-      // 2. Call iterate API
-      const refs = referenceImagesRef.current;
-      const res = await fetch("/api/pipeline/iterate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          currentCode,
-          renderScreenshots: screenshots,
-          referenceImages: refs
-            ? {
-                front: refs.front,
-                right: refs.right,
-                back: refs.back,
-                left: refs.left,
-              }
-            : null,
-          stats: statsRef.current,
-          buildingName: buildingNameRef.current,
-          feedback,
-        }),
-      });
-
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(
-          errData.error || `Iterate failed with status ${res.status}`
-        );
-      }
-
-      const { code: newCode, analysis } = await res.json();
-      setLastAnalysis(analysis);
-
-      // 3. Load new code (also updates codeRef via loadCode)
-      loadCode(newCode);
-
-      // 4. Capture new screenshots for display
-      const newScreenshots = canvas.captureScreenshots();
-      if (newScreenshots) setRenderScreenshots(newScreenshots);
-    },
-    [loadCode]
-  );
-
-  const handleIterate = useCallback(
-    async (feedback?: string) => {
-      setIsRunning(true);
-      setTotalIterations(1);
-      setIterationCount(0);
-      try {
-        setIterationCount(1);
-        await runOneIteration(feedback);
-      } catch (err) {
-        console.error("[Viewer] Iteration error:", err);
-        setLastAnalysis(
-          `Error: ${err instanceof Error ? err.message : "Unknown error"}`
-        );
-      } finally {
-        setIsRunning(false);
-      }
-    },
-    [runOneIteration]
-  );
-
-  const handleAutoIterate = useCallback(
-    async (count: number) => {
-      setIsRunning(true);
-      setTotalIterations(count);
-      setIterationCount(0);
-      let completedCount = 0;
-      try {
-        for (let i = 0; i < count; i++) {
-          completedCount = i + 1;
-          setIterationCount(completedCount);
-          await runOneIteration();
-        }
-      } catch (err) {
-        console.error("[Viewer] Auto-iteration error:", err);
-        setLastAnalysis(
-          `Error at iteration ${completedCount}: ${err instanceof Error ? err.message : "Unknown error"}`
-        );
-      } finally {
-        setIsRunning(false);
-      }
-    },
-    [runOneIteration]
-  );
-
-  // Load reference images from URL inputs
   const handleLoadReferenceUrls = useCallback(
     (urls: { front: string; right: string; back: string; left: string }) => {
       setReferenceImages(urls);
@@ -235,16 +100,6 @@ function ViewerPage() {
 
         <ViewerStats stats={stats} />
 
-        <IteratePanel
-          onIterate={handleIterate}
-          onAutoIterate={handleAutoIterate}
-          isRunning={isRunning}
-          iterationCount={iterationCount}
-          totalIterations={totalIterations}
-          lastAnalysis={lastAnalysis}
-          disabled={!code}
-        />
-
         {/* Reference URL inputs */}
         <ReferenceUrlInputs onLoad={handleLoadReferenceUrls} />
       </div>
@@ -260,7 +115,7 @@ function ViewerPage() {
       <div className="w-96 flex flex-col gap-2 p-2 overflow-y-auto border-l border-gray-800">
         <ReferencePanel
           referenceImages={referenceImages}
-          renderScreenshots={renderScreenshots}
+          renderScreenshots={null}
         />
         <CodePanel code={code} onUpdate={handleCodeUpdate} />
       </div>
