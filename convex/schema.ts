@@ -75,6 +75,19 @@ export default defineSchema({
     updatedAt: v.number(),
   }).index("by_userId", ["userId"]),
 
+  planes: defineTable({
+    userId: v.string(),
+    x: v.number(),
+    y: v.number(),
+    z: v.number(),
+    heading: v.number(),
+    pitch: v.number(),
+    roll: v.number(),
+    userName: v.string(),
+    userAvatar: v.optional(v.string()),
+    updatedAt: v.number(),
+  }).index("by_userId", ["userId"]),
+
   multiViewPreviews: defineTable({
     buildingName: v.string(),
     gridStorageId: v.id("_storage"),

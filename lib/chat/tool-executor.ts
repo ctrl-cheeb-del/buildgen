@@ -8,6 +8,7 @@ export interface IterationConfig {
 export interface ToolDeps {
   setCarMode: (on: boolean) => void;
   setBoatMode: (on: boolean) => void;
+  setPlaneMode: (on: boolean) => void;
   setFPMode: (on: boolean) => void;
   setCharacter: (c: { handle: string; avatarUrl?: string } | null) => void;
   runPipeline: (
@@ -36,6 +37,12 @@ export function executeTool(
     case "spawn_boat": {
       deps.setBoatMode(true);
       return JSON.stringify({ success: true, mode: "sailing" });
+    }
+
+    case "fly":
+    case "spawn_plane": {
+      deps.setPlaneMode(true);
+      return JSON.stringify({ success: true, mode: "flying" });
     }
 
     case "walk": {

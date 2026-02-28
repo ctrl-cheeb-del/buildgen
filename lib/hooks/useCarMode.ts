@@ -4,6 +4,7 @@ import { useEffect, useRef, useCallback } from "react";
 import * as THREE from "three";
 import { useCarStore } from "../stores/car-store";
 import { useBoatStore } from "../stores/boat-store";
+import { usePlaneStore } from "../stores/plane-store";
 import { useCarKeys } from "./useCarKeys";
 import { loadCarModel } from "../car/car-loader";
 import { updateCar, findNearestRoadPosition } from "../car/car-physics";
@@ -206,9 +207,12 @@ export function useCarMode(
     const currentLayer = layerRef.current;
     if (!currentLayer) return;
 
-    // Exit boat mode if active
+    // Exit other vehicle modes
     if (useBoatStore.getState().boatMode) {
       useBoatStore.getState().setBoatMode(false);
+    }
+    if (usePlaneStore.getState().planeMode) {
+      usePlaneStore.getState().setPlaneMode(false);
     }
 
     const camera = currentLayer.getCamera() as THREE.PerspectiveCamera;
