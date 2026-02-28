@@ -231,8 +231,13 @@ Generate the code now for "${buildDescription}".`;
       if (!code) throw new Error("LLM returned no usable geometry code");
       console.log(`[agentBuild] Got geometry code (${code.length} chars)`);
 
-      // 5.5. Evaluate + optionally improve the generated code
-      const evaluatedCode = await evaluateAndImprove(code, buildDescription);
+      // 5.5. Evaluate + optionally improve (non-fatal — use raw code on failure)
+      let evaluatedCode = code;
+      try {
+        evaluatedCode = await evaluateAndImprove(code, buildDescription);
+      } catch (evalErr) {
+        console.warn(`[agentBuild] Eval/improve failed, using raw code:`, evalErr);
+      }
 
       // 6. Create building
       await ctx.runMutation(internal.buildings.createBuildingInternal, {
@@ -406,12 +411,27 @@ ${proceduralCode}
 \`\`\``;
 
   const mistral = new Mistral({ apiKey: process.env.MISTRAL_API_KEY });
-  const response = await mistral.chat.complete({
-    model: "mistral-large-latest",
-    messages: [{ role: "user", content: adaptPrompt }],
-  });
 
-  const text = response?.choices?.[0]?.message?.content;
+  // Retry once on timeout
+  let text: string | undefined;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const response = await mistral.chat.complete({
+        model: "mistral-large-latest",
+        messages: [{ role: "user", content: adaptPrompt }],
+        maxTokens: 4000,
+      });
+      text = response?.choices?.[0]?.message?.content as string | undefined;
+      if (text) break;
+    } catch (err) {
+      if (attempt === 0) {
+        console.warn(`[agentBuild] adaptExistingCode attempt ${attempt + 1} failed, retrying...`);
+        continue;
+      }
+      throw err;
+    }
+  }
+
   if (!text || typeof text !== "string")
     throw new Error("Mistral returned no content for code adaptation");
 
