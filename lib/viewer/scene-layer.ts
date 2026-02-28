@@ -12,4 +12,6 @@ export interface SceneLayer {
   getScene(): THREE.Scene;
   getCamera(): THREE.Camera;
   getCanvas(): HTMLCanvasElement;
+  /** Enable/disable OrbitControls (used by car mode) */
+  setControlsEnabled(enabled: boolean): void;
 }

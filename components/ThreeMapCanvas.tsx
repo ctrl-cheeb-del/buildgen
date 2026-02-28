@@ -136,7 +136,7 @@ export default function ThreeMapCanvas() {
     );
     camera.position.set(-200, 650, 700);
 
-    // ── OrbitControls (map-like behavior) ─────────────────────
+    // ── OrbitControls (Sims/Mapbox-style) ──────────────────────
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.target.set(0, 0, 0);
     controls.enableDamping = true;
@@ -145,7 +145,24 @@ export default function ThreeMapCanvas() {
     controls.maxPolarAngle = Math.PI / 2 - 0.05;
     controls.minDistance = 50;
     controls.maxDistance = 3000;
+    controls.panSpeed = 1.5;
+
+    // Left-drag = pan, right-drag = rotate, scroll = zoom (map-like)
+    controls.mouseButtons = {
+      LEFT: THREE.MOUSE.PAN,
+      MIDDLE: THREE.MOUSE.DOLLY,
+      RIGHT: THREE.MOUSE.ROTATE,
+    };
+    // Touch: one finger = pan, two fingers = pinch-zoom + rotate
+    controls.touches = {
+      ONE: THREE.TOUCH.PAN,
+      TWO: THREE.TOUCH.DOLLY_ROTATE,
+    };
+    // Pan along world XZ plane (not screen-space)
     controls.screenSpacePanning = false;
+
+    // Arrow keys to pan
+    controls.listenToKeyEvents(window);
     controls.update();
 
     // ── Adaptive quality ─────────────────────────────────────
@@ -174,7 +191,8 @@ export default function ThreeMapCanvas() {
       quality.sample(dt);
 
       // Damping needs update() every frame when active
-      const controlsUpdated = controls.update();
+      // Skip when disabled (car mode owns the camera)
+      const controlsUpdated = controls.enabled ? controls.update() : false;
 
       // Cloud drift: update every 2s (cheap tick, triggers repaint)
       if (elapsed - lastCloudTick > 2) {
@@ -233,6 +251,9 @@ export default function ThreeMapCanvas() {
       getScene: () => scene,
       getCamera: () => camera,
       getCanvas: () => renderer.domElement,
+      setControlsEnabled(enabled: boolean) {
+        controls.enabled = enabled;
+      },
     };
 
     layerRef.current = layer;

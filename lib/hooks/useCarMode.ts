@@ -16,7 +16,26 @@ function wrapAngle(a: number): number {
   return a;
 }
 
-// Pre-allocated vector for camera follow
+// ── GTA V-style chase camera state ──────────────────────────────
+// All angles in radians. yawOffset = 0 means directly behind the car.
+const cam = {
+  yawOffset: 0,       // mouse orbit offset from car heading
+  pitch: 0.35,        // vertical angle (0 = level, PI/2 = top-down)
+  distance: 40,       // follow distance (zoom)
+  dragging: false,
+  lastPointerX: 0,
+  lastPointerY: 0,
+};
+
+const CAM_PITCH_MIN = 0.05;
+const CAM_PITCH_MAX = Math.PI / 2 - 0.05;
+const CAM_DIST_MIN = 12;
+const CAM_DIST_MAX = 120;
+const CAM_SENSITIVITY = 0.004;
+const CAM_RETURN_SPEED = 2.0;  // how fast yaw drifts back behind car (rad/s)
+const CAM_HEIGHT_OFFSET = 3;   // look-at target height above ground
+
+// Pre-allocated vectors
 const _cameraTarget = new THREE.Vector3();
 const _cameraPos = new THREE.Vector3();
 
@@ -44,11 +63,61 @@ export function useCarMode(
   const onExitRef = useRef(onExitCar);
   onExitRef.current = onExitCar;
 
+  // ── Mouse/touch event handlers for camera orbit + zoom ────────
+  const onPointerDown = useCallback((e: PointerEvent) => {
+    // Right-click or middle-click to orbit (left-click reserved for UI)
+    if (e.button === 2 || e.button === 1) {
+      cam.dragging = true;
+      cam.lastPointerX = e.clientX;
+      cam.lastPointerY = e.clientY;
+      e.preventDefault();
+    }
+  }, []);
+
+  const onPointerMove = useCallback((e: PointerEvent) => {
+    if (!cam.dragging) return;
+    const dx = e.clientX - cam.lastPointerX;
+    const dy = e.clientY - cam.lastPointerY;
+    cam.lastPointerX = e.clientX;
+    cam.lastPointerY = e.clientY;
+
+    cam.yawOffset -= dx * CAM_SENSITIVITY;
+    cam.pitch = THREE.MathUtils.clamp(
+      cam.pitch + dy * CAM_SENSITIVITY,
+      CAM_PITCH_MIN,
+      CAM_PITCH_MAX
+    );
+  }, []);
+
+  const onPointerUp = useCallback((e: PointerEvent) => {
+    if (e.button === 2 || e.button === 1) {
+      cam.dragging = false;
+    }
+  }, []);
+
+  const onWheel = useCallback((e: WheelEvent) => {
+    // Only intercept wheel when in car mode
+    if (!useCarStore.getState().carMode) return;
+    e.preventDefault();
+    cam.distance = THREE.MathUtils.clamp(
+      cam.distance + e.deltaY * 0.05,
+      CAM_DIST_MIN,
+      CAM_DIST_MAX
+    );
+  }, []);
+
+  const onContextMenu = useCallback((e: MouseEvent) => {
+    // Prevent context menu while in car mode (right-click = orbit)
+    if (useCarStore.getState().carMode) {
+      e.preventDefault();
+    }
+  }, []);
+
   const tick = useCallback((now: number) => {
     const carStore = useCarStore.getState();
     if (!carStore.carMode) return;
 
-    const dt = (now - lastTimeRef.current) / 1000;
+    const dt = Math.min((now - lastTimeRef.current) / 1000, 0.1); // clamp dt
     lastTimeRef.current = now;
     const nowSec = now / 1000;
 
@@ -82,33 +151,42 @@ export function useCarMode(
       nowSec
     );
 
-    // Camera follow — direct Three.js camera manipulation
+    // ── GTA V chase camera ──────────────────────────────────────
     const currentLayer = layerRef.current;
     if (currentLayer) {
       const camera = currentLayer.getCamera() as THREE.PerspectiveCamera;
-      const bearingRad = newState.heading;
 
-      // Position camera behind and above the car
-      const followDist = 35;
-      const followHeight = 18;
+      // When not dragging, drift yaw back to 0 (behind car)
+      if (!cam.dragging && Math.abs(cam.yawOffset) > 0.001) {
+        const returnStep = CAM_RETURN_SPEED * dt;
+        if (Math.abs(cam.yawOffset) < returnStep) {
+          cam.yawOffset = 0;
+        } else {
+          cam.yawOffset -= Math.sign(cam.yawOffset) * returnStep;
+        }
+      }
+
+      // Camera orbit angle = car heading + user yaw offset
+      const orbitAngle = newState.heading + cam.yawOffset;
+
+      // Spherical coordinates: camera position relative to car
+      const cosP = Math.cos(cam.pitch);
+      const sinP = Math.sin(cam.pitch);
       _cameraPos.set(
-        newState.x + Math.sin(bearingRad) * followDist,
-        followHeight,
-        newState.z - Math.cos(bearingRad) * followDist
+        newState.x - Math.sin(orbitAngle) * cam.distance * cosP,
+        cam.distance * sinP,
+        newState.z + Math.cos(orbitAngle) * cam.distance * cosP
       );
 
-      // Speed-adaptive follow: tighter at high speed, looser when slow
+      // Smooth follow — tighter at speed, looser when slow/orbiting
       const speed = Math.abs(newState.speed);
-      const followLerp = THREE.MathUtils.clamp(0.04 + speed * 0.003, 0.04, 0.15);
+      const followLerp = cam.dragging
+        ? 0.15  // responsive when user is orbiting
+        : THREE.MathUtils.clamp(0.04 + speed * 0.003, 0.04, 0.12);
       camera.position.lerp(_cameraPos, followLerp);
 
-      // Look slightly ahead of the car (forward-biased target)
-      const lookAhead = Math.min(speed * 0.3, 10);
-      _cameraTarget.set(
-        newState.x - Math.sin(bearingRad) * lookAhead,
-        2,
-        newState.z + Math.cos(bearingRad) * lookAhead
-      );
+      // Look at the car (slightly above ground)
+      _cameraTarget.set(newState.x, CAM_HEIGHT_OFFSET, newState.z);
       camera.lookAt(_cameraTarget);
 
       currentLayer.repaint();
@@ -132,8 +210,26 @@ export function useCarMode(
     // Save current camera state
     savedCamera.current = {
       position: camera.position.clone(),
-      target: new THREE.Vector3(0, 0, 0), // will be restored
+      target: new THREE.Vector3(0, 0, 0),
     };
+
+    // Disable OrbitControls — car camera takes over
+    currentLayer.setControlsEnabled(false);
+
+    // Reset camera state
+    cam.yawOffset = 0;
+    cam.pitch = 0.35;
+    cam.distance = 40;
+    cam.dragging = false;
+
+    // Add mouse/touch listeners for orbit + zoom
+    const canvas = currentLayer.getCanvas();
+    canvas.addEventListener("pointerdown", onPointerDown);
+    canvas.addEventListener("pointermove", onPointerMove);
+    canvas.addEventListener("pointerup", onPointerUp);
+    canvas.addEventListener("pointerleave", onPointerUp);
+    canvas.addEventListener("wheel", onWheel, { passive: false });
+    canvas.addEventListener("contextmenu", onContextMenu);
 
     // Load car model
     const carGroup = await loadCarModel();
@@ -165,7 +261,7 @@ export function useCarMode(
     // Start animation loop
     lastTimeRef.current = performance.now();
     animFrameRef.current = requestAnimationFrame(tick);
-  }, [tick]);
+  }, [tick, onPointerDown, onPointerMove, onPointerUp, onWheel, onContextMenu]);
 
   const exitCarMode = useCallback(() => {
     if (animFrameRef.current) {
@@ -186,21 +282,35 @@ export function useCarMode(
       driftEffectsRef.current = null;
     }
 
+    // Remove mouse/touch listeners
+    if (currentLayer) {
+      const canvas = currentLayer.getCanvas();
+      canvas.removeEventListener("pointerdown", onPointerDown);
+      canvas.removeEventListener("pointermove", onPointerMove);
+      canvas.removeEventListener("pointerup", onPointerUp);
+      canvas.removeEventListener("pointerleave", onPointerUp);
+      canvas.removeEventListener("wheel", onWheel);
+      canvas.removeEventListener("contextmenu", onContextMenu);
+    }
+
     useCarStore.getState().setCarGroup(null);
     useCarStore.getState().updatePosition({
       x: 0, z: 0, heading: 0, speed: 0, velAngle: 0, drifting: false,
     });
 
-    // Restore camera position
-    if (savedCamera.current && currentLayer) {
-      const camera = currentLayer.getCamera() as THREE.PerspectiveCamera;
-      camera.position.copy(savedCamera.current.position);
-      camera.lookAt(0, 0, 0);
-      currentLayer.repaint();
+    // Restore camera position & re-enable OrbitControls
+    if (currentLayer) {
+      currentLayer.setControlsEnabled(true);
+      if (savedCamera.current) {
+        const camera = currentLayer.getCamera() as THREE.PerspectiveCamera;
+        camera.position.copy(savedCamera.current.position);
+        camera.lookAt(0, 0, 0);
+        currentLayer.repaint();
+      }
     }
 
     onExitRef.current?.();
-  }, []);
+  }, [onPointerDown, onPointerMove, onPointerUp, onWheel, onContextMenu]);
 
   // React to carMode changes
   useEffect(() => {
