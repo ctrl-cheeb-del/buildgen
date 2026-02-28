@@ -37,3 +37,41 @@ export interface WorldSaveFile {
   origin: [number, number];
   buildings: WorldBuilding[];
 }
+
+/* ------------------------------------------------------------------ */
+/*  Iteration Workbench types                                          */
+/* ------------------------------------------------------------------ */
+
+export type CameraAngle =
+  | "front"
+  | "right"
+  | "back"
+  | "left"
+  | "top"
+  | "perspective";
+
+export interface WorkbenchScreenshots {
+  front: string; // data URL (JPEG)
+  right: string;
+  back: string;
+  left: string;
+}
+
+export interface ScoreBreakdown {
+  silhouette: number; // 0-10
+  proportions: number;
+  features: number;
+  materials: number;
+  totalScore: number; // 0-10 average
+  summary: string;
+}
+
+export interface IterationResult {
+  iteration: number;
+  score: ScoreBreakdown;
+  feedback: string;
+  feedbackPrompt: string;
+  code: string;
+  screenshots: WorkbenchScreenshots;
+  improved: boolean;
+}

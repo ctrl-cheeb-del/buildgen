@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { useUser } from "@clerk/nextjs";
-import type { MultiViewImages } from "@/lib/types";
+import type { MultiViewImages, WorkbenchScreenshots } from "@/lib/types";
 import { api } from "../convex/_generated/api";
 import ThreeMapCanvas from "@/components/ThreeMapCanvas";
 import AuthButton from "@/components/AuthButton";
@@ -12,9 +12,16 @@ import SettingsPanel from "@/components/SettingsPanel";
 import ChatInput from "@/components/chat/ChatInput";
 import ChatMessages from "@/components/chat/ChatMessages";
 import PlotPopups from "@/components/PlotPopups";
+import PipelineFlowchart, {
+  PipelineSummaryBar,
+} from "@/components/PipelineFlowchart";
+import IsolatedViewer, {
+  type IsolatedViewerHandle,
+} from "@/components/workbench/IsolatedViewer";
 import { useFPStore } from "@/lib/stores/fp-store";
 import { useCarStore } from "@/lib/stores/car-store";
 import { usePipeline } from "@/lib/hooks/usePipeline";
+import { useIteration } from "@/lib/hooks/useIteration";
 import { useGridSync } from "@/lib/hooks/useGridSync";
 import { useBuildingDrag } from "@/lib/hooks/useBuildingDrag";
 import { useCarMode } from "@/lib/hooks/useCarMode";
@@ -22,6 +29,7 @@ import { useRemoteCars } from "@/lib/hooks/useRemoteCars";
 import { useChat } from "@/lib/hooks/useChat";
 import { useChatStore } from "@/lib/stores/chat-store";
 import { useWorldStore } from "@/lib/stores/world-store";
+import { usePipelineStore } from "@/lib/stores/pipeline-store";
 import { GRID_COLS, GRID_ROWS } from "@/lib/grid/grid-constants";
 import { gridIndexToColRow, plotCenterMeters } from "@/lib/grid/grid-geometry";
 import type { Id } from "../convex/_generated/dataModel";
@@ -29,7 +37,11 @@ import type { Id } from "../convex/_generated/dataModel";
 const TOTAL_PLOTS = GRID_COLS * GRID_ROWS;
 
 export default function Home() {
-  const { isRunning, multiView, steps, runPipeline } = usePipeline();
+  const iterationViewerRef = useRef<IsolatedViewerHandle>(null);
+  const { isRunning, multiView, sessionId, steps, runPipeline } = usePipeline();
+  const iteration = useIteration();
+  const pipelineIsActive = usePipelineStore((s) => s.isActive);
+  const pipelineIterationCount = usePipelineStore((s) => s.iterationCount);
   const { isSignedIn, user } = useUser();
   const { plotStates, buildings, localPendingUpdates } =
     useGridSync();
@@ -256,6 +268,74 @@ export default function Home() {
 
   const { sendMessage } = useChat(chatDeps);
 
+  // --- Iteration auto-start ---
+  const selectedBuilding = selectedId
+    ? myBuildings?.find((b) => (b._id as string) === selectedId)
+    : null;
+
+  const generationComplete = steps.render?.state === "done";
+
+  const captureScreenshotsForCode = useCallback(
+    (code: string): WorkbenchScreenshots => {
+      const viewer = iterationViewerRef.current;
+      if (!viewer) throw new Error("Iteration viewer not mounted");
+      viewer.loadCode(code);
+      return viewer.captureAllViews();
+    },
+    []
+  );
+
+  const autoStartedRef = useRef(false);
+  useEffect(() => {
+    if (
+      generationComplete &&
+      selectedBuilding &&
+      sessionId &&
+      !autoStartedRef.current &&
+      !iteration.isIterating
+    ) {
+      autoStartedRef.current = true;
+      iteration.startSession({
+        sessionId,
+        buildingId: selectedBuilding._id as string,
+        initialCode: selectedBuilding.proceduralCode,
+        captureScreenshots: captureScreenshotsForCode,
+      });
+    }
+    if (isRunning) {
+      autoStartedRef.current = false;
+    }
+  }, [
+    generationComplete,
+    selectedBuilding,
+    sessionId,
+    iteration,
+    captureScreenshotsForCode,
+    isRunning,
+  ]);
+
+  // --- Bottom pipeline panel state ---
+  const pipelineError = usePipelineStore((s) => s.error);
+  const pipelineHasRun = pipelineIsActive || pipelineIterationCount > 0 || isRunning || !!pipelineError;
+  const [isMinimized, setMinimized] = useState(false);
+
+  // Auto-minimize when pipeline finishes (but NOT on error)
+  const prevActiveRef = useRef(false);
+  useEffect(() => {
+    if (prevActiveRef.current && !pipelineIsActive && !isRunning && !pipelineError) {
+      const t = setTimeout(() => setMinimized(true), 2000);
+      return () => clearTimeout(t);
+    }
+    prevActiveRef.current = pipelineIsActive || isRunning;
+  }, [pipelineIsActive, isRunning, pipelineError]);
+
+  // Expand when pipeline starts
+  useEffect(() => {
+    if (pipelineIsActive || isRunning) {
+      setMinimized(false);
+    }
+  }, [pipelineIsActive, isRunning]);
+
   return (
     <div className="relative w-screen h-screen overflow-hidden">
       <ThreeMapCanvas />
@@ -266,6 +346,17 @@ export default function Home() {
         plotStates={plotStates}
         onPlotClick={handlePlotClick}
       />
+
+      {/* Hidden IsolatedViewer for iteration screenshot capture */}
+      <div
+        className="absolute"
+        style={{ left: -9999, top: -9999 }}
+        aria-hidden="true"
+      >
+        <div style={{ width: 512, height: 512 }}>
+          <IsolatedViewer ref={iterationViewerRef} />
+        </div>
+      </div>
 
       {/* Top-right: Auth + Settings gear */}
       {!fpMode && (
@@ -301,6 +392,21 @@ export default function Home() {
       {/* Chat UI */}
       <ChatMessages />
       <ChatInput onSend={sendMessage} isLoading={chatIsLoading} />
+
+      {/* Bottom pipeline panel */}
+      {pipelineHasRun && !fpMode && (
+        <div className="absolute bottom-0 left-0 right-0 z-10">
+          {isMinimized ? (
+            <PipelineSummaryBar onExpand={() => setMinimized(false)} />
+          ) : (
+            <PipelineFlowchart
+              onMinimize={() => setMinimized(true)}
+              onStop={iteration.stop}
+              onTogglePause={iteration.togglePause}
+            />
+          )}
+        </div>
+      )}
     </div>
   );
 }

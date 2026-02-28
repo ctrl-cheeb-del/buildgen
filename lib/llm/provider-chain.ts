@@ -2,6 +2,9 @@ import { Mistral } from "@mistralai/mistralai";
 import {
   BedrockRuntimeClient,
   InvokeModelCommand,
+  ConverseCommand,
+  type ContentBlock,
+  type Message,
 } from "@aws-sdk/client-bedrock-runtime";
 
 let _mistral: Mistral | null = null;
@@ -65,6 +68,52 @@ async function callBedrock(
   return text;
 }
 
+async function callBedrockConverse(
+  modelId: string,
+  prompt: string,
+  imageUrls: string[]
+): Promise<string> {
+  const content: ContentBlock[] = [];
+
+  for (const url of imageUrls) {
+    const res = await fetch(url);
+    const buf = new Uint8Array(await res.arrayBuffer());
+    const contentType = res.headers.get("content-type") || "image/png";
+    const formatMatch = contentType.match(/image\/(jpeg|png|gif|webp)/);
+    const format = (formatMatch?.[1] || "png") as "jpeg" | "png" | "gif" | "webp";
+    content.push({
+      image: {
+        format,
+        source: { bytes: buf },
+      },
+    } as ContentBlock);
+  }
+
+  content.push({ text: prompt } as ContentBlock);
+
+  const messages: Message[] = [{ role: "user", content }];
+
+  const command = new ConverseCommand({
+    modelId,
+    messages,
+    inferenceConfig: { maxTokens: 16384 },
+  });
+
+  const response = await getBedrock().send(command);
+
+  const outputContent = response.output;
+  if (!outputContent || !("message" in outputContent) || !outputContent.message) {
+    throw new Error(`Bedrock Converse ${modelId} returned no output`);
+  }
+
+  const textBlocks = outputContent.message.content?.filter(
+    (block): block is ContentBlock.TextMember => "text" in block
+  );
+  const text = textBlocks?.map((b) => b.text).join("") ?? "";
+  if (!text) throw new Error(`Bedrock Converse ${modelId} returned no content`);
+  return text;
+}
+
 export type Provider = {
   name: string;
   call: (prompt: string, imageUrls: string[]) => Promise<string>;
@@ -108,6 +157,11 @@ export async function callOpenRouter(
 }
 
 export const providers: Provider[] = [
+  {
+    name: "Bedrock (GPT-OSS-120B)",
+    call: (prompt, imageUrls) =>
+      callBedrockConverse("openai.gpt-oss-120b-1:0", prompt, imageUrls),
+  },
   {
     name: "Bedrock (Claude Opus 4.6)",
     call: (prompt, imageUrls) =>

@@ -4,10 +4,12 @@ import { useState, useCallback } from "react";
 import { useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import type { MultiViewImages, PipelineStatus } from "../types";
+import { usePipelineStore } from "../stores/pipeline-store";
 
 interface PipelineState {
   isRunning: boolean;
   multiView: MultiViewImages | null;
+  sessionId: string | null;
   steps: Record<string, PipelineStatus>;
 }
 
@@ -35,6 +37,7 @@ export function usePipeline() {
   const [state, setState] = useState<PipelineState>({
     isRunning: false,
     multiView: null,
+    sessionId: null,
     steps: {
       multiview: { step: "multiview", state: "idle" },
       generate: { step: "generate", state: "idle" },
@@ -80,8 +83,14 @@ export function usePipeline() {
         ...prev,
         isRunning: true,
         multiView: null,
+        sessionId: null,
       }));
       resetSteps();
+
+      // Activate pipeline store
+      const store = usePipelineStore.getState();
+      store.reset();
+      store.setActive(true);
 
       try {
         // Mark the user's plot as generating
@@ -94,9 +103,11 @@ export function usePipeline() {
           views = cachedViews;
           setState((prev) => ({ ...prev, multiView: views }));
           setStep("multiview", "done", "Using cached preview");
+          store.setNodeStatus("generate-views", "done", "Cached");
         } else {
           // Step 1: Multi-view generation via nanobanana
           setStep("multiview", "running", "Generating views...");
+          store.setNodeStatus("generate-views", "active", "Generating views...");
 
           const mvRes = await fetch("/api/pipeline/multiview", {
             method: "POST",
@@ -173,10 +184,13 @@ export function usePipeline() {
               setStep("multiview", "done", "Views ready (cache failed)");
             }
           }
+
+          store.setNodeStatus("generate-views", "done");
         }
 
-        // Step 2: Geometry generation via Mistral
+        // Step 2: Geometry generation
         setStep("generate", "running", "Generating 3D code...");
+        store.setNodeStatus("generate-code", "active", "Generating 3D code...");
 
         const geoRes = await fetch("/api/pipeline/geometry", {
           method: "POST",
@@ -191,9 +205,26 @@ export function usePipeline() {
 
         const { code } = (await geoRes.json()) as { code: string };
         setStep("generate", "done", "Code generated");
+        store.setNodeStatus("generate-code", "done");
+
+        // Create iteration session (stores reference images for the iteration loop)
+        try {
+          const sessRes = await fetch("/api/iterate/session", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ buildingName, views }),
+          });
+          if (sessRes.ok) {
+            const { sessionId } = (await sessRes.json()) as { sessionId: string };
+            setState((prev) => ({ ...prev, sessionId }));
+          }
+        } catch (sessErr) {
+          console.warn("[Pipeline] Failed to create iteration session:", sessErr);
+        }
 
         // Step 3: Store in Convex (rendering happens via useGridSync subscription)
         setStep("render", "running", "Saving building...");
+        store.setNodeStatus("place-on-map", "active", "Saving building...");
 
         await createBuilding({
           plotIndex,
@@ -203,8 +234,13 @@ export function usePipeline() {
         });
 
         setStep("render", "done", `Placed in Plot #${plotIndex}`);
+        store.setNodeStatus("place-on-map", "done");
       } catch (err) {
         console.error("[Pipeline] Error:", err);
+        const errMsg = err instanceof Error ? err.message : String(err);
+        store.setError(errMsg);
+        const activeNode = usePipelineStore.getState().nodes.find((n) => n.status === "active");
+        if (activeNode) store.setNodeStatus(activeNode.id, "error", errMsg);
 
         // Rollback the plot status
         try {
