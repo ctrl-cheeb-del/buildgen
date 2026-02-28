@@ -1,10 +1,16 @@
 "use client";
 
+import { useState } from "react";
 import {
   usePipelineStore,
   type PipelineNodeId,
   type NodeStatus,
 } from "@/lib/stores/pipeline-store";
+import type {
+  MultiViewImages,
+  IterationResult,
+  ScoreBreakdown,
+} from "@/lib/types";
 
 /* ------------------------------------------------------------------ */
 /*  Heroicon SVG paths (outline, 24x24 viewBox)                        */
@@ -28,7 +34,62 @@ const ICONS: Record<PipelineNodeId, string> = {
 };
 
 /* ------------------------------------------------------------------ */
-/*  Node icon                                                          */
+/*  Status dot color                                                    */
+/* ------------------------------------------------------------------ */
+
+function dotColor(status: NodeStatus): string {
+  switch (status) {
+    case "pending":
+      return "bg-white/30";
+    case "active":
+      return "bg-blue-400 animate-pulse";
+    case "done":
+      return "bg-green-400";
+    case "error":
+      return "bg-red-400";
+  }
+}
+
+function pillGlow(status: NodeStatus): string {
+  switch (status) {
+    case "active":
+      return "animate-glow";
+    default:
+      return "";
+  }
+}
+
+function connectorColor(status: NodeStatus): string {
+  switch (status) {
+    case "done":
+      return "bg-green-400/50";
+    case "active":
+      return "bg-blue-400/50";
+    case "error":
+      return "bg-red-400/50";
+    default:
+      return "bg-white/15";
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/*  Score helpers                                                       */
+/* ------------------------------------------------------------------ */
+
+function scoreBarColor(score: number): string {
+  if (score >= 7) return "bg-green-400/70";
+  if (score >= 4) return "bg-yellow-400/70";
+  return "bg-red-400/70";
+}
+
+function scoreTextColor(score: number): string {
+  if (score >= 7) return "text-green-300";
+  if (score >= 4) return "text-yellow-300";
+  return "text-red-300";
+}
+
+/* ------------------------------------------------------------------ */
+/*  NodeIcon                                                            */
 /* ------------------------------------------------------------------ */
 
 function NodeIcon({ nodeId }: { nodeId: PipelineNodeId }) {
@@ -46,84 +107,190 @@ function NodeIcon({ nodeId }: { nodeId: PipelineNodeId }) {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Pod status styling (glass-adapted)                                 */
+/*  VerticalConnector                                                   */
 /* ------------------------------------------------------------------ */
 
-function podStyle(status: NodeStatus) {
-  switch (status) {
-    case "pending":
-      return "bg-white/10 border-white/20 text-white/40";
-    case "active":
-      return "bg-blue-400/25 border-blue-400/50 text-blue-200 animate-glow";
-    case "done":
-      return "bg-green-400/25 border-green-400/50 text-green-200";
-    case "error":
-      return "bg-red-400/25 border-red-400/50 text-red-200";
-  }
-}
-
-function connectorColor(status: NodeStatus) {
-  switch (status) {
-    case "done":
-      return "bg-green-400/50";
-    case "active":
-      return "bg-blue-400/50";
-    case "error":
-      return "bg-red-400/50";
-    default:
-      return "bg-white/15";
-  }
+function VerticalConnector({ status }: { status: NodeStatus }) {
+  return (
+    <div className="flex items-center pl-[18px]">
+      <div className={`w-[2px] h-3 rounded-full ${connectorColor(status)}`} />
+    </div>
+  );
 }
 
 /* ------------------------------------------------------------------ */
-/*  Score bar (glass-adapted)                                          */
+/*  NodeDetailPanel — glass popover to the right of clicked pill        */
 /* ------------------------------------------------------------------ */
 
-function scoreBarColor(score: number): string {
-  if (score >= 7) return "bg-green-400/70";
-  if (score >= 4) return "bg-yellow-400/70";
-  return "bg-red-400/70";
+interface DetailPanelProps {
+  nodeId: PipelineNodeId;
+  multiView: MultiViewImages | null;
+  iterations: IterationResult[];
+  selectedBuilding: { proceduralCode: string; prompt: string; plotIndex: number } | null;
 }
 
-function scoreTextColor(score: number): string {
-  if (score >= 7) return "text-green-300";
-  if (score >= 4) return "text-yellow-300";
-  return "text-red-300";
+function NodeDetailPanel({ nodeId, multiView, iterations, selectedBuilding }: DetailPanelProps) {
+  const latest = iterations.length > 0 ? iterations[iterations.length - 1] : null;
+
+  return (
+    <div className="absolute left-full ml-2 top-0 w-56 bg-white/15 backdrop-blur-2xl rounded-2xl border border-white/25 shadow-[0_8px_32px_rgba(0,0,0,0.3)] p-3 z-50 animate-fade-in">
+      {nodeId === "generate-views" && multiView && (
+        <div>
+          <div className="text-[10px] text-white/50 mb-1.5">Blueprint Views</div>
+          <div className="grid grid-cols-2 gap-1">
+            {(["front", "right", "back", "left"] as const).map((angle) => (
+              <div key={angle} className="relative aspect-square rounded-lg overflow-hidden bg-black/30">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={multiView[angle]}
+                  alt={angle}
+                  className="w-full h-full object-cover"
+                />
+                <span className="absolute bottom-0.5 left-0.5 text-[8px] text-white/60 bg-black/40 px-1 rounded">
+                  {angle}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {nodeId === "generate-code" && selectedBuilding && (
+        <div>
+          <div className="text-[10px] text-white/50 mb-1.5">Code Preview</div>
+          <pre className="text-[9px] text-white/70 font-mono bg-black/20 rounded-lg p-2 overflow-hidden max-h-40 leading-relaxed">
+            {selectedBuilding.proceduralCode.split("\n").slice(0, 12).join("\n")}
+            {selectedBuilding.proceduralCode.split("\n").length > 12 && "\n..."}
+          </pre>
+        </div>
+      )}
+
+      {nodeId === "place-on-map" && selectedBuilding && (
+        <div>
+          <div className="text-[10px] text-white/50 mb-1.5">Plot Info</div>
+          <div className="text-xs text-white/80">Plot #{selectedBuilding.plotIndex}</div>
+          <div className="text-[11px] text-white/60 mt-0.5">{selectedBuilding.prompt}</div>
+        </div>
+      )}
+
+      {nodeId === "capture" && latest?.screenshots && (
+        <div>
+          <div className="text-[10px] text-white/50 mb-1.5">Render Screenshots</div>
+          <div className="grid grid-cols-2 gap-1">
+            {(["front", "right", "back", "left"] as const).map((angle) => (
+              <div key={angle} className="relative aspect-square rounded-lg overflow-hidden bg-black/30">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={latest.screenshots[angle]}
+                  alt={angle}
+                  className="w-full h-full object-cover"
+                />
+                <span className="absolute bottom-0.5 left-0.5 text-[8px] text-white/60 bg-black/40 px-1 rounded">
+                  {angle}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {nodeId === "score" && latest && (
+        <div>
+          <div className="text-[10px] text-white/50 mb-1.5">Score Breakdown</div>
+          <ScoreCard score={latest.score} />
+          {latest.feedback && (
+            <div className="mt-2 text-[9px] text-white/50 leading-relaxed line-clamp-4">
+              {latest.feedback}
+            </div>
+          )}
+        </div>
+      )}
+
+      {nodeId === "improve" && latest && (
+        <div>
+          <div className="text-[10px] text-white/50 mb-1.5">Improvement</div>
+          <div className="flex items-center gap-1.5">
+            <span className={`text-xs font-medium ${latest.improved ? "text-green-300" : "text-red-300"}`}>
+              {latest.improved ? "Improved" : "No improvement"}
+            </span>
+          </div>
+          {latest.feedback && (
+            <div className="mt-1.5 text-[9px] text-white/50 leading-relaxed line-clamp-3">
+              {latest.feedback}
+            </div>
+          )}
+        </div>
+      )}
+
+      {nodeId === "update" && (
+        <div>
+          <div className="text-[10px] text-white/50 mb-1.5">Update</div>
+          <div className="text-xs text-white/80">Saved to map</div>
+          {iterations.length > 0 && (
+            <div className="text-[10px] text-white/50 mt-0.5">
+              {iterations.length} iteration{iterations.length !== 1 ? "s" : ""} complete
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Fallback if no data yet */}
+      {nodeId === "generate-views" && !multiView && (
+        <div className="text-[10px] text-white/40">No views generated yet</div>
+      )}
+      {nodeId === "generate-code" && !selectedBuilding && (
+        <div className="text-[10px] text-white/40">No code generated yet</div>
+      )}
+      {nodeId === "place-on-map" && !selectedBuilding && (
+        <div className="text-[10px] text-white/40">Not placed yet</div>
+      )}
+      {nodeId === "capture" && !latest?.screenshots && (
+        <div className="text-[10px] text-white/40">No captures yet</div>
+      )}
+      {nodeId === "score" && !latest && (
+        <div className="text-[10px] text-white/40">No scores yet</div>
+      )}
+      {nodeId === "improve" && !latest && (
+        <div className="text-[10px] text-white/40">No improvements yet</div>
+      )}
+    </div>
+  );
 }
 
-function ScoreBar() {
-  const latestScore = usePipelineStore((s) => s.latestScore);
-  if (!latestScore) return null;
+/* ------------------------------------------------------------------ */
+/*  ScoreCard — compact score display for detail panel                  */
+/* ------------------------------------------------------------------ */
 
+function ScoreCard({ score }: { score: ScoreBreakdown }) {
   const dims = [
-    { label: "Sil", val: latestScore.silhouette },
-    { label: "Prop", val: latestScore.proportions },
-    { label: "Feat", val: latestScore.features },
-    { label: "Mat", val: latestScore.materials },
+    { label: "Sil", val: score.silhouette },
+    { label: "Prop", val: score.proportions },
+    { label: "Feat", val: score.features },
+    { label: "Mat", val: score.materials },
   ];
 
   return (
-    <div className="px-3 pb-3">
-      <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+    <div>
+      <div className="grid grid-cols-2 gap-x-3 gap-y-1">
         {dims.map((d) => (
-          <div key={d.label} className="flex items-center gap-1.5">
-            <span className="text-[10px] text-white/50 w-6">{d.label}</span>
-            <div className="flex-1 h-1.5 bg-white/10 rounded-full overflow-hidden">
+          <div key={d.label} className="flex items-center gap-1">
+            <span className="text-[9px] text-white/50 w-5">{d.label}</span>
+            <div className="flex-1 h-1 bg-white/10 rounded-full overflow-hidden">
               <div
                 className={`h-full rounded-full transition-all duration-500 ${scoreBarColor(d.val)}`}
                 style={{ width: `${(d.val / 10) * 100}%` }}
               />
             </div>
-            <span className={`text-[10px] font-semibold w-5 ${scoreTextColor(d.val)}`}>
+            <span className={`text-[9px] font-semibold w-4 ${scoreTextColor(d.val)}`}>
               {d.val.toFixed(1)}
             </span>
           </div>
         ))}
       </div>
-      <div className="flex items-center justify-between mt-2 pt-2 border-t border-white/10">
-        <span className="text-[10px] text-white/50">Total</span>
-        <span className={`text-sm font-bold ${scoreTextColor(latestScore.totalScore)}`}>
-          {latestScore.totalScore.toFixed(1)}/10
+      <div className="flex items-center justify-between mt-1.5 pt-1.5 border-t border-white/10">
+        <span className="text-[9px] text-white/50">Total</span>
+        <span className={`text-xs font-bold ${scoreTextColor(score.totalScore)}`}>
+          {score.totalScore.toFixed(1)}/10
         </span>
       </div>
     </div>
@@ -131,57 +298,216 @@ function ScoreBar() {
 }
 
 /* ------------------------------------------------------------------ */
-/*  VerticalNode — 40px circle + icon + label row                      */
+/*  NodePill — individual glass pill for each pipeline step             */
 /* ------------------------------------------------------------------ */
 
-function VerticalNode({
+function NodePill({
   node,
+  isExpanded,
+  onToggle,
+  detailProps,
 }: {
   node: { id: PipelineNodeId; label: string; status: NodeStatus; detail?: string };
+  isExpanded: boolean;
+  onToggle: () => void;
+  detailProps: DetailPanelProps;
 }) {
   return (
-    <div className="flex items-center gap-2.5 py-0.5">
-      <div
-        className={`w-8 h-8 rounded-full border flex-shrink-0 flex items-center justify-center transition-all duration-300 ${podStyle(node.status)}`}
+    <div className="relative">
+      <button
+        onClick={onToggle}
+        className={`flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/15 backdrop-blur-2xl border border-white/25 shadow-[0_8px_32px_rgba(0,0,0,0.3)] cursor-pointer hover:bg-white/20 transition-all duration-200 ${pillGlow(node.status)}`}
       >
-        {node.status === "done" ? (
-          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-          </svg>
-        ) : node.status === "error" ? (
-          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+        {/* Status dot */}
+        <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${dotColor(node.status)}`} />
+        {/* Icon */}
+        <span className="text-white/70">
+          <NodeIcon nodeId={node.id} />
+        </span>
+        {/* Label */}
+        <span className="text-[11px] font-medium text-white/90 whitespace-nowrap">
+          {node.label}
+        </span>
+      </button>
+
+      {/* Detail panel */}
+      {isExpanded && <NodeDetailPanel {...detailProps} nodeId={node.id} />}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  LoopBackLine — SVG curve on the right side (Capture -> Update)      */
+/* ------------------------------------------------------------------ */
+
+function LoopBackLine({ nodeCount, isActive }: { nodeCount: number; isActive: boolean }) {
+  // Height per node row: pill (~36px) + connector (~12px) = ~48px
+  // 4 iteration nodes: Capture, Score, Improve, Update
+  const rowH = 48;
+  const totalH = nodeCount * rowH;
+  const pad = 18; // center of pill vertically
+  const x = 8;
+  const r = 8; // corner radius
+
+  const top = pad;
+  const bottom = totalH - pad;
+
+  return (
+    <svg
+      className="absolute -right-5 top-0 pointer-events-none"
+      width="20"
+      height={totalH}
+      fill="none"
+    >
+      <path
+        d={`M ${x} ${bottom} L ${x} ${top + r} Q ${x} ${top} ${x - r} ${top}`}
+        stroke="white"
+        strokeOpacity={0.2}
+        strokeWidth={1.5}
+        strokeDasharray={isActive ? "4 3" : "none"}
+        className={isActive ? "animate-dash" : ""}
+        fill="none"
+      />
+      {/* Arrow pointing left at top */}
+      <path
+        d={`M ${x - r + 4} ${top - 3} L ${x - r} ${top} L ${x - r + 4} ${top + 3}`}
+        stroke="white"
+        strokeOpacity={0.3}
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        fill="none"
+      />
+    </svg>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  IterationCounterPill                                                */
+/* ------------------------------------------------------------------ */
+
+function IterationCounterPill({
+  current,
+  max,
+}: {
+  current: number;
+  max: number;
+}) {
+  const pct = max > 0 ? Math.min((current / max) * 100, 100) : 0;
+
+  return (
+    <div className="px-3 py-1.5 rounded-full bg-white/15 backdrop-blur-2xl border border-white/25 shadow-[0_8px_32px_rgba(0,0,0,0.3)]">
+      <div className="flex items-center justify-between mb-1">
+        <span className="text-[10px] text-white/60 font-medium">
+          Iteration {current} / {max}
+        </span>
+      </div>
+      <div className="h-1 bg-white/10 rounded-full overflow-hidden">
+        <div
+          className="h-full bg-blue-400/60 rounded-full transition-all duration-500"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  ScorePill                                                           */
+/* ------------------------------------------------------------------ */
+
+function ScorePill({ score }: { score: ScoreBreakdown }) {
+  const dims = [
+    { label: "Sil", val: score.silhouette },
+    { label: "Prop", val: score.proportions },
+    { label: "Feat", val: score.features },
+    { label: "Mat", val: score.materials },
+  ];
+
+  return (
+    <div className="px-3 py-2 rounded-2xl bg-white/15 backdrop-blur-2xl border border-white/25 shadow-[0_8px_32px_rgba(0,0,0,0.3)]">
+      <div className="flex items-center justify-between mb-1.5">
+        <span className="text-[10px] text-white/50">Score</span>
+        <span className={`text-sm font-bold ${scoreTextColor(score.totalScore)}`}>
+          {score.totalScore.toFixed(1)}/10
+        </span>
+      </div>
+      <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+        {dims.map((d) => (
+          <div key={d.label} className="flex items-center gap-1">
+            <span className="text-[9px] text-white/50 w-5">{d.label}</span>
+            <div className="flex-1 h-1 bg-white/10 rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all duration-500 ${scoreBarColor(d.val)}`}
+                style={{ width: `${(d.val / 10) * 100}%` }}
+              />
+            </div>
+            <span className={`text-[9px] font-semibold w-4 ${scoreTextColor(d.val)}`}>
+              {d.val.toFixed(1)}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  ControlsPill — pause/stop/minimize (only when active)               */
+/* ------------------------------------------------------------------ */
+
+function ControlsPill({
+  isPaused,
+  onTogglePause,
+  onStop,
+  onMinimize,
+}: {
+  isPaused: boolean;
+  onTogglePause: () => void;
+  onStop: () => void;
+  onMinimize: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-0.5 px-2 py-1 rounded-full bg-white/15 backdrop-blur-2xl border border-white/25 shadow-[0_8px_32px_rgba(0,0,0,0.3)]">
+      <button
+        onClick={onTogglePause}
+        className="p-1 rounded-full hover:bg-white/10 transition-colors"
+        title={isPaused ? "Resume" : "Pause"}
+      >
+        {isPaused ? (
+          <svg className="w-3.5 h-3.5 text-green-300" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M8 5v14l11-7z" />
           </svg>
         ) : (
-          <NodeIcon nodeId={node.id} />
+          <svg className="w-3.5 h-3.5 text-yellow-300" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
+          </svg>
         )}
-      </div>
-      <div className="min-w-0">
-        <div className="text-[11px] font-medium text-white/90 leading-tight">
-          {node.label}
-        </div>
-        {node.detail && node.status === "active" && (
-          <div className="text-[9px] text-white/40 truncate">{node.detail}</div>
-        )}
-      </div>
+      </button>
+      <button
+        onClick={onStop}
+        className="p-1 rounded-full hover:bg-white/10 transition-colors"
+        title="Stop"
+      >
+        <svg className="w-3.5 h-3.5 text-red-300" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M6 6h12v12H6z" />
+        </svg>
+      </button>
+      <button
+        onClick={onMinimize}
+        className="p-1 rounded-full hover:bg-white/10 transition-colors"
+        title="Minimize"
+      >
+        <svg className="w-3.5 h-3.5 text-white/50" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 12h-15" />
+        </svg>
+      </button>
     </div>
   );
 }
 
 /* ------------------------------------------------------------------ */
-/*  VerticalConnector — 2px × 16px vertical line                       */
-/* ------------------------------------------------------------------ */
-
-function VerticalConnector({ status }: { status: NodeStatus }) {
-  return (
-    <div className="flex items-center pl-[15px]">
-      <div className={`w-[2px] h-4 rounded-full ${connectorColor(status)}`} />
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/*  Summary pill (minimized state)                                     */
+/*  Summary pill (minimized state)                                      */
 /* ------------------------------------------------------------------ */
 
 export function PipelineSummaryPill({ onExpand }: { onExpand: () => void }) {
@@ -216,73 +542,75 @@ export function PipelineSummaryPill({ onExpand }: { onExpand: () => void }) {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Main flowchart — vertical liquid glass panel                       */
+/*  Main flowchart — individual glass pills with loop-back              */
 /* ------------------------------------------------------------------ */
+
+export interface PipelineFlowchartProps {
+  onMinimize: () => void;
+  onStop: () => void;
+  onTogglePause: () => void;
+  multiView: MultiViewImages | null;
+  iterations: IterationResult[];
+  selectedBuilding: {
+    proceduralCode: string;
+    prompt: string;
+    plotIndex: number;
+  } | null;
+}
 
 export default function PipelineFlowchart({
   onMinimize,
   onStop,
   onTogglePause,
-}: {
-  onMinimize: () => void;
-  onStop: () => void;
-  onTogglePause: () => void;
-}) {
+  multiView,
+  iterations,
+  selectedBuilding,
+}: PipelineFlowchartProps) {
   const nodes = usePipelineStore((s) => s.nodes);
   const isActive = usePipelineStore((s) => s.isActive);
   const isPaused = usePipelineStore((s) => s.isPaused);
   const iterationCount = usePipelineStore((s) => s.iterationCount);
   const maxIterations = usePipelineStore((s) => s.maxIterations);
+  const latestScore = usePipelineStore((s) => s.latestScore);
   const error = usePipelineStore((s) => s.error);
+
+  const [expandedNode, setExpandedNode] = useState<PipelineNodeId | null>(null);
+
+  const toggleNode = (id: PipelineNodeId) => {
+    setExpandedNode((prev) => (prev === id ? null : id));
+  };
 
   // Split into generation nodes (first 3) and iteration nodes (last 4)
   const genNodes = nodes.slice(0, 3);
   const iterNodes = nodes.slice(3);
 
+  const detailProps: Omit<DetailPanelProps, "nodeId"> = {
+    multiView,
+    iterations,
+    selectedBuilding,
+  };
+
+  const hasIterations = iterationCount > 0;
+  const iterationIsActive = iterNodes.some((n) => n.status === "active");
+
   return (
-    <div className="w-64 bg-white/15 backdrop-blur-2xl rounded-2xl border border-white/25 shadow-[0_8px_32px_rgba(0,0,0,0.3)] animate-slide-in-right overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold text-white/90">Pipeline</span>
-          {iterationCount > 0 && (
-            <span className="text-[10px] text-white/50">
-              {iterationCount}/{maxIterations}
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-0.5">
-          {isActive && (
-            <>
-              <button
-                onClick={onTogglePause}
-                className="p-1 rounded hover:bg-white/10 transition-colors"
-                title={isPaused ? "Resume" : "Pause"}
-              >
-                {isPaused ? (
-                  <svg className="w-3.5 h-3.5 text-green-300" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M8 5v14l11-7z" />
-                  </svg>
-                ) : (
-                  <svg className="w-3.5 h-3.5 text-yellow-300" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
-                  </svg>
-                )}
-              </button>
-              <button
-                onClick={onStop}
-                className="p-1 rounded hover:bg-white/10 transition-colors"
-                title="Stop"
-              >
-                <svg className="w-3.5 h-3.5 text-red-300" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M6 6h12v12H6z" />
-                </svg>
-              </button>
-            </>
-          )}
+    <div className="flex flex-col gap-2 animate-slide-in-left">
+      {/* Controls pill — only when active */}
+      {isActive && (
+        <ControlsPill
+          isPaused={isPaused}
+          onTogglePause={onTogglePause}
+          onStop={onStop}
+          onMinimize={onMinimize}
+        />
+      )}
+
+      {/* Minimize button when not active (no controls pill) */}
+      {!isActive && (
+        <div className="flex">
           <button
             onClick={onMinimize}
-            className="p-1 rounded hover:bg-white/10 transition-colors"
+            className="p-1.5 rounded-full bg-white/15 backdrop-blur-2xl border border-white/25 shadow-[0_8px_32px_rgba(0,0,0,0.3)] hover:bg-white/20 transition-colors"
             title="Minimize"
           >
             <svg className="w-3.5 h-3.5 text-white/50" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
@@ -290,70 +618,56 @@ export default function PipelineFlowchart({
             </svg>
           </button>
         </div>
-      </div>
-
-      {/* Iteration subtitle */}
-      {iterationCount > 0 && (
-        <div className="px-3 pt-1.5">
-          <span className="text-[10px] text-white/40">
-            Iteration {iterationCount} of {maxIterations}
-          </span>
-        </div>
       )}
 
       {/* Generation nodes */}
-      <div className="px-3 pt-2">
-        {genNodes.map((node, i) => (
+      {genNodes.map((node, i) => (
+        <div key={node.id}>
+          {i > 0 && <VerticalConnector status={node.status} />}
+          <NodePill
+            node={node}
+            isExpanded={expandedNode === node.id}
+            onToggle={() => toggleNode(node.id)}
+            detailProps={{ ...detailProps, nodeId: node.id }}
+          />
+        </div>
+      ))}
+
+      {/* Connector from generation to iteration */}
+      <VerticalConnector status={iterNodes[0].status} />
+
+      {/* Iteration nodes with loop-back line */}
+      <div className="relative">
+        {/* Loop-back line on the right side */}
+        {hasIterations && (
+          <LoopBackLine nodeCount={4} isActive={iterationIsActive} />
+        )}
+
+        {/* Iteration node pills */}
+        {iterNodes.map((node, i) => (
           <div key={node.id}>
             {i > 0 && <VerticalConnector status={node.status} />}
-            <VerticalNode node={node} />
+            <NodePill
+              node={node}
+              isExpanded={expandedNode === node.id}
+              onToggle={() => toggleNode(node.id)}
+              detailProps={{ ...detailProps, nodeId: node.id }}
+            />
           </div>
         ))}
       </div>
 
-      {/* Connector to iteration loop */}
-      <div className="px-3">
-        <VerticalConnector status={iterNodes[0].status} />
-      </div>
+      {/* Iteration counter pill */}
+      {hasIterations && (
+        <IterationCounterPill current={iterationCount} max={maxIterations} />
+      )}
 
-      {/* Iteration loop container */}
-      <div className="mx-3 mb-2 relative">
-        <div className="border border-white/10 rounded-lg pl-3 pr-2 py-1.5 bg-white/5">
-          {/* Loop label */}
-          <div className="flex items-center gap-1.5 mb-1">
-            <svg className="w-3 h-3 text-white/30" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182" />
-            </svg>
-            <span className="text-[9px] text-white/30 uppercase tracking-wider font-medium">
-              Iteration Loop
-            </span>
-          </div>
-
-          {iterNodes.map((node, i) => (
-            <div key={node.id}>
-              {i > 0 && <VerticalConnector status={node.status} />}
-              <VerticalNode node={node} />
-            </div>
-          ))}
-
-          {/* Loop-back indicator */}
-          {iterationCount > 0 && (
-            <div className="flex items-center gap-1 mt-1 pt-1 border-t border-white/10">
-              <svg className="w-3 h-3 text-white/25" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 15 3 9m0 0 6-6M3 9h12a6 6 0 0 1 0 12h-3" />
-              </svg>
-              <span className="text-[9px] text-white/25">repeat</span>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Score bar */}
-      <ScoreBar />
+      {/* Score pill */}
+      {latestScore && <ScorePill score={latestScore} />}
 
       {/* Error */}
       {error && (
-        <div className="px-3 pb-2">
+        <div className="px-3 py-1.5 rounded-full bg-red-400/15 backdrop-blur-2xl border border-red-400/25 shadow-[0_8px_32px_rgba(0,0,0,0.3)]">
           <div className="text-[10px] text-red-300/80 truncate">{error}</div>
         </div>
       )}

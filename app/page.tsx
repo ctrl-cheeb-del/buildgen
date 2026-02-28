@@ -395,9 +395,9 @@ export default function Home() {
       <ChatMessages />
       <ChatInput onSend={sendMessage} isLoading={chatIsLoading} />
 
-      {/* Pipeline panel — top-right vertical glass */}
+      {/* Pipeline panel — top-left individual glass pills */}
       {pipelineHasRun && !fpMode && (
-        <div className="absolute top-16 right-4 z-10 max-h-[calc(100vh-5rem)] overflow-y-auto scrollbar-hide">
+        <div className="absolute top-16 left-4 z-10 max-h-[calc(100vh-5rem)] overflow-y-auto scrollbar-hide">
           {isMinimized ? (
             <PipelineSummaryPill onExpand={() => setMinimized(false)} />
           ) : (
@@ -405,6 +405,17 @@ export default function Home() {
               onMinimize={() => setMinimized(true)}
               onStop={iteration.stop}
               onTogglePause={iteration.togglePause}
+              multiView={multiView}
+              iterations={iteration.iterations}
+              selectedBuilding={
+                selectedBuilding
+                  ? {
+                      proceduralCode: selectedBuilding.proceduralCode,
+                      prompt: selectedBuilding.prompt,
+                      plotIndex: selectedBuilding.plotIndex,
+                    }
+                  : null
+              }
             />
           )}
         </div>
