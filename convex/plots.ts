@@ -145,7 +145,11 @@ export const markGenerating = mutation({
       throw new Error("You don't own this plot");
     }
 
-    await ctx.db.patch(plot._id, { status: "generating" });
+    await ctx.db.patch(plot._id, {
+      status: "generating",
+      pipelineStep: undefined,
+      pipelineMultiViewUrl: undefined,
+    });
   },
 });
 
@@ -221,7 +225,11 @@ export const markGeneratingInternal = internalMutation({
       .collect();
     const plot = plots[0];
     if (!plot) throw new Error(`Plot ${plotIndex} not found`);
-    await ctx.db.patch(plot._id, { status: "generating" });
+    await ctx.db.patch(plot._id, {
+      status: "generating",
+      pipelineStep: undefined,
+      pipelineMultiViewUrl: undefined,
+    });
   },
 });
 

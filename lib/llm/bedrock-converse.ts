@@ -47,21 +47,27 @@ const SYSTEM_PROMPT = `You are an expert Three.js developer and 3D building eval
 When shown reference images with a generation prompt, produce JavaScript code that creates a THREE.Group representing the building.
 
 REQUIREMENTS:
-- CRITICAL SIZING: The building sits on a 100×100 unit plot. XZ footprint must stay within 100×100.
-- HEIGHT MUST MATCH REAL-WORLD SCALE (1 unit ≈ 1 meter):
-  - Small house / cabin / shed: 5–10 units tall
-  - Regular house / villa / bungalow: 8–15 units tall
-  - Townhouse / small apartment: 15–25 units tall
-  - Mid-rise office / apartment block: 30–60 units tall
-  - Tall office tower / skyscraper: 80–150 units tall
-  - Supertall skyscraper: 200–400+ units tall
-- WIDTH/DEPTH should vary realistically — do NOT always fill 100×100:
-  - Small house / cabin: ~20×15
-  - Regular house / villa: ~30×20
-  - Mansion / estate: ~80×50
-  - Townhouse: ~15×20
-  - Office tower / skyscraper: ~40×40
-  - Supertall: ~50×50 at base, tapering upward
+- CRITICAL: Use 1 unit = 1 meter. ALL dimensions must match real-world scale. The plot is 100×100 max but most buildings should NOT fill it.
+  FOOTPRINT (width × depth):
+  - Small house / cabin / shed: ~10×8
+  - Regular house / villa: ~15×12
+  - Pub / shop / small restaurant: ~15×12
+  - Church / temple: ~20×35
+  - Townhouse: ~8×15
+  - Mansion / estate: ~30×25
+  - Mid-rise office / apartment block: ~30×25
+  - Tall office tower / skyscraper: ~40×40
+  - Supertall skyscraper: ~60×60 at base
+  - Stadium / arena: ~80×60
+  - Bridge: ~80×15 (long but narrow)
+  HEIGHT:
+  - Small house / cabin / shed: 5–10m
+  - Regular house / villa / bungalow: 8–15m
+  - Townhouse / small apartment: 15–25m
+  - Mid-rise office / apartment block: 30–60m
+  - Tall office tower / skyscraper: 80–150m
+  - Supertall skyscraper: 200–400+m
+  Only use the full plot if the building genuinely needs it.
 - Return ONLY a JavaScript function body wrapped in: function(THREE) { ... return group; }
 - Create a THREE.Group as the root
 - Use THREE.BoxGeometry, CylinderGeometry, SphereGeometry, ExtrudeGeometry, Shape, LatheGeometry, etc.
@@ -70,7 +76,7 @@ REQUIREMENTS:
 - AVOID Z-FIGHTING: offset decorative panels at least 0.3 units from walls
 - NO texture loading, NO external files
 - Center at origin (0,0,0) on XZ, base at Y=0 (Y-up)
-- Keep footprint within ±50 on X and ±50 on Z
+- Maximum footprint: ±50 on X and ±50 on Z (hard limit), but use realistic dimensions
 - Use THREE.Shape + ExtrudeGeometry for organic/curved cross-sections
 - Code must be valid JavaScript runnable in a Function constructor
 

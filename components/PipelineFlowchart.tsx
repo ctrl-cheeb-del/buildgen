@@ -417,58 +417,39 @@ function NodePill({
 }
 
 /* ------------------------------------------------------------------ */
-/*  LoopBackLine — solid glowing SVG curve, connected to active node    */
+/*  LoopBackLine — CSS vertical bar on right side of iteration nodes    */
 /* ------------------------------------------------------------------ */
 
-function LoopBackLine({
-  activeIndex,
-}: {
-  /** Index of the active node within iteration nodes (0-3), or -1 if none active */
-  activeIndex: number;
-}) {
-  // Each row = pill(~32px) + connector(~20px) = ~52px
-  const rowH = 52;
-  const pillCenter = 16; // vertical center of a pill
-  const x = 12;
-  const r = 8;
-
-  // The line always starts at the top (Capture = index 0)
-  const top = pillCenter;
-  // It extends down to the active node, or to Update if none active
-  const targetIdx = activeIndex >= 0 ? activeIndex : 3;
-  const bottom = targetIdx * rowH + pillCenter;
-
-  // Don't draw if line would be zero height (active is Capture itself)
-  if (targetIdx === 0) return null;
-
-  const totalH = 4 * rowH;
-  const isAnimating = activeIndex >= 0;
-
+function LoopBackLine({ isAnimating }: { isAnimating: boolean }) {
   return (
-    <svg
-      className={`absolute -right-6 top-0 pointer-events-none ${isAnimating ? "animate-loop-glow" : ""}`}
-      width="24"
-      height={totalH}
-      fill="none"
+    <div
+      className={`absolute -right-3 top-3 bottom-3 pointer-events-none flex flex-col items-center ${
+        isAnimating ? "animate-loop-glow" : ""
+      }`}
     >
-      {/* Main solid line from active node up to top, then curve left */}
-      <path
-        d={`M ${x} ${bottom} L ${x} ${top + r} Q ${x} ${top} ${x - r} ${top}`}
-        stroke="rgba(96, 165, 250, 0.6)"
-        strokeWidth={2.5}
-        strokeLinecap="round"
+      {/* Arrow pointing up at top */}
+      <svg
+        className="w-2.5 h-2.5 flex-shrink-0 -mb-px"
+        viewBox="0 0 10 10"
         fill="none"
+      >
+        <path
+          d="M2 7 L5 3 L8 7"
+          stroke="rgba(96, 165, 250, 0.7)"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+      {/* Vertical line that stretches to fill */}
+      <div
+        className={`flex-1 w-[2.5px] rounded-full ${
+          isAnimating
+            ? "bg-blue-400/50 shadow-[0_0_6px_rgba(96,165,250,0.3)]"
+            : "bg-blue-400/25"
+        }`}
       />
-      {/* Arrow pointing left at top */}
-      <path
-        d={`M ${x - r + 4} ${top - 3.5} L ${x - r} ${top} L ${x - r + 4} ${top + 3.5}`}
-        stroke="rgba(96, 165, 250, 0.7)"
-        strokeWidth={2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        fill="none"
-      />
-    </svg>
+    </div>
   );
 }
 
@@ -546,141 +527,15 @@ function ScorePill({ score }: { score: ScoreBreakdown }) {
   );
 }
 
-/* ------------------------------------------------------------------ */
-/*  ControlsPill                                                        */
-/* ------------------------------------------------------------------ */
-
-function ControlsPill({
-  isPaused,
-  onTogglePause,
-  onStop,
-  onMinimize,
-}: {
-  isPaused: boolean;
-  onTogglePause: () => void;
-  onStop: () => void;
-  onMinimize: () => void;
-}) {
-  return (
-    <div
-      className={`w-fit flex items-center gap-0.5 px-2 py-1 rounded-full ${GLASS_PILL}`}
-    >
-      <button
-        onClick={onTogglePause}
-        className="p-1 rounded-full hover:bg-white/10 transition-colors"
-        title={isPaused ? "Resume" : "Pause"}
-      >
-        {isPaused ? (
-          <svg
-            className="w-3.5 h-3.5 text-green-300"
-            fill="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path d="M8 5v14l11-7z" />
-          </svg>
-        ) : (
-          <svg
-            className="w-3.5 h-3.5 text-yellow-300"
-            fill="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
-          </svg>
-        )}
-      </button>
-      <button
-        onClick={onStop}
-        className="p-1 rounded-full hover:bg-white/10 transition-colors"
-        title="Stop"
-      >
-        <svg
-          className="w-3.5 h-3.5 text-red-300"
-          fill="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path d="M6 6h12v12H6z" />
-        </svg>
-      </button>
-      <button
-        onClick={onMinimize}
-        className="p-1 rounded-full hover:bg-white/10 transition-colors"
-        title="Minimize"
-      >
-        <svg
-          className="w-3.5 h-3.5 text-white/50"
-          fill="none"
-          viewBox="0 0 24 24"
-          strokeWidth={2}
-          stroke="currentColor"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            d="M19.5 12h-15"
-          />
-        </svg>
-      </button>
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/*  Summary pill (minimized state)                                      */
-/* ------------------------------------------------------------------ */
-
-export function PipelineSummaryPill({
-  onExpand,
-}: {
-  onExpand: () => void;
-}) {
-  const latestScore = usePipelineStore((s) => s.latestScore);
-  const iterationCount = usePipelineStore((s) => s.iterationCount);
-  const isActive = usePipelineStore((s) => s.isActive);
-
-  return (
-    <div
-      className={`flex items-center gap-2 px-3 py-1.5 rounded-full ${GLASS_PILL} cursor-pointer hover:bg-white/20 transition-colors`}
-      onClick={onExpand}
-    >
-      <div
-        className={`w-2 h-2 rounded-full ${
-          isActive ? "bg-blue-400 animate-pulse" : "bg-green-400"
-        }`}
-      />
-      <span className="text-[11px] text-white/80 font-medium">Pipeline</span>
-      {latestScore && (
-        <span
-          className={`text-[11px] font-bold ${scoreTextColor(latestScore.totalScore)}`}
-        >
-          {latestScore.totalScore.toFixed(1)}
-        </span>
-      )}
-      {iterationCount > 0 && (
-        <span className="text-[10px] text-white/40">#{iterationCount}</span>
-      )}
-      <svg
-        className="w-3 h-3 text-white/50"
-        fill="none"
-        viewBox="0 0 24 24"
-        strokeWidth={2}
-        stroke="currentColor"
-      >
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          d="M8.25 4.5l7.5 7.5-7.5 7.5"
-        />
-      </svg>
-    </div>
-  );
-}
+/* ControlsPill and PipelineSummaryPill removed — merged into main PipelineFlowchart header */
 
 /* ------------------------------------------------------------------ */
 /*  Main flowchart                                                      */
 /* ------------------------------------------------------------------ */
 
 export interface PipelineFlowchartProps {
-  onMinimize: () => void;
+  isMinimized: boolean;
+  onToggleMinimize: () => void;
   onStop: () => void;
   onTogglePause: () => void;
   multiViewUrl: string | null;
@@ -693,7 +548,8 @@ export interface PipelineFlowchartProps {
 }
 
 export default function PipelineFlowchart({
-  onMinimize,
+  isMinimized,
+  onToggleMinimize,
   onStop,
   onTogglePause,
   multiViewUrl,
@@ -735,112 +591,171 @@ export default function PipelineFlowchart({
   const activeIterIndex = iterNodes.findIndex((n) => n.status === "active");
 
   return (
-    <div className="flex flex-col items-start animate-slide-in-left">
-      {/* Controls pill — only when active */}
-      {isActive && (
-        <>
-          <ControlsPill
-            isPaused={isPaused}
-            onTogglePause={onTogglePause}
-            onStop={onStop}
-            onMinimize={onMinimize}
+    <div className="flex flex-col items-start">
+      {/* Header pill — always visible, acts as toggle */}
+      <div className="flex items-center gap-1.5">
+        <div
+          className={`flex items-center gap-2 px-3 py-1.5 rounded-full ${GLASS_PILL} cursor-pointer hover:bg-white/20 transition-colors`}
+          onClick={onToggleMinimize}
+        >
+          <div
+            className={`w-2 h-2 rounded-full ${
+              isActive ? "bg-blue-400 animate-pulse" : "bg-green-400"
+            }`}
           />
-          <GlassConnector status={genNodes[0].status} />
-        </>
-      )}
-
-      {/* Minimize button when not active */}
-      {!isActive && (
-        <>
-          <button
-            onClick={onMinimize}
-            className={`p-1.5 rounded-full ${GLASS_PILL} hover:bg-white/20 transition-colors`}
-            title="Minimize"
-          >
-            <svg
-              className="w-3.5 h-3.5 text-white/50"
-              fill="none"
-              viewBox="0 0 24 24"
-              strokeWidth={2}
-              stroke="currentColor"
+          <span className="text-[11px] text-white/80 font-medium">
+            Pipeline
+          </span>
+          {latestScore && (
+            <span
+              className={`text-[11px] font-bold ${scoreTextColor(latestScore.totalScore)}`}
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M19.5 12h-15"
-              />
-            </svg>
-          </button>
-          <GlassConnector status={genNodes[0].status} />
-        </>
-      )}
-
-      {/* Generation nodes */}
-      {genNodes.map((node, i) => (
-        <div key={node.id} className="flex flex-col items-start">
-          <NodePill
-            node={node}
-            isExpanded={expandedNode === node.id}
-            onToggle={() => toggleNode(node.id)}
-            detailProps={makeDetailProps(node)}
-          />
-          <GlassConnector
-            status={
-              i < genNodes.length - 1
-                ? genNodes[i + 1].status
-                : iterNodes[0].status
-            }
-          />
-        </div>
-      ))}
-
-      {/* Iteration nodes with loop-back line */}
-      <div className="relative flex flex-col items-start pr-8">
-        {hasIterations && <LoopBackLine activeIndex={activeIterIndex} />}
-
-        {iterNodes.map((node, i) => (
-          <div key={node.id} className="flex flex-col items-start">
-            <NodePill
-              node={node}
-              isExpanded={expandedNode === node.id}
-              onToggle={() => toggleNode(node.id)}
-              detailProps={makeDetailProps(node)}
+              {latestScore.totalScore.toFixed(1)}
+            </span>
+          )}
+          {iterationCount > 0 && (
+            <span className="text-[10px] text-white/40">
+              #{iterationCount}
+            </span>
+          )}
+          <svg
+            className={`w-3 h-3 text-white/50 transition-transform duration-200 ${
+              isMinimized ? "" : "rotate-90"
+            }`}
+            fill="none"
+            viewBox="0 0 24 24"
+            strokeWidth={2}
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M8.25 4.5l7.5 7.5-7.5 7.5"
             />
-            {i < iterNodes.length - 1 && (
-              <GlassConnector status={iterNodes[i + 1].status} />
-            )}
+          </svg>
+        </div>
+
+        {/* Inline controls when active (always visible, even minimized) */}
+        {isActive && (
+          <div className="flex items-center gap-0.5 animate-fade-in">
+            <button
+              onClick={onTogglePause}
+              className={`p-1 rounded-full ${GLASS_PILL} hover:bg-white/20 transition-colors`}
+              title={isPaused ? "Resume" : "Pause"}
+            >
+              {isPaused ? (
+                <svg
+                  className="w-3.5 h-3.5 text-green-300"
+                  fill="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path d="M8 5v14l11-7z" />
+                </svg>
+              ) : (
+                <svg
+                  className="w-3.5 h-3.5 text-yellow-300"
+                  fill="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
+                </svg>
+              )}
+            </button>
+            <button
+              onClick={onStop}
+              className={`p-1 rounded-full ${GLASS_PILL} hover:bg-white/20 transition-colors`}
+              title="Stop"
+            >
+              <svg
+                className="w-3.5 h-3.5 text-red-300"
+                fill="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path d="M6 6h12v12H6z" />
+              </svg>
+            </button>
           </div>
-        ))}
+        )}
       </div>
 
-      {/* Iteration counter pill */}
-      {hasIterations && (
-        <>
-          <GlassConnector status="done" />
-          <IterationCounterPill current={iterationCount} max={maxIterations} />
-        </>
-      )}
+      {/* Expandable content — nodes, connectors, scores */}
+      {!isMinimized && (
+        <div className="flex flex-col items-start animate-expand-down">
+          <GlassConnector status={genNodes[0].status} />
 
-      {/* Score pill */}
-      {latestScore && (
-        <>
-          <GlassConnector status="done" />
-          <ScorePill score={latestScore} />
-        </>
-      )}
-
-      {/* Error */}
-      {error && (
-        <>
-          <GlassConnector status="error" />
-          <div
-            className={`w-fit px-3 py-1.5 rounded-full bg-red-400/15 backdrop-blur-2xl border border-red-400/25 shadow-[0_2px_8px_rgba(0,0,0,0.15)]`}
-          >
-            <div className="text-[10px] text-red-300/80 truncate max-w-[180px]">
-              {error}
+          {/* Generation nodes */}
+          {genNodes.map((node, i) => (
+            <div key={node.id} className="flex flex-col items-start">
+              <NodePill
+                node={node}
+                isExpanded={expandedNode === node.id}
+                onToggle={() => toggleNode(node.id)}
+                detailProps={makeDetailProps(node)}
+              />
+              <GlassConnector
+                status={
+                  i < genNodes.length - 1
+                    ? genNodes[i + 1].status
+                    : iterNodes[0].status
+                }
+              />
             </div>
+          ))}
+
+          {/* Iteration nodes with loop-back line */}
+          <div className="relative flex flex-col items-start pr-8">
+            {hasIterations && (
+              <LoopBackLine isAnimating={activeIterIndex >= 0} />
+            )}
+
+            {iterNodes.map((node, i) => (
+              <div key={node.id} className="flex flex-col items-start">
+                <NodePill
+                  node={node}
+                  isExpanded={expandedNode === node.id}
+                  onToggle={() => toggleNode(node.id)}
+                  detailProps={makeDetailProps(node)}
+                />
+                {i < iterNodes.length - 1 && (
+                  <GlassConnector status={iterNodes[i + 1].status} />
+                )}
+              </div>
+            ))}
           </div>
-        </>
+
+          {/* Iteration counter pill */}
+          {hasIterations && (
+            <>
+              <GlassConnector status="done" />
+              <IterationCounterPill
+                current={iterationCount}
+                max={maxIterations}
+              />
+            </>
+          )}
+
+          {/* Score pill */}
+          {latestScore && (
+            <>
+              <GlassConnector status="done" />
+              <ScorePill score={latestScore} />
+            </>
+          )}
+
+          {/* Error */}
+          {error && (
+            <>
+              <GlassConnector status="error" />
+              <div
+                className={`w-fit px-3 py-1.5 rounded-full bg-red-400/15 backdrop-blur-2xl border border-red-400/25 shadow-[0_2px_8px_rgba(0,0,0,0.15)]`}
+              >
+                <div className="text-[10px] text-red-300/80 truncate max-w-[180px]">
+                  {error}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
       )}
     </div>
   );

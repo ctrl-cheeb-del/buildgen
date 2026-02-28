@@ -101,6 +101,9 @@ export class WorkbenchRenderer {
   fitCamera() {
     if (!this.currentGroup) return;
 
+    // Ensure world matrices are up to date before computing bounds
+    this.currentGroup.updateMatrixWorld(true);
+
     const box = new THREE.Box3().setFromObject(this.currentGroup);
     const center = box.getCenter(new THREE.Vector3());
     const size = box.getSize(new THREE.Vector3());
@@ -116,53 +119,62 @@ export class WorkbenchRenderer {
     this.controls.update();
   }
 
-  /** Returns the relevant view dimensions for a given camera angle */
-  private getViewDimensions(
-    angle: CameraAngle,
-    size: THREE.Vector3
-  ): { width: number; height: number } {
-    switch (angle) {
-      case "front":
-      case "back":
-        return { width: size.x, height: size.y };
-      case "left":
-      case "right":
-        return { width: size.z, height: size.y };
-      default:
-        return { width: Math.max(size.x, size.z), height: size.y };
+  /**
+   * After positioning the camera, project all 8 bounding box corners to
+   * screen space and zoom out until the entire building fits with padding.
+   * This correctly handles perspective distortion and any aspect ratio.
+   */
+  private ensureBBoxInView(box: THREE.Box3, fillRatio = 0.82) {
+    this.camera.updateMatrixWorld();
+    this.camera.updateProjectionMatrix();
+
+    // Get all 8 corners of the bounding box
+    const corners: THREE.Vector3[] = [];
+    for (let x = 0; x <= 1; x++) {
+      for (let y = 0; y <= 1; y++) {
+        for (let z = 0; z <= 1; z++) {
+          corners.push(
+            new THREE.Vector3(
+              x ? box.max.x : box.min.x,
+              y ? box.max.y : box.min.y,
+              z ? box.max.z : box.min.z,
+            )
+          );
+        }
+      }
     }
-  }
 
-  /** Compute minimum camera distance so the bounding box fills the frame with padding */
-  private computeTightDistance(viewWidth: number, viewHeight: number): number {
-    const fovRad = THREE.MathUtils.degToRad(this.camera.fov);
-    const aspect = this.camera.aspect;
-    const padding = 1.1; // 10% padding
+    // Project corners to NDC space [-1, 1]
+    let maxNDC = 0;
+    for (const corner of corners) {
+      const ndc = corner.clone().project(this.camera);
+      maxNDC = Math.max(maxNDC, Math.abs(ndc.x), Math.abs(ndc.y));
+    }
 
-    // Distance needed to fit the height
-    const distForHeight = (viewHeight * padding) / (2 * Math.tan(fovRad / 2));
-    // Distance needed to fit the width
-    const distForWidth =
-      (viewWidth * padding) / (2 * Math.tan(fovRad / 2) * aspect);
-
-    return Math.max(distForHeight, distForWidth);
+    // If any corner exceeds the desired fill, zoom out proportionally
+    if (maxNDC > 0) {
+      const scale = maxNDC / fillRatio;
+      if (scale > 1) {
+        const dir = new THREE.Vector3()
+          .subVectors(this.camera.position, this.controls.target)
+          .multiplyScalar(scale);
+        this.camera.position.copy(this.controls.target).add(dir);
+        this.controls.update();
+      }
+    }
   }
 
   setCameraAngle(angle: CameraAngle, forCapture = false) {
     if (!this.currentGroup) return;
 
+    this.currentGroup.updateMatrixWorld(true);
     const box = new THREE.Box3().setFromObject(this.currentGroup);
     const center = box.getCenter(new THREE.Vector3());
     const size = box.getSize(new THREE.Vector3());
+    const maxDim = Math.max(size.x, size.y, size.z);
 
-    let dist: number;
-    if (forCapture) {
-      const viewDims = this.getViewDimensions(angle, size);
-      dist = this.computeTightDistance(viewDims.width, viewDims.height);
-    } else {
-      const maxDim = Math.max(size.x, size.y, size.z);
-      dist = maxDim * 2;
-    }
+    // Initial distance: rough estimate based on largest dimension
+    const dist = maxDim * 1.5;
 
     const positionFn = CAMERA_ANGLES[angle];
     const pos = positionFn(center, dist);
@@ -170,6 +182,11 @@ export class WorkbenchRenderer {
     this.camera.position.copy(pos);
     this.controls.target.copy(center);
     this.controls.update();
+
+    // For captures, project-and-verify to guarantee full building is in frame
+    if (forCapture) {
+      this.ensureBBoxInView(box, 0.82);
+    }
   }
 
   captureScreenshot(): string {

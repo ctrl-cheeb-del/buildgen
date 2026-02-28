@@ -74,7 +74,7 @@ export const usePipelineStore = create<PipelineStore>((set) => ({
   nodes: DEFAULT_NODES.map((n) => ({ ...n })),
   isActive: false,
   iterationCount: 0,
-  maxIterations: 3000,
+  maxIterations: 10,
   latestScore: null,
   iterations: [],
   isPaused: false,

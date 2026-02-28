@@ -3,6 +3,7 @@
 import { useState, useCallback } from "react";
 import { useAction } from "convex/react";
 import { api } from "../../convex/_generated/api";
+import { usePipelineStore } from "../stores/pipeline-store";
 
 interface PipelineState {
   isRunning: boolean;
@@ -21,6 +22,8 @@ export function usePipeline() {
     async (buildingName: string, plotIndex: number) => {
       if (!buildingName.trim()) return;
 
+      // Reset pipeline store — clears old iteration data, scores, node statuses
+      usePipelineStore.getState().reset();
       setState({ isRunning: true, error: null });
 
       try {

@@ -1,3 +1,5 @@
+import { usePipelineStore } from "../stores/pipeline-store";
+
 export interface IterationConfig {
   maxIterations?: number;
   qualityTarget?: number;
@@ -52,6 +54,10 @@ export function executeTool(
       }
       if (typeof args.quality_target === "number") {
         iterationConfig.qualityTarget = args.quality_target;
+      }
+      // Store iteration config so auto-start uses the correct values
+      if (iterationConfig.maxIterations != null) {
+        usePipelineStore.getState().setMaxIterations(iterationConfig.maxIterations);
       }
       // Fire and forget — pipeline runs in background
       deps.runPipeline(description, deps.myPlotIndex);
