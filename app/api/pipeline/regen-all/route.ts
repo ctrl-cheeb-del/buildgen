@@ -121,7 +121,7 @@ Generate JavaScript code that creates a THREE.Group representing this building u
 IMPORTANT: The description may be creative or fantastical (e.g. "a beaver-shaped building", "a mushroom tower", "a building that looks like a guitar"). Study the reference images carefully and recreate the unique shape, silhouette, and features you see. The 3D model should clearly look like the subject described — capture its distinctive outline, proportions, and character.
 
 REQUIREMENTS:
-- CRITICAL: Use 1 unit = 1 meter. ALL dimensions (height, width, depth) must match real-world scale. The plot is 100×100 but most buildings should NOT fill it — use realistic footprints:
+- CRITICAL: Use 1 unit = 1 meter. The plot is 50×50 max. Use realistic footprints — do NOT fill the plot:
   FOOTPRINT (width × depth):
   - Small house / cabin / shed: ~5×4
   - Regular house / villa: ~8×6
@@ -148,7 +148,7 @@ REQUIREMENTS:
 - IMPORTANT: Use THREE.MeshStandardMaterial (NOT MeshPhysicalMaterial). Always set side: THREE.DoubleSide on every material.
 - NO texture loading, NO external files
 - Build the model centered at origin (0,0,0) on XZ, with the base at Y=0 (Y-up)
-- Maximum footprint: ±50 on X and ±50 on Z (100×100 hard limit), but use realistic dimensions — do NOT fill the plot unless the building actually needs it.
+- Maximum footprint: ±25 on X and ±25 on Z (50×50 hard limit). Most buildings should be MUCH smaller than this.
 - Focus on capturing the overall silhouette and distinctive features — make it immediately recognizable as "${buildingName}"
 - Use THREE.Shape + ExtrudeGeometry for organic or curved cross-sections
 - The code must be valid JavaScript that can run in a Function constructor
