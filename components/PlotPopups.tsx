@@ -94,14 +94,22 @@ export default function PlotPopups({
     };
   }, [layer]);
 
-  const raycastPlot = useCallback(
+  const setNdc = useCallback(
     (px: number, py: number) => {
-      if (!layer || !clickTargetsRef.current) return null;
+      if (!layer) return false;
       const canvas = layer.getCanvas();
       const rect = canvas.getBoundingClientRect();
       _ndc.x = ((px - rect.left) / rect.width) * 2 - 1;
       _ndc.y = -((py - rect.top) / rect.height) * 2 + 1;
       _raycaster.setFromCamera(_ndc, layer.getCamera());
+      return true;
+    },
+    [layer]
+  );
+
+  const raycastPlot = useCallback(
+    (px: number, py: number) => {
+      if (!clickTargetsRef.current || !setNdc(px, py)) return null;
 
       const hits = _raycaster.intersectObjects(
         clickTargetsRef.current.children,
@@ -113,7 +121,45 @@ export default function PlotPopups({
       if (plotIndex === undefined) return null;
       return { plotIndex, worldPos: hit.object.position };
     },
-    [layer]
+    [setNdc]
+  );
+
+  /** Raycast against actual building meshes in the scene. */
+  const raycastBuilding = useCallback(
+    (px: number, py: number) => {
+      if (!setNdc(px, py)) return null;
+
+      const { buildings, containers } = useWorldStore.getState();
+      const meshes: THREE.Object3D[] = [];
+      for (const container of containers.values()) {
+        container.traverse((child) => {
+          if (child instanceof THREE.Mesh) meshes.push(child);
+        });
+      }
+      if (meshes.length === 0) return null;
+
+      const hits = _raycaster.intersectObjects(meshes, false);
+      if (hits.length === 0) return null;
+
+      // Walk up to find the building container (named "building-{id}")
+      let obj: THREE.Object3D | null = hits[0].object;
+      while (obj) {
+        if (obj.name.startsWith("building-")) {
+          const buildingId = obj.name.slice("building-".length);
+          const building = buildings.get(buildingId);
+          if (building) {
+            return {
+              buildingId,
+              buildingName: building.name,
+              worldPos: hits[0].point,
+            };
+          }
+        }
+        obj = obj.parent;
+      }
+      return null;
+    },
+    [setNdc]
   );
 
   const worldToScreen = useCallback(
@@ -157,6 +203,46 @@ export default function PlotPopups({
     const onClick = (e: MouseEvent) => {
       if (useWorldStore.getState().isDragging) return;
 
+      // Try building-level raycast first
+      const bHit = raycastBuilding(e.clientX, e.clientY);
+      if (bHit) {
+        removePopup();
+        removeHover();
+
+        const screen = worldToScreen(
+          new THREE.Vector3(bHit.worldPos.x, bHit.worldPos.y + 5, bHit.worldPos.z)
+        );
+        if (!screen) return;
+
+        const popup = document.createElement("div");
+        popup.style.cssText = `
+          position: fixed; z-index: 50;
+          left: ${screen.x}px; top: ${screen.y - 10}px;
+          transform: translate(-50%, -100%);
+          background: white; border-radius: 8px; padding: 8px 12px;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+          pointer-events: auto; font-family: system-ui;
+          max-width: 220px;
+        `;
+        popup.innerHTML = `
+          <div style="text-align:center;padding:4px 0">
+            <div style="font-size:13px;font-weight:600;color:#374151">${esc(bHit.buildingName)}</div>
+          </div>`;
+
+        document.body.appendChild(popup);
+        popupRef.current = popup;
+
+        const dismiss = (ev: MouseEvent) => {
+          if (!popup.contains(ev.target as Node)) {
+            removePopup();
+            document.removeEventListener("click", dismiss, true);
+          }
+        };
+        setTimeout(() => document.addEventListener("click", dismiss, true), 0);
+        return;
+      }
+
+      // Fall back to plot-level raycast
       const result = raycastPlot(e.clientX, e.clientY);
       if (!result) {
         removePopup();
@@ -192,6 +278,36 @@ export default function PlotPopups({
               style="background:#3b82f6;color:white;border:none;padding:5px 16px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer"
             >Claim this plot</button>
           </div>`;
+      } else if (state.status === "generating") {
+        const agentLine = state.isAgentOwned && state.agentName
+          ? `<div style="font-size:11px;color:#6b7280;margin-top:2px">by ${esc(state.agentName)}</div>`
+          : "";
+        popup.innerHTML = `
+          <div style="text-align:center;padding:6px 0">
+            <div style="display:inline-flex;align-items:center;gap:6px;margin-bottom:4px">
+              <div style="width:12px;height:12px;border:2px solid #3b82f6;border-top-color:transparent;border-radius:50%;animation:spin 1s linear infinite"></div>
+              <span style="font-size:13px;font-weight:600;color:#3b82f6">Generating</span>
+            </div>
+            ${agentLine}
+            <div style="font-size:10px;color:#9ca3af;margin-top:4px">Plot #${plotIndex}</div>
+          </div>
+          <style>@keyframes spin{to{transform:rotate(360deg)}}</style>`;
+      } else if (state.isAgentOwned && state.agentName) {
+        const buildingList = state.buildingPrompts?.length
+          ? state.buildingPrompts
+              .map(
+                (p) =>
+                  `<div style="font-size:11px;color:#374151;margin-top:2px">${esc(p)}</div>`
+              )
+              .join("")
+          : "";
+        popup.innerHTML = `
+          <div style="text-align:center;padding:6px 0">
+            <div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:2px">Agent</div>
+            <div style="font-size:13px;font-weight:600;color:#374151">${esc(state.agentName)}</div>
+            ${buildingList}
+            <div style="font-size:10px;color:#9ca3af;margin-top:4px">Plot #${plotIndex} &middot; ${esc(state.status)}</div>
+          </div>`;
       } else if (state.ownerName) {
         const avatarHtml = state.ownerAvatar
           ? `<img src="${esc(state.ownerAvatar)}" style="width:32px;height:32px;border-radius:50%;margin:0 auto 6px" />`
@@ -200,10 +316,19 @@ export default function PlotPopups({
           ? `<a href="https://x.com/${encodeURIComponent(state.ownerUsername)}" target="_blank" rel="noopener" style="font-size:13px;font-weight:600;color:#374151;text-decoration:none">${esc(state.ownerName)}</a>
              <div style="font-size:11px;color:#9ca3af">@${esc(state.ownerUsername)}</div>`
           : `<div style="font-size:13px;font-weight:600;color:#374151">${esc(state.ownerName)}</div>`;
+        const buildingList = state.buildingPrompts?.length
+          ? `<div style="margin-top:4px;border-top:1px solid #f3f4f6;padding-top:4px">${state.buildingPrompts
+              .map(
+                (p) =>
+                  `<div style="font-size:11px;color:#374151">${esc(p)}</div>`
+              )
+              .join("")}</div>`
+          : "";
         popup.innerHTML = `
           <div style="text-align:center;padding:6px 0">
             ${avatarHtml}
             ${nameHtml}
+            ${buildingList}
             <div style="font-size:10px;color:#9ca3af;margin-top:4px">Plot #${plotIndex} &middot; ${esc(state.status)}</div>
           </div>`;
       } else {
@@ -240,7 +365,7 @@ export default function PlotPopups({
 
     canvas.addEventListener("click", onClick);
     return () => canvas.removeEventListener("click", onClick);
-  }, [layer, raycastPlot, worldToScreen, removePopup, removeHover]);
+  }, [layer, raycastPlot, raycastBuilding, worldToScreen, removePopup, removeHover]);
 
   // Hover handler
   useEffect(() => {
@@ -253,6 +378,35 @@ export default function PlotPopups({
         return;
       }
 
+      // Try building-level hover first
+      const bHit = raycastBuilding(e.clientX, e.clientY);
+      if (bHit) {
+        canvas.style.cursor = "pointer";
+        const screen = worldToScreen(
+          new THREE.Vector3(bHit.worldPos.x, bHit.worldPos.y + 5, bHit.worldPos.z)
+        );
+        if (!screen) { removeHover(); return; }
+
+        if (!hoverRef.current) {
+          const hover = document.createElement("div");
+          hover.style.cssText = `
+            position: fixed; z-index: 49; pointer-events: none;
+            background: white; border-radius: 6px; padding: 4px 8px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+            font-family: system-ui; white-space: nowrap; max-width: 200px;
+          `;
+          document.body.appendChild(hover);
+          hoverRef.current = hover;
+        }
+        const hover = hoverRef.current;
+        hover.style.left = `${screen.x}px`;
+        hover.style.top = `${screen.y - 10}px`;
+        hover.style.transform = "translate(-50%, -100%)";
+        hover.innerHTML = `<div style="font-size:11px;text-align:center;font-weight:600;color:#374151">${esc(bHit.buildingName)}</div>`;
+        return;
+      }
+
+      // Fall back to plot-level hover
       const result = raycastPlot(e.clientX, e.clientY);
       if (!result) {
         removeHover();
@@ -270,7 +424,7 @@ export default function PlotPopups({
 
       if (state.status === "empty") {
         canvas.style.cursor = "pointer";
-      } else if (state.ownerName) {
+      } else if (state.ownerName || state.isAgentOwned || state.status === "generating") {
         canvas.style.cursor = "pointer";
       } else {
         removeHover();
@@ -303,6 +457,11 @@ export default function PlotPopups({
 
       if (state.status === "empty") {
         hover.innerHTML = `<div style="font-size:11px;color:#6b7280;text-align:center">Plot #${plotIndex}<br><span style="color:#3b82f6;font-weight:600">Click to claim</span></div>`;
+      } else if (state.status === "generating") {
+        const agentLabel = state.isAgentOwned && state.agentName ? ` (${esc(state.agentName)})` : "";
+        hover.innerHTML = `<div style="font-size:11px;text-align:center;color:#3b82f6;font-weight:600">Generating...${agentLabel}</div>`;
+      } else if (state.isAgentOwned && state.agentName) {
+        hover.innerHTML = `<div style="font-size:11px;text-align:center"><span style="font-weight:600;color:#374151">${esc(state.agentName)}</span><br><span style="color:#9ca3af">Plot #${plotIndex}</span></div>`;
       } else if (state.ownerName) {
         const avatar = state.ownerAvatar
           ? `<img src="${esc(state.ownerAvatar)}" style="width:20px;height:20px;border-radius:50%;vertical-align:middle;margin-right:4px" />`
@@ -326,7 +485,7 @@ export default function PlotPopups({
       canvas.removeEventListener("mouseleave", onMouseLeave);
       removeHover();
     };
-  }, [layer, raycastPlot, worldToScreen, removeHover]);
+  }, [layer, raycastPlot, raycastBuilding, worldToScreen, removeHover]);
 
   // Clean up popups on unmount
   useEffect(() => {

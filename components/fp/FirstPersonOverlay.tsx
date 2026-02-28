@@ -1,15 +1,15 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import React, { useEffect, useRef, useState, useCallback } from "react";
 import * as THREE from "three";
-import { FirstPersonController } from "@/lib/fp/fp-controller";
+import { FirstPersonController } from "../../lib/fp/fp-controller";
 import {
   buildFPScene,
   getSpawnPosition,
   type BuildingData,
-} from "@/lib/fp/fp-scene-builder";
-import { useFPStore } from "@/lib/stores/fp-store";
-import { useFPKeys } from "@/lib/hooks/useFPKeys";
+} from "../../lib/fp/fp-scene-builder";
+import { useFPStore } from "../../lib/stores/fp-store";
+import { useFPKeys } from "../../lib/hooks/useFPKeys";
 import FPHud from "./FPHud";
 
 interface FirstPersonOverlayProps {

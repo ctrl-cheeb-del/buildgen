@@ -1,15 +1,11 @@
-import { SignIn } from "@clerk/nextjs";
+"use client";
+
+import { useEffect } from "react";
 
 export default function SignInPage() {
-  return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-900">
-      <SignIn
-        appearance={{
-          elements: {
-            rootBox: "mx-auto",
-          },
-        }}
-      />
-    </div>
-  );
+  useEffect(() => {
+    window.location.href = "/login";
+  }, []);
+
+  return null;
 }

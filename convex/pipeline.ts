@@ -44,7 +44,7 @@ async function fetchReplicateImage(buildingName: string): Promise<Buffer> {
       input: {
         prompt,
         aspect_ratio: "1:1",
-        resolution: "2K",
+        resolution: "1K",
         output_format: "png",
       },
     });

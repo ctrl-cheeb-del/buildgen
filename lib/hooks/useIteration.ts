@@ -54,14 +54,14 @@ export function useIteration() {
     isIterating: false,
     isPaused: false,
     currentStep: "idle",
-    maxIterations: 3000,
+    maxIterations: 10,
     error: null,
   });
 
   const stopRef = useRef(false);
   const pauseRef = useRef(false);
   const isRunningRef = useRef(false);
-  const maxIterRef = useRef(3000);
+  const maxIterRef = useRef(10);
   const abortRef = useRef<AbortController | null>(null);
   const updateBuildingCode = useMutation(api.buildings.updateProceduralCode);
 
