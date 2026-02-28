@@ -319,22 +319,34 @@ Generate JavaScript code that creates a THREE.Group representing this building u
 IMPORTANT: The description may be creative or fantastical (e.g. "a beaver-shaped building", "a mushroom tower", "a building that looks like a guitar"). Study the reference images carefully and recreate the unique shape, silhouette, and features you see. The 3D model should clearly look like the subject described — capture its distinctive outline, proportions, and character.
 
 REQUIREMENTS:
-- CRITICAL SIZING: The building sits on a 100×100 unit plot. The XZ footprint must stay within 100×100. Use as much space as the building naturally needs — a bridge should be long, a stadium should be wide.
-- HEIGHT MUST MATCH REAL-WORLD SCALE relative to the building type. Use 1 unit ≈ 1 meter:
-  - Small house / cabin / shed: 5–10 units tall
-  - Regular house / villa / bungalow: 8–15 units tall
-  - Townhouse / small apartment: 15–25 units tall
-  - Mid-rise office / apartment block: 30–60 units tall
-  - Tall office tower / skyscraper: 80–150 units tall
-  - Supertall skyscraper (Burj Khalifa, etc.): 200–400+ units tall
-  Pick the height that matches what "${buildingName}" would actually be in real life. A cottage must NOT be the same height as a skyscraper!
+- CRITICAL: Use 1 unit = 1 meter. ALL dimensions (height, width, depth) must match real-world scale. The plot is 100×100 but most buildings should NOT fill it — use realistic footprints:
+  FOOTPRINT (width × depth):
+  - Small house / cabin / shed: ~10×8
+  - Regular house / villa: ~15×12
+  - Pub / shop / small restaurant: ~15×12
+  - Church / temple: ~20×35
+  - Townhouse: ~8×15
+  - Mansion / estate: ~30×25
+  - Mid-rise office / apartment block: ~30×25
+  - Tall office tower / skyscraper: ~40×40
+  - Supertall skyscraper: ~60×60 at base
+  - Stadium / arena: ~80×60
+  - Bridge: ~80×15 (long but narrow)
+  HEIGHT:
+  - Small house / cabin / shed: 5–10m
+  - Regular house / villa / bungalow: 8–15m
+  - Townhouse / small apartment: 15–25m
+  - Mid-rise office / apartment block: 30–60m
+  - Tall office tower / skyscraper: 80–150m
+  - Supertall skyscraper (Burj Khalifa, etc.): 200–400+m
+  Pick dimensions that match what "${buildingName}" would actually be in real life. A cottage must NOT be the same size as a skyscraper! Only use the full plot if the building genuinely needs it (e.g. a massive stadium).
 - Return ONLY a JavaScript function body that will be wrapped in: function(THREE) { ... return group; }
 - Create a THREE.Group as the root
 - Use THREE.BoxGeometry, THREE.CylinderGeometry, THREE.SphereGeometry, THREE.ExtrudeGeometry, THREE.Shape, THREE.LatheGeometry, etc. — use whatever geometry types best capture the shape
 - IMPORTANT: Use THREE.MeshStandardMaterial (NOT MeshPhysicalMaterial). Always set side: THREE.DoubleSide on every material.
 - NO texture loading, NO external files
 - Build the model centered at origin (0,0,0) on XZ, with the base at Y=0 (Y-up)
-- Keep the footprint within ±50 on X and ±50 on Z (100×100 total).
+- Maximum footprint: ±50 on X and ±50 on Z (100×100 hard limit), but use realistic dimensions — do NOT fill the plot unless the building actually needs it.
 - Focus on capturing the overall silhouette and distinctive features — make it immediately recognizable as "${buildingName}"
 - Use THREE.Shape + ExtrudeGeometry for organic or curved cross-sections
 - The code must be valid JavaScript that can run in a Function constructor
