@@ -235,7 +235,7 @@ export async function callMayor(
   const response = await mistral.chat.complete({
     model: "mistral-small-latest",
     messages: [{ role: "user", content: prompt }],
-    maxTokens: 400,
+    maxTokens: 800,
     temperature: 0.7,
   });
 
@@ -260,6 +260,10 @@ export async function callMayor(
     if (Array.isArray(parsed.build_approvals)) {
       let remainingSlots = cap - city.activeBuildCount;
       for (const approval of parsed.build_approvals) {
+        // Normalize: LLM sometimes returns "true" string instead of boolean
+        if (typeof approval.approved === "string") {
+          approval.approved = (approval.approved as any) === "true";
+        }
         if (remainingSlots <= 0) {
           approval.approved = false;
           approval.reason = `Build queue full (${cap}/${cap})`;
@@ -587,12 +591,21 @@ export const run = internalAction({
       }
     }
 
-    // Overnight mode: use mayor approvals with matching
+    // Overnight mode: use mayor approvals with robust matching
+    const usedPlots = new Set<number>();
     for (const approval of mayorDecision.build_approvals) {
       if (isLive) break; // Already handled above
-      if (approval.approved && city.activeBuildCount + newBuildsApproved < buildCap) {
-        const req = buildRequests.find((r) => r.agent.plotIndex === approval.agentPlot);
+      const isApproved = approval.approved === true || (approval.approved as any) === "true";
+      if (isApproved && city.activeBuildCount + newBuildsApproved < buildCap) {
+        // Robust matching: try plotIndex first, then loose match by coercing to number
+        const plotNum = typeof approval.agentPlot === "string" ? parseInt(approval.agentPlot, 10) : approval.agentPlot;
+        let req = buildRequests.find((r) => r.agent.plotIndex === plotNum && !usedPlots.has(r.agent.plotIndex));
+        // Fallback: if no match, just take the next unmatched build request
+        if (!req) {
+          req = buildRequests.find((r) => !usedPlots.has(r.agent.plotIndex));
+        }
         if (req && req.action.build_description) {
+          usedPlots.add(req.agent.plotIndex);
           console.log(`[tick ${tickNumber}] BUILD APPROVED: ${req.agent.name} → "${req.action.build_description}"`);
           newBuildsApproved++;
 
