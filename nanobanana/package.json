@@ -1,0 +1,9 @@
+{
+  "name": "nanobanana",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "echo 'nanobanana dev not configured yet'",
+    "build": "echo 'nanobanana build not configured yet'"
+  }
+}

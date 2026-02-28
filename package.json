@@ -1,0 +1,12 @@
+{
+  "name": "buildgen",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "dev:frontend": "bun run --cwd frontend dev",
+    "dev:nanobanana": "bun run --cwd nanobanana dev",
+    "dev:splats": "bun run --cwd gaussian-splats dev",
+    "build": "bun run --cwd frontend build",
+    "lint": "bun run --cwd frontend lint"
+  }
+}

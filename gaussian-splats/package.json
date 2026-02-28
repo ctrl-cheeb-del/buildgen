@@ -1,0 +1,9 @@
+{
+  "name": "gaussian-splats",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "echo 'gaussian-splats dev not configured yet'",
+    "build": "echo 'gaussian-splats build not configured yet'"
+  }
+}
