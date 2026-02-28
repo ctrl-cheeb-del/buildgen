@@ -12,15 +12,16 @@ export const createBuilding = mutation({
     const identity = await ctx.auth.getUserIdentity();
     const ownerId = identity?.subject ?? "anonymous";
 
-    // Find a free position on the plot using candidate grid
+    // Find a free position on the plot using 3x3 sub-grid (perimeter first, center last)
+    // 120m plot, 6m pavement each side → 108m grass. 3x3 grid → 36m cells.
+    const S = 36; // sub-grid spacing
     const CANDIDATES: [number, number][] = [
-      [0, 0],
-      [-27, -27],
-      [27, -27],
-      [-27, 27],
-      [27, 27],
+      [-S, -S], [0, -S], [S, -S],  // bottom row
+      [-S,  0],          [S,  0],  // middle sides
+      [-S,  S], [0,  S], [S,  S],  // top row
+      [0,   0],                    // center (last resort)
     ];
-    const MIN_SPACING = 30;
+    const MIN_SPACING = 24;
 
     const existing = await ctx.db
       .query("buildings")
@@ -66,15 +67,15 @@ export const createBuildingInternal = internalMutation({
     multiViewGrid: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    // Same auto-placement logic as createBuilding
+    // Same auto-placement logic as createBuilding (3x3 perimeter grid)
+    const S = 36;
     const CANDIDATES: [number, number][] = [
-      [0, 0],
-      [-27, -27],
-      [27, -27],
-      [-27, 27],
-      [27, 27],
+      [-S, -S], [0, -S], [S, -S],
+      [-S,  0],          [S,  0],
+      [-S,  S], [0,  S], [S,  S],
+      [0,   0],
     ];
-    const MIN_SPACING = 30;
+    const MIN_SPACING = 24;
 
     const existing = await ctx.db
       .query("buildings")

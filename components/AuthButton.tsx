@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import { SignInButton, SignOutButton, useUser } from "@clerk/nextjs";
 
 export default function AuthButton() {

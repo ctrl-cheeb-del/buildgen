@@ -17,6 +17,9 @@ export interface PlotState {
   ownerAvatar?: string;
   pipelineStep?: string;
   pipelineMultiViewUrl?: string;
+  isAgentOwned?: boolean;
+  agentName?: string;
+  buildingPrompts?: string[];
 }
 
 export function gridIndexToColRow(index: number): { col: number; row: number } {

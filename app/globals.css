@@ -85,3 +85,20 @@ body {
   to { opacity: 1; transform: translateX(0); }
 }
 .animate-fade-in { animation: fadeIn 0.2s ease-out; }
+
+@keyframes feed-in {
+  from {
+    opacity: 0;
+    transform: translateX(20px) scale(0.95);
+    filter: blur(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+.animate-feed-in {
+  animation: feed-in 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}

@@ -18,6 +18,10 @@ import PipelineFlowchart, {
 import IsolatedViewer, {
   type IsolatedViewerHandle,
 } from "@/components/workbench/IsolatedViewer";
+import MetricsBar from "@/components/simulation/MetricsBar";
+import SimFeed from "@/components/simulation/SimFeed";
+import AgentDetailPanel from "@/components/simulation/AgentDetailPanel";
+import SimControls from "@/components/simulation/SimControls";
 import { useFPStore } from "@/lib/stores/fp-store";
 import { useCarStore } from "@/lib/stores/car-store";
 import { usePipeline } from "@/lib/hooks/usePipeline";
@@ -397,6 +401,9 @@ export default function Home() {
     }
   }, [pipelineIsActive, isRunning]);
 
+  // Agent detail panel
+  const [selectedAgentPlot, setSelectedAgentPlot] = useState<number | null>(null);
+
   return (
     <div className="relative w-screen h-screen overflow-hidden">
       <ThreeMapCanvas />
@@ -418,6 +425,15 @@ export default function Home() {
           <IsolatedViewer ref={iterationViewerRef} />
         </div>
       </div>
+
+      {/* Simulation UI */}
+      {!fpMode && <MetricsBar />}
+      {!fpMode && <SimFeed onAgentClick={setSelectedAgentPlot} />}
+      {!fpMode && <SimControls />}
+      <AgentDetailPanel
+        plotIndex={selectedAgentPlot}
+        onClose={() => setSelectedAgentPlot(null)}
+      />
 
       {/* Top-right: Auth + Settings gear */}
       {!fpMode && (
