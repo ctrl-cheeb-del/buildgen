@@ -25,7 +25,15 @@ Generate JavaScript code that creates a THREE.Group representing this building u
 IMPORTANT: The description may be creative or fantastical (e.g. "a beaver-shaped building", "a mushroom tower", "a building that looks like a guitar"). Study the reference images carefully and recreate the unique shape, silhouette, and features you see. The 3D model should clearly look like the subject described — capture its distinctive outline, proportions, and character.
 
 REQUIREMENTS:
-- CRITICAL SIZING: The building sits on a 24×24 unit plot. The XZ footprint must stay within 24×24. Height can be up to 80 units.
+- CRITICAL SIZING: The building sits on a 24×24 unit plot. The XZ footprint must stay within 24×24.
+- HEIGHT MUST MATCH REAL-WORLD SCALE relative to the building type. Use 1 unit ≈ 1 meter:
+  - Small house / cabin / shed: 5–10 units tall
+  - Regular house / villa / bungalow: 8–15 units tall
+  - Townhouse / small apartment: 15–25 units tall
+  - Mid-rise office / apartment block: 30–60 units tall
+  - Tall office tower / skyscraper: 80–150 units tall
+  - Supertall skyscraper (Burj Khalifa, etc.): 200–400+ units tall
+  Pick the height that matches what "${buildingName}" would actually be in real life. A cottage must NOT be the same height as a skyscraper!
 - Return ONLY a JavaScript function body that will be wrapped in: function(THREE) { ... return group; }
 - Create a THREE.Group as the root
 - Use THREE.BoxGeometry, THREE.CylinderGeometry, THREE.SphereGeometry, THREE.ExtrudeGeometry, THREE.Shape, THREE.LatheGeometry, etc. — use whatever geometry types best capture the shape
@@ -38,7 +46,7 @@ REQUIREMENTS:
   - Use any other colors that match the reference images, always with side: THREE.DoubleSide
 - NO texture loading, NO external files
 - Build the model centered at origin (0,0,0) on XZ, with the base at Y=0 (Y-up)
-- Keep the footprint within ±12 on X and ±12 on Z (24×24 total). Height up to 80 units.
+- Keep the footprint within ±12 on X and ±12 on Z (24×24 total).
 - Focus on capturing the overall silhouette and distinctive features — make it immediately recognizable as "${buildingName}"
 - Use THREE.Shape + ExtrudeGeometry for organic or curved cross-sections
 - The code must be valid JavaScript that can run in a Function constructor

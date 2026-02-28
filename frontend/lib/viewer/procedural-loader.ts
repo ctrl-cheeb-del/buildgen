@@ -10,6 +10,7 @@ const MAX_FOOTPRINT = PLOT_SIZE_M - 2 * PAVEMENT_WIDTH_M; // 24m
 /**
  * Normalize a group so its XZ footprint fits within MAX_FOOTPRINT and
  * the model is centered on X/Z with its base at Y=0.
+ * Height is preserved proportionally — a house stays short, a skyscraper stays tall.
  */
 function normalizeToPlot(group: THREE.Group): void {
   const box = new THREE.Box3().setFromObject(group);
@@ -18,11 +19,13 @@ function normalizeToPlot(group: THREE.Group): void {
   const size = box.getSize(new THREE.Vector3());
   const center = box.getCenter(new THREE.Vector3());
 
-  // Scale uniformly so the largest horizontal dimension fits the plot
+  // Scale uniformly so the largest horizontal dimension fits the plot.
+  // Uniform scale preserves the building's height-to-width proportions,
+  // so a cottage stays short and a supertall stays tall.
   const maxHorizontal = Math.max(size.x, size.z);
   if (maxHorizontal > 0) {
     const fitScale = MAX_FOOTPRINT / maxHorizontal;
-    // Only shrink, never enlarge beyond what fits
+    // Only shrink to fit the plot footprint, never enlarge
     const s = Math.min(fitScale, 1);
     if (s < 1) {
       group.scale.multiplyScalar(s);
@@ -87,40 +90,18 @@ export function loadProceduralGeometry(code: string): THREE.Group {
       return createFallbackGroup();
     }
 
-    // Ensure all materials use DoubleSide rendering and downgrade
-    // MeshPhysicalMaterial to MeshStandardMaterial for shared GL compatibility
+    // Ensure all materials use DoubleSide rendering + enable shadow casting.
+    // Environment maps are set on scene.environment, so MeshPhysicalMaterial
+    // renders correctly without per-material envMap.
     group.traverse((child) => {
       if (child instanceof THREE.Mesh && child.material) {
+        child.castShadow = true;
+        child.receiveShadow = true;
         const mats = Array.isArray(child.material)
           ? child.material
           : [child.material];
-        for (let i = 0; i < mats.length; i++) {
-          const mat = mats[i];
+        for (const mat of mats) {
           mat.side = THREE.DoubleSide;
-          // MeshPhysicalMaterial can render black in shared GL contexts
-          // without environment maps — downgrade to MeshStandardMaterial
-          if (
-            mat.type === "MeshPhysicalMaterial" &&
-            !(mat as THREE.MeshPhysicalMaterial).envMap
-          ) {
-            const std = new THREE.MeshStandardMaterial({
-              color: (mat as THREE.MeshStandardMaterial).color,
-              roughness: (mat as THREE.MeshStandardMaterial).roughness,
-              metalness: Math.min(
-                (mat as THREE.MeshStandardMaterial).metalness,
-                0.5
-              ),
-              transparent: mat.transparent,
-              opacity: mat.opacity,
-              side: THREE.DoubleSide,
-            });
-            mat.dispose();
-            if (Array.isArray(child.material)) {
-              child.material[i] = std;
-            } else {
-              child.material = std;
-            }
-          }
         }
       }
     });
@@ -144,6 +125,8 @@ function createFallbackGroup(): THREE.Group {
     side: THREE.DoubleSide,
   });
   const mesh = new THREE.Mesh(geo, mat);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
   mesh.position.y = 25;
   group.add(mesh);
   return group;
