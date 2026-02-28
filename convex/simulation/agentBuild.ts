@@ -10,7 +10,7 @@ import {
   InvokeModelCommand,
 } from "@aws-sdk/client-bedrock-runtime";
 import { Mistral } from "@mistralai/mistralai";
-import { withRetry } from "./mistral-retry";
+import { withRetry } from "./mistral_retry";
 
 /**
  * Call Bedrock Claude for text-only prompts (no images).

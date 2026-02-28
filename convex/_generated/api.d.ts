@@ -26,6 +26,7 @@ import type * as simulation_cityState from "../simulation/cityState.js";
 import type * as simulation_control from "../simulation/control.js";
 import type * as simulation_ensureRunning from "../simulation/ensureRunning.js";
 import type * as simulation_initialize from "../simulation/initialize.js";
+import type * as simulation_mistral_retry from "../simulation/mistral_retry.js";
 import type * as simulation_replay from "../simulation/replay.js";
 import type * as simulation_start from "../simulation/start.js";
 import type * as simulation_tick from "../simulation/tick.js";
@@ -55,6 +56,7 @@ declare const fullApi: ApiFromModules<{
   "simulation/control": typeof simulation_control;
   "simulation/ensureRunning": typeof simulation_ensureRunning;
   "simulation/initialize": typeof simulation_initialize;
+  "simulation/mistral_retry": typeof simulation_mistral_retry;
   "simulation/replay": typeof simulation_replay;
   "simulation/start": typeof simulation_start;
   "simulation/tick": typeof simulation_tick;

@@ -4,7 +4,7 @@ import { v } from "convex/values";
 import { internalAction } from "../_generated/server";
 import { internal } from "../_generated/api";
 import { Mistral } from "@mistralai/mistralai";
-import { withRetry } from "./mistral-retry";
+import { withRetry } from "./mistral_retry";
 
 // ── Types ────────────────────────────────────────────────────────────
 
