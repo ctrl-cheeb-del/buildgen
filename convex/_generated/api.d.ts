@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as boats from "../boats.js";
 import type * as buildings from "../buildings.js";
 import type * as cars from "../cars.js";
 import type * as multiViewPreviews from "../multiViewPreviews.js";
@@ -34,6 +35,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  boats: typeof boats;
   buildings: typeof buildings;
   cars: typeof cars;
   multiViewPreviews: typeof multiViewPreviews;

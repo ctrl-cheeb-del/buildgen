@@ -65,6 +65,16 @@ export default defineSchema({
     updatedAt: v.number(),
   }).index("by_userId", ["userId"]),
 
+  boats: defineTable({
+    userId: v.string(),
+    x: v.number(),
+    z: v.number(),
+    heading: v.number(),
+    userName: v.string(),
+    userAvatar: v.optional(v.string()),
+    updatedAt: v.number(),
+  }).index("by_userId", ["userId"]),
+
   multiViewPreviews: defineTable({
     buildingName: v.string(),
     gridStorageId: v.id("_storage"),

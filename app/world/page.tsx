@@ -22,12 +22,15 @@ import AgentDetailPanel from "@/components/simulation/AgentDetailPanel";
 import SimControls from "@/components/simulation/SimControls";
 import { useFPStore } from "@/lib/stores/fp-store";
 import { useCarStore } from "@/lib/stores/car-store";
+import { useBoatStore } from "@/lib/stores/boat-store";
 import { usePipeline } from "@/lib/hooks/usePipeline";
 import { useIteration } from "@/lib/hooks/useIteration";
 import { useGridSync } from "@/lib/hooks/useGridSync";
 import { useBuildingDrag } from "@/lib/hooks/useBuildingDrag";
 import { useCarMode } from "@/lib/hooks/useCarMode";
 import { useRemoteCars } from "@/lib/hooks/useRemoteCars";
+import { useBoatMode } from "@/lib/hooks/useBoatMode";
+import { useRemoteBoats } from "@/lib/hooks/useRemoteBoats";
 import { useChat } from "@/lib/hooks/useChat";
 import { useChatStore } from "@/lib/stores/chat-store";
 import { useWorldStore } from "@/lib/stores/world-store";
@@ -220,6 +223,34 @@ export default function Home() {
   useCarMode(layer, handleCarSync, handleCarExit);
   useRemoteCars(carUserId);
 
+  // Boat mode
+  const updateBoatPosition = useMutation(api.boats.updateBoatPosition);
+  const removeBoatPosition = useMutation(api.boats.removeBoatPosition);
+  const setBoatMode = useBoatStore((s) => s.setBoatMode);
+
+  const handleBoatSync = useCallback(
+    (x: number, z: number, heading: number) => {
+      if (!carUserId) return;
+      updateBoatPosition({
+        userId: carUserId,
+        x,
+        z,
+        heading,
+        userName: carUserName,
+        userAvatar: carUserAvatar,
+      }).catch(() => {});
+    },
+    [carUserId, carUserName, carUserAvatar, updateBoatPosition]
+  );
+
+  const handleBoatExit = useCallback(() => {
+    if (!carUserId) return;
+    removeBoatPosition({ userId: carUserId });
+  }, [carUserId, removeBoatPosition]);
+
+  useBoatMode(layer, handleBoatSync, handleBoatExit);
+  useRemoteBoats(carUserId);
+
   // First-person walk mode
   const fpMode = useFPStore((s) => s.fpMode);
   const setFPMode = useFPStore((s) => s.setFPMode);
@@ -260,6 +291,7 @@ export default function Home() {
   const chatDeps = useMemo(
     () => ({
       setCarMode,
+      setBoatMode,
       setFPMode,
       setCharacter: setFPCharacter,
       runPipeline,
@@ -272,6 +304,7 @@ export default function Home() {
     }),
     [
       setCarMode,
+      setBoatMode,
       setFPMode,
       setFPCharacter,
       runPipeline,

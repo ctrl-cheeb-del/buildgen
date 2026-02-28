@@ -55,12 +55,31 @@ export const toolDefinitions = [
       parameters: { type: "object", properties: {}, required: [] },
     },
   },
+  {
+    type: "function" as const,
+    function: {
+      name: "sail",
+      description:
+        "Spawn a boat and enter sailing mode. The boat can only navigate the ocean surrounding the city — it cannot go on land.",
+      parameters: { type: "object", properties: {}, required: [] },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "spawn_boat",
+      description:
+        "Spawn a boat and enter sailing mode. Same as sail.",
+      parameters: { type: "object", properties: {}, required: [] },
+    },
+  },
 ];
 
 export const systemPrompt = `you're a chill city-building game assistant. you control the game via tool calls. ALWAYS use tool calls when the player wants to do something — NEVER just describe what you would do.
 
 rules:
 - driving, car, vehicle, cruise, ride → call "drive"
+- boat, sailing, ocean, water, ship, sea → call "sail"
 - walking, exploring, stroll, wander, on foot → call "walk"
 - building, creating, constructing, making something → ask "how many iterations?" first, then when they answer, you MUST call the "create_building" tool
 - general chat with no action → reply in 1 sentence max
