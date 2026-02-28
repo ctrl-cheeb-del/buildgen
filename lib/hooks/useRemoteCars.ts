@@ -11,6 +11,7 @@ import * as THREE from "three";
 export function useRemoteCars(userId: string | null) {
   const activeCars = useQuery(api.cars.listActiveCars);
   const remoteGroupsRef = useRef<Map<string, THREE.Group>>(new Map());
+  const loadingRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     if (!activeCars) return;
@@ -44,14 +45,16 @@ export function useRemoteCars(userId: string | null) {
           0.3
         );
         existing.rotation.y = car.heading;
-      } else {
-        // Load and add new remote car
+      } else if (!loadingRef.current.has(car.userId)) {
+        // Load and add new remote car (guard against duplicate loads)
+        loadingRef.current.add(car.userId);
         loadCarModel().then((group) => {
           group.name = `remote-car-${car.userId}`;
           group.position.set(car.x, 0, car.z);
           group.rotation.set(0, car.heading, 0);
           layer.addGroup(group);
           remoteGroupsRef.current.set(car.userId, group);
+          loadingRef.current.delete(car.userId);
         });
       }
     }
@@ -64,6 +67,7 @@ export function useRemoteCars(userId: string | null) {
       if (!seenIds.has(id)) {
         layer.removeGroup(group);
         remoteGroupsRef.current.delete(id);
+        loadingRef.current.delete(id);
       }
     }
   }, [activeCars, userId]);

@@ -15,10 +15,10 @@ const PETROL_BLUE = 0x105983;
 
 const bodyMaterial = new THREE.MeshPhysicalMaterial({
   color: PETROL_BLUE,
-  metalness: 0.85,
-  roughness: 0.15,
-  clearcoat: 1.0,
-  clearcoatRoughness: 0.1,
+  metalness: 0.55,
+  roughness: 0.4,
+  clearcoat: 0.3,
+  clearcoatRoughness: 0.4,
   side: THREE.DoubleSide,
 });
 
@@ -57,14 +57,25 @@ export async function loadCarModel(): Promise<THREE.Group> {
   scene.position.z -= center.z;
   scene.position.y -= newBox.min.y;
 
-  // Override body materials with petrol blue metallic
+  // Override materials: strip all textures and apply our own
   scene.traverse((child) => {
     if (child instanceof THREE.Mesh) {
       const mats = Array.isArray(child.material)
         ? child.material
         : [child.material];
       for (let i = 0; i < mats.length; i++) {
-        if (mats[i] && isBodyMaterial(mats[i])) {
+        const mat = mats[i];
+        if (!mat) continue;
+        // Strip all texture maps from every material
+        if ("map" in mat) (mat as any).map = null;
+        if ("normalMap" in mat) (mat as any).normalMap = null;
+        if ("emissiveMap" in mat) (mat as any).emissiveMap = null;
+        if ("roughnessMap" in mat) (mat as any).roughnessMap = null;
+        if ("metalnessMap" in mat) (mat as any).metalnessMap = null;
+        if ("aoMap" in mat) (mat as any).aoMap = null;
+        mat.needsUpdate = true;
+
+        if (isBodyMaterial(mat)) {
           if (Array.isArray(child.material)) {
             child.material[i] = bodyMaterial;
           } else {
