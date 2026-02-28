@@ -14,46 +14,73 @@ import { updateVisibilityCulling } from "@/lib/viewer/visibility-culling";
 import type { SceneLayer } from "@/lib/viewer/scene-layer";
 
 /**
- * Adaptive quality: measures FPS over first N frames.
- * Auto-disables expensive features if FPS drops below thresholds.
- * Inspired by Levelsio's fly.pieter.com — shadows alone cost +57% GPU.
+ * Progressive quality degradation — monitors rolling FPS and steps down
+ * through quality tiers one at a time to avoid over-correction.
+ *
+ * L0 (High)   : Everything on
+ * L1 (Medium) : Fog tightened (reduces overdraw on distant buildings)
+ * L2 (Low)    : Shadows disabled
+ * L3 (Potato) : Pixel ratio → 1
+ * L4 (Survive): Distance culling at 800m
  */
 class AdaptiveQuality {
-  private frameTimes: number[] = [];
-  private settled = false;
-  private readonly SAMPLE_FRAMES = 90; // ~1.5s at 60fps
+  private frameTimes: number[];
+  private frameIndex = 0;
+  private frameCount = 0;
+  private readonly WINDOW = 60;
   private renderer: THREE.WebGLRenderer;
   private sun: THREE.DirectionalLight;
+  private scene: THREE.Scene;
+  private level = 0;
+  renderDistance = Infinity;
 
-  constructor(renderer: THREE.WebGLRenderer, sun: THREE.DirectionalLight) {
+  constructor(
+    renderer: THREE.WebGLRenderer,
+    sun: THREE.DirectionalLight,
+    scene: THREE.Scene
+  ) {
     this.renderer = renderer;
     this.sun = sun;
+    this.scene = scene;
+    this.frameTimes = new Array(this.WINDOW).fill(0);
   }
 
   sample(dt: number) {
-    if (this.settled) return;
-    this.frameTimes.push(dt);
-    if (this.frameTimes.length < this.SAMPLE_FRAMES) return;
+    this.frameTimes[this.frameIndex] = dt;
+    this.frameIndex = (this.frameIndex + 1) % this.WINDOW;
+    this.frameCount++;
 
-    // Calculate average FPS (skip first 10 frames — init spike)
-    const relevant = this.frameTimes.slice(10);
-    const avgDt = relevant.reduce((a, b) => a + b, 0) / relevant.length;
+    if (this.frameCount < this.WINDOW || this.frameCount % this.WINDOW !== 0)
+      return;
+
+    const avgDt = this.frameTimes.reduce((a, b) => a + b, 0) / this.WINDOW;
     const avgFPS = 1 / avgDt;
 
-    if (avgFPS < 30) {
-      // Disable shadows (biggest GPU win — +57% in Levelsio's tests)
+    // One step per evaluation cycle to avoid over-correction
+    if (this.level === 0 && avgFPS < 45) {
+      this.level = 1;
+      if (this.scene.fog instanceof THREE.FogExp2) {
+        this.scene.fog.density = 0.0015;
+      }
+      console.log(`[Perf] L1: Fog tightened (avg ${avgFPS.toFixed(0)} FPS)`);
+    } else if (this.level === 1 && avgFPS < 35) {
+      this.level = 2;
       this.renderer.shadowMap.enabled = false;
       this.sun.castShadow = false;
-      console.log(`[Perf] Shadows disabled (avg ${avgFPS.toFixed(0)} FPS)`);
+      console.log(`[Perf] L2: Shadows disabled (avg ${avgFPS.toFixed(0)} FPS)`);
+    } else if (this.level === 2 && avgFPS < 25) {
+      this.level = 3;
+      if (this.renderer.getPixelRatio() > 1) {
+        this.renderer.setPixelRatio(1);
+      }
+      console.log(`[Perf] L3: Pixel ratio → 1 (avg ${avgFPS.toFixed(0)} FPS)`);
+    } else if (this.level === 3 && avgFPS < 18) {
+      this.level = 4;
+      this.renderDistance = 800;
+      console.log(
+        `[Perf] L4: Distance culling at 800m (avg ${avgFPS.toFixed(0)} FPS)`
+      );
     }
-
-    if (avgFPS < 20) {
-      // Reduce pixel ratio for extreme cases
-      this.renderer.setPixelRatio(1);
-      console.log(`[Perf] Pixel ratio reduced to 1 (avg ${avgFPS.toFixed(0)} FPS)`);
-    }
-
-    this.settled = true;
   }
 }
 
@@ -77,7 +104,7 @@ export default function ThreeMapCanvas() {
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.2;
     renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.shadowMap.type = THREE.PCFShadowMap;
     container.appendChild(renderer.domElement);
 
     initTextureQuality(renderer);
@@ -102,12 +129,12 @@ export default function ThreeMapCanvas() {
     const sun = new THREE.DirectionalLight(0xfff4e6, 1.6);
     sun.position.set(500, 800, 400);
     sun.castShadow = true;
-    sun.shadow.mapSize.width = 2048;
-    sun.shadow.mapSize.height = 2048;
-    sun.shadow.camera.left = -800;
-    sun.shadow.camera.right = 800;
-    sun.shadow.camera.top = 800;
-    sun.shadow.camera.bottom = -800;
+    sun.shadow.mapSize.width = 1024;
+    sun.shadow.mapSize.height = 1024;
+    sun.shadow.camera.left = -600;
+    sun.shadow.camera.right = 600;
+    sun.shadow.camera.top = 750;
+    sun.shadow.camera.bottom = -650;
     sun.shadow.camera.near = 1;
     sun.shadow.camera.far = 1800;
     sun.shadow.bias = -0.0005;
@@ -173,7 +200,7 @@ export default function ThreeMapCanvas() {
     controls.update();
 
     // ── Adaptive quality ─────────────────────────────────────
-    const quality = new AdaptiveQuality(renderer, sun);
+    const quality = new AdaptiveQuality(renderer, sun, scene);
 
     // ── Render-on-demand (dirty flag) ────────────────────────
     // Only render when something changes. GPU drops to ~zero when idle.
@@ -181,6 +208,7 @@ export default function ThreeMapCanvas() {
     let dirty = true;
     let animId = 0;
     let lastCloudTick = 0;
+    let frameNum = 0;
 
     function markDirty() {
       dirty = true;
@@ -208,6 +236,20 @@ export default function ThreeMapCanvas() {
         clouds.update(elapsed, camera);
         dirty = true;
       }
+
+      // Distance culling — every 30 frames, hide buildings beyond render distance
+      if (quality.renderDistance < Infinity && frameNum % 30 === 0) {
+        const { containers } = useWorldStore.getState();
+        const cx = camera.position.x, cz = camera.position.z;
+        const maxDist2 = quality.renderDistance * quality.renderDistance;
+        for (const container of containers.values()) {
+          const dx = container.position.x - cx;
+          const dz = container.position.z - cz;
+          container.visible = dx * dx + dz * dz < maxDist2;
+        }
+        dirty = true;
+      }
+      frameNum++;
 
       if (dirty || controlsUpdated) {
         // Distance-based culling — skip shadows and hide far buildings

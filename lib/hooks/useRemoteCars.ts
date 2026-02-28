@@ -122,32 +122,40 @@ export function useRemoteCars(userId: string | null) {
   // Animation loop — smoothly interpolate all remote cars every frame
   useEffect(() => {
     const animate = () => {
+      rafRef.current = requestAnimationFrame(animate);
+
+      if (carsRef.current.size === 0) return;
+
       const now = performance.now();
       let needsRepaint = false;
 
       for (const [, state] of carsRef.current) {
-        // t goes from 0 (at updateTime) to 1 (at updateTime + interval)
         const elapsed = now - state.updateTime;
-        // Allow slight overshoot (1.2) for extrapolation to keep motion smooth
-        // if the next update is slightly late
         const t = Math.min(elapsed / state.interval, 1.2);
-        const clamped = Math.min(t, 1);
 
+        // Car finished interpolation and is stationary — skip
+        if (t >= 1.2) continue;
+
+        const clamped = Math.min(t, 1);
         const x = state.prevX + (state.targetX - state.prevX) * t;
         const z = state.prevZ + (state.targetZ - state.prevZ) * t;
         const heading = lerpAngle(state.prevHeading, state.targetHeading, clamped);
 
-        state.group.position.x = x;
-        state.group.position.z = z;
-        state.group.rotation.y = heading;
-        needsRepaint = true;
+        // Only repaint if position actually changed
+        if (
+          Math.abs(state.group.position.x - x) > 0.001 ||
+          Math.abs(state.group.position.z - z) > 0.001
+        ) {
+          state.group.position.x = x;
+          state.group.position.z = z;
+          state.group.rotation.y = heading;
+          needsRepaint = true;
+        }
       }
 
       if (needsRepaint) {
         useWorldStore.getState().layer?.repaint();
       }
-
-      rafRef.current = requestAnimationFrame(animate);
     };
 
     rafRef.current = requestAnimationFrame(animate);

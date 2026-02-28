@@ -16,6 +16,7 @@ import {
 
 const _raycaster = new THREE.Raycaster();
 const _ndc = new THREE.Vector2();
+const _screenPos = new THREE.Vector3();
 
 interface PlotPopupsProps {
   layer: SceneLayer | null;
@@ -124,21 +125,16 @@ export default function PlotPopups({
     [setNdc]
   );
 
-  /** Raycast against actual building meshes in the scene. */
+  /** Raycast against building containers (not full scene). */
   const raycastBuilding = useCallback(
     (px: number, py: number) => {
       if (!setNdc(px, py)) return null;
 
       const { buildings, containers } = useWorldStore.getState();
-      const meshes: THREE.Object3D[] = [];
-      for (const container of containers.values()) {
-        container.traverse((child) => {
-          if (child instanceof THREE.Mesh) meshes.push(child);
-        });
-      }
-      if (meshes.length === 0) return null;
+      if (containers.size === 0) return null;
 
-      const hits = _raycaster.intersectObjects(meshes, false);
+      const targets = Array.from(containers.values());
+      const hits = _raycaster.intersectObjects(targets, true);
       if (hits.length === 0) return null;
 
       // Walk up to find the building container (named "building-{id}")
@@ -167,14 +163,14 @@ export default function PlotPopups({
       if (!layer) return null;
       const camera = layer.getCamera() as THREE.PerspectiveCamera;
       const canvas = layer.getCanvas();
-      const pos = worldPos.clone();
-      pos.y = 5;
-      pos.project(camera);
-      if (pos.z > 1) return null; // behind camera
+      _screenPos.copy(worldPos);
+      _screenPos.y = 5;
+      _screenPos.project(camera);
+      if (_screenPos.z > 1) return null; // behind camera
       const rect = canvas.getBoundingClientRect();
       return {
-        x: ((pos.x + 1) / 2) * rect.width + rect.left,
-        y: ((-pos.y + 1) / 2) * rect.height + rect.top,
+        x: ((_screenPos.x + 1) / 2) * rect.width + rect.left,
+        y: ((-_screenPos.y + 1) / 2) * rect.height + rect.top,
       };
     },
     [layer]
@@ -372,6 +368,9 @@ export default function PlotPopups({
     if (!layer) return;
     const canvas = layer.getCanvas();
 
+    let rafPending = false;
+    let lastMoveEvent: MouseEvent | null = null;
+
     const onMouseMove = (e: MouseEvent) => {
       if (useWorldStore.getState().isDragging) {
         removeHover();
@@ -458,10 +457,20 @@ export default function PlotPopups({
       canvas.style.cursor = "";
     };
 
-    canvas.addEventListener("mousemove", onMouseMove);
+    const onMouseMoveThrottled = (e: MouseEvent) => {
+      lastMoveEvent = e;
+      if (rafPending) return;
+      rafPending = true;
+      requestAnimationFrame(() => {
+        rafPending = false;
+        if (lastMoveEvent) onMouseMove(lastMoveEvent);
+      });
+    };
+
+    canvas.addEventListener("mousemove", onMouseMoveThrottled);
     canvas.addEventListener("mouseleave", onMouseLeave);
     return () => {
-      canvas.removeEventListener("mousemove", onMouseMove);
+      canvas.removeEventListener("mousemove", onMouseMoveThrottled);
       canvas.removeEventListener("mouseleave", onMouseLeave);
       removeHover();
     };
