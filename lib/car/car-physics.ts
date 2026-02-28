@@ -101,7 +101,16 @@ function wrapAngle(a: number): number {
   return a;
 }
 
-export function updateCar(state: CarState, keys: CarKeys, dt: number): CarState {
+export interface RemoteCarPos {
+  x: number;
+  z: number;
+}
+
+const CAR_COLLISION_RADIUS = 4; // ~4m per car
+const CAR_COLLISION_DIST = CAR_COLLISION_RADIUS * 2; // sum of two radii
+const CAR_COLLISION_BROAD = CAR_COLLISION_DIST + 2; // broad-phase threshold (cheap axis check)
+
+export function updateCar(state: CarState, keys: CarKeys, dt: number, remoteCars?: RemoteCarPos[]): CarState {
   let { x, z, heading, speed, velAngle, drifting } = state;
 
   // Clamp dt to avoid physics explosions on tab-away
@@ -204,6 +213,28 @@ export function updateCar(state: CarState, keys: CarKeys, dt: number): CarState 
       speed *= 0.7;
     } else {
       speed *= 0.3;
+    }
+  }
+
+  // Car-to-car collision
+  if (remoteCars) {
+    for (const rc of remoteCars) {
+      // Broad-phase: cheap per-axis check to skip distant cars
+      const dx = x - rc.x;
+      const dz = z - rc.z;
+      if (Math.abs(dx) > CAR_COLLISION_BROAD || Math.abs(dz) > CAR_COLLISION_BROAD) continue;
+
+      // Narrow-phase: actual distance
+      const dist = Math.sqrt(dx * dx + dz * dz);
+      if (dist < CAR_COLLISION_DIST && dist > 0.001) {
+        // Push local car out along collision normal
+        const nx = dx / dist;
+        const nz = dz / dist;
+        const overlap = CAR_COLLISION_DIST - dist;
+        x += nx * overlap;
+        z += nz * overlap;
+        speed *= 0.3;
+      }
     }
   }
 

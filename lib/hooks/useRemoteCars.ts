@@ -73,7 +73,7 @@ export function useRemoteCars(userId: string | null) {
         // Set new target
         existing.targetX = car.x;
         existing.targetZ = car.z;
-        existing.targetHeading = car.heading;
+        existing.targetHeading = Math.PI - car.heading;
         // Update timing
         const timeSinceLast = now - existing.updateTime;
         if (timeSinceLast > 50 && timeSinceLast < 2000) {
@@ -88,16 +88,16 @@ export function useRemoteCars(userId: string | null) {
         loadCarModel().then((group) => {
           group.name = `remote-car-${car.userId}`;
           group.position.set(car.x, 0, car.z);
-          group.rotation.set(0, car.heading, 0);
+          group.rotation.set(0, Math.PI - car.heading, 0);
           layer.addGroup(group);
           carsRef.current.set(car.userId, {
             group,
             prevX: car.x,
             prevZ: car.z,
-            prevHeading: car.heading,
+            prevHeading: Math.PI - car.heading,
             targetX: car.x,
             targetZ: car.z,
-            targetHeading: car.heading,
+            targetHeading: Math.PI - car.heading,
             updateTime: now,
             prevUpdateTime: now - 200,
             interval: 200, // initial estimate matching sync rate

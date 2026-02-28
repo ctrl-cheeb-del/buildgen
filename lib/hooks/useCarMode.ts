@@ -72,8 +72,14 @@ export function useCarMode(
     lastTimeRef.current = now;
     const nowSec = now / 1000;
 
+    // Gather remote car positions for collision
+    const remoteMap = carStore.remoteCars;
+    const remoteCars = remoteMap
+      ? Array.from(remoteMap.values(), (c) => ({ x: c.x, z: c.z }))
+      : undefined;
+
     // Physics update
-    const newState = updateCar(carStore.carPosition, keys.current!, dt);
+    const newState = updateCar(carStore.carPosition, keys.current!, dt, remoteCars);
     carStore.updatePosition(newState);
 
     // Update Three.js car group

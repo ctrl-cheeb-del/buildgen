@@ -175,7 +175,7 @@ export default function Home() {
   const handleCarSync = useCallback(
     (x: number, z: number, heading: number) => {
       if (!carUserId) return;
-      updateCarPosition({ userId: carUserId, x, z, heading, userName: carUserName, userAvatar: carUserAvatar });
+      updateCarPosition({ userId: carUserId, x, z, heading, userName: carUserName, userAvatar: carUserAvatar }).catch(() => {});
     },
     [carUserId, carUserName, carUserAvatar, updateCarPosition]
   );
