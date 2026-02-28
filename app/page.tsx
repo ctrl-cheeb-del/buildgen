@@ -3,10 +3,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { useUser } from "@clerk/nextjs";
-import type mapboxgl from "mapbox-gl";
 import type { MultiViewImages } from "@/lib/types";
 import { api } from "../convex/_generated/api";
-import MapCanvas from "@/components/MapCanvas";
+import ThreeMapCanvas from "@/components/ThreeMapCanvas";
 import PromptBar from "@/components/PromptBar";
 import StatusPanel from "@/components/StatusPanel";
 import ImagePreview from "@/components/ImagePreview";
@@ -16,6 +15,7 @@ import CarModeButton from "@/components/CarModeButton";
 import WalkModeButton from "@/components/fp/WalkModeButton";
 import FirstPersonOverlay from "@/components/fp/FirstPersonOverlay";
 import ControlPanel from "@/components/ControlPanel";
+import PlotPopups from "@/components/PlotPopups";
 import { useFPStore } from "@/lib/stores/fp-store";
 import { usePipeline } from "@/lib/hooks/usePipeline";
 import { useGridSync } from "@/lib/hooks/useGridSync";
@@ -24,22 +24,20 @@ import { useCarMode } from "@/lib/hooks/useCarMode";
 import { useRemoteCars } from "@/lib/hooks/useRemoteCars";
 import { useWorldStore } from "@/lib/stores/world-store";
 import { GRID_COLS, GRID_ROWS } from "@/lib/grid/grid-constants";
-import { gridIndexToColRow, getPlotCenter } from "@/lib/grid/grid-geometry";
+import { gridIndexToColRow, plotCenterMeters } from "@/lib/grid/grid-geometry";
 import type { Id } from "../convex/_generated/dataModel";
 
 const TOTAL_PLOTS = GRID_COLS * GRID_ROWS;
 
 export default function Home() {
-  const mapRef = useRef<mapboxgl.Map | null>(null);
   const { isRunning, multiView, steps, runPipeline } = usePipeline();
   const { isSignedIn, user } = useUser();
-  const { plotStates, gridGeoJSON, buildings, localPendingUpdates } =
+  const { plotStates, buildings, localPendingUpdates } =
     useGridSync();
 
   const myPlot = useQuery(api.plots.getMyPlot);
   const claimPlot = useMutation(api.plots.claimPlot);
   const convexUpdateTransform = useMutation(api.buildings.updateTransform);
-  const deleteBuilding = useMutation(api.buildings.deleteBuilding);
   const releasePlot = useMutation(api.plots.releasePlot);
 
   const selectedId = useWorldStore((s) => s.selectedId);
@@ -70,10 +68,6 @@ export default function Home() {
     views: MultiViewImages;
     buildingName: string;
   } | null>(null);
-
-  const handleMapReady = useCallback((map: mapboxgl.Map) => {
-    mapRef.current = map;
-  }, []);
 
   const handleGenerate = useCallback(
     (buildingName: string) => {
@@ -111,17 +105,6 @@ export default function Home() {
     setCachedViews(null);
   }, []);
 
-  const handleDeleteBuilding = useCallback(
-    async (buildingId: string) => {
-      try {
-        await deleteBuilding({ buildingId: buildingId as Id<"buildings"> });
-      } catch (err) {
-        console.error("Failed to delete building:", err);
-      }
-    },
-    [deleteBuilding]
-  );
-
   const handleReleasePlot = useCallback(async () => {
     if (!myPlot) return;
     try {
@@ -147,23 +130,23 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ownedKey]);
 
-  // Plot centers for each building (needed for drag offset calculation)
+  // Plot centers for each building in meter-space (for drag offset calculation)
   const buildingKeys = buildings?.map((b) => `${b._id}:${b.plotIndex}`).join(",") ?? "";
   const plotCenters = useMemo(() => {
     const centers = new Map<string, [number, number]>();
     if (buildings) {
       for (const b of buildings) {
         const { col, row } = gridIndexToColRow(b.plotIndex);
-        const [lng, lat] = getPlotCenter(col, row);
-        centers.set(b._id as string, [lng, lat]);
+        const [mx, mz] = plotCenterMeters(col, row);
+        centers.set(b._id as string, [mx, mz]);
       }
     }
     return centers;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [buildingKeys]);
 
-  // Wire up building drag system
-  useBuildingDrag(mapRef, layer, ownedBuildingIds, plotCenters);
+  // Wire up building drag system (pure Three.js raycasting)
+  useBuildingDrag(layer, ownedBuildingIds, plotCenters);
 
   // Car mode
   const updateCarPosition = useMutation(api.cars.updateCarPosition);
@@ -185,7 +168,7 @@ export default function Home() {
     removeCarPosition({ userId: carUserId });
   }, [carUserId, removeCarPosition]);
 
-  useCarMode(mapRef, layer, handleCarSync, handleCarExit);
+  useCarMode(layer, handleCarSync, handleCarExit);
   useRemoteCars(carUserId);
 
   // First-person walk mode
@@ -218,9 +201,12 @@ export default function Home() {
 
   return (
     <div className="relative w-screen h-screen overflow-hidden">
-      <MapCanvas
-        gridGeoJSON={gridGeoJSON}
-        onMapReady={handleMapReady}
+      <ThreeMapCanvas />
+
+      {/* Plot click/hover popups */}
+      <PlotPopups
+        layer={layer}
+        plotStates={plotStates}
         onPlotClick={handlePlotClick}
       />
 
@@ -318,15 +304,6 @@ export default function Home() {
                   <span className="text-xs text-gray-700 truncate flex-1">
                     {b.prompt}
                   </span>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDeleteBuilding(b._id as string);
-                    }}
-                    className="text-xs text-red-400 hover:text-red-600 ml-2"
-                  >
-                    Delete
-                  </button>
                 </div>
               ))}
             </div>

@@ -1,32 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useCallback } from "react";
-import mapboxgl from "mapbox-gl";
+import * as THREE from "three";
 import { useCarStore } from "../stores/car-store";
 import { useCarKeys } from "./useCarKeys";
 import { loadCarModel } from "../car/car-loader";
 import { updateCar, findNearestRoadPosition } from "../car/car-physics";
 import { createDriftEffects, type DriftEffects } from "../car/drift-effects";
-import {
-  CITY_ORIGIN_LNG,
-  CITY_ORIGIN_LAT,
-} from "../grid/grid-constants";
-import type { ThreeJSMapboxLayer } from "../viewer/mapbox-layer";
-
-function metersToLngLat(dx: number, dz: number): [number, number] {
-  const originMerc = mapboxgl.MercatorCoordinate.fromLngLat(
-    [CITY_ORIGIN_LNG, CITY_ORIGIN_LAT],
-    0
-  );
-  const scale = originMerc.meterInMercatorCoordinateUnits();
-  const merc = new mapboxgl.MercatorCoordinate(
-    originMerc.x + dx * scale,
-    originMerc.y + dz * scale,
-    0
-  );
-  const lngLat = merc.toLngLat();
-  return [lngLat.lng, lngLat.lat];
-}
+import type { SceneLayer } from "../viewer/scene-layer";
 
 function wrapAngle(a: number): number {
   a = a % (2 * Math.PI);
@@ -35,9 +16,12 @@ function wrapAngle(a: number): number {
   return a;
 }
 
+// Pre-allocated vector for camera follow
+const _cameraTarget = new THREE.Vector3();
+const _cameraPos = new THREE.Vector3();
+
 export function useCarMode(
-  mapRef: React.RefObject<mapboxgl.Map | null>,
-  layer: ThreeJSMapboxLayer | null,
+  layer: SceneLayer | null,
   onSyncPosition?: (x: number, z: number, heading: number) => void,
   onExitCar?: () => void
 ) {
@@ -48,17 +32,13 @@ export function useCarMode(
   const prevCarMode = useRef(false);
   const driftEffectsRef = useRef<DriftEffects | null>(null);
   const savedCamera = useRef<{
-    center: [number, number];
-    zoom: number;
-    pitch: number;
-    bearing: number;
+    position: THREE.Vector3;
+    target: THREE.Vector3;
   } | null>(null);
 
   // Store latest callback refs to avoid stale closures in animation loop
   const layerRef = useRef(layer);
   layerRef.current = layer;
-  const mapRefRef = useRef(mapRef);
-  mapRefRef.current = mapRef;
   const onSyncRef = useRef(onSyncPosition);
   onSyncRef.current = onSyncPosition;
   const onExitRef = useRef(onExitCar);
@@ -102,18 +82,36 @@ export function useCarMode(
       nowSec
     );
 
-    layerRef.current?.repaint();
+    // Camera follow — direct Three.js camera manipulation
+    const currentLayer = layerRef.current;
+    if (currentLayer) {
+      const camera = currentLayer.getCamera() as THREE.PerspectiveCamera;
+      const bearingRad = newState.heading;
 
-    // Camera follow via Mapbox — allow user's current zoom (scroll zoom enabled)
-    const map = mapRefRef.current.current;
-    if (map) {
-      const [lng, lat] = metersToLngLat(newState.x, newState.z);
-      const bearingDeg = newState.heading * (180 / Math.PI);
-      map.jumpTo({
-        center: [lng, lat],
-        bearing: bearingDeg,
-        pitch: 60,
-      });
+      // Position camera behind and above the car
+      const followDist = 35;
+      const followHeight = 18;
+      _cameraPos.set(
+        newState.x + Math.sin(bearingRad) * followDist,
+        followHeight,
+        newState.z - Math.cos(bearingRad) * followDist
+      );
+
+      // Speed-adaptive follow: tighter at high speed, looser when slow
+      const speed = Math.abs(newState.speed);
+      const followLerp = THREE.MathUtils.clamp(0.04 + speed * 0.003, 0.04, 0.15);
+      camera.position.lerp(_cameraPos, followLerp);
+
+      // Look slightly ahead of the car (forward-biased target)
+      const lookAhead = Math.min(speed * 0.3, 10);
+      _cameraTarget.set(
+        newState.x - Math.sin(bearingRad) * lookAhead,
+        2,
+        newState.z + Math.cos(bearingRad) * lookAhead
+      );
+      camera.lookAt(_cameraTarget);
+
+      currentLayer.repaint();
     }
 
     // Debounced multiplayer sync (every 200ms)
@@ -127,23 +125,15 @@ export function useCarMode(
 
   const enterCarMode = useCallback(async () => {
     const currentLayer = layerRef.current;
-    const map = mapRefRef.current.current;
-    if (!currentLayer || !map) return;
+    if (!currentLayer) return;
 
-    // Save current camera
-    const c = map.getCenter();
+    const camera = currentLayer.getCamera() as THREE.PerspectiveCamera;
+
+    // Save current camera state
     savedCamera.current = {
-      center: [c.lng, c.lat],
-      zoom: map.getZoom(),
-      pitch: map.getPitch(),
-      bearing: map.getBearing(),
+      position: camera.position.clone(),
+      target: new THREE.Vector3(0, 0, 0), // will be restored
     };
-
-    // Disable map interaction except scroll zoom (for drone-style zoom in/out)
-    map.dragPan.disable();
-    map.dragRotate.disable();
-    map.doubleClickZoom.disable();
-    map.touchZoomRotate.disable();
 
     // Load car model
     const carGroup = await loadCarModel();
@@ -156,21 +146,8 @@ export function useCarMode(
     driftEffectsRef.current = effects;
     currentLayer.addGroup(effects.group);
 
-    // Place car on nearest road from current view center
-    const viewCenter = map.getCenter();
-    const originMerc = mapboxgl.MercatorCoordinate.fromLngLat(
-      [CITY_ORIGIN_LNG, CITY_ORIGIN_LAT],
-      0
-    );
-    const viewMerc = mapboxgl.MercatorCoordinate.fromLngLat(
-      [viewCenter.lng, viewCenter.lat],
-      0
-    );
-    const meterScale = currentLayer.getMeterScale();
-    const meterX = (viewMerc.x - originMerc.x) / meterScale;
-    const meterZ = (viewMerc.y - originMerc.y) / meterScale;
-
-    const roadPos = findNearestRoadPosition(meterX, meterZ);
+    // Place car on nearest road from camera target (roughly center of view)
+    const roadPos = findNearestRoadPosition(0, 0);
     useCarStore.getState().updatePosition({
       x: roadPos.x,
       z: roadPos.z,
@@ -184,9 +161,6 @@ export function useCarMode(
     carGroup.position.set(roadPos.x, 0, roadPos.z);
     carGroup.rotation.set(0, Math.PI, 0);
     currentLayer.repaint();
-
-    // Zoom in close to the car
-    map.jumpTo({ zoom: 19.5, pitch: 60 });
 
     // Start animation loop
     lastTimeRef.current = performance.now();
@@ -213,24 +187,16 @@ export function useCarMode(
     }
 
     useCarStore.getState().setCarGroup(null);
-    useCarStore.getState().updatePosition({ x: 0, z: 0, heading: 0, speed: 0, velAngle: 0, drifting: false });
+    useCarStore.getState().updatePosition({
+      x: 0, z: 0, heading: 0, speed: 0, velAngle: 0, drifting: false,
+    });
 
-    // Restore map controls
-    const map = mapRefRef.current.current;
-    if (map) {
-      map.dragPan.enable();
-      map.dragRotate.enable();
-      map.doubleClickZoom.enable();
-      map.touchZoomRotate.enable();
-
-      if (savedCamera.current) {
-        map.jumpTo({
-          center: savedCamera.current.center,
-          zoom: savedCamera.current.zoom,
-          pitch: savedCamera.current.pitch,
-          bearing: savedCamera.current.bearing,
-        });
-      }
+    // Restore camera position
+    if (savedCamera.current && currentLayer) {
+      const camera = currentLayer.getCamera() as THREE.PerspectiveCamera;
+      camera.position.copy(savedCamera.current.position);
+      camera.lookAt(0, 0, 0);
+      currentLayer.repaint();
     }
 
     onExitRef.current?.();

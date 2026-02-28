@@ -7,8 +7,7 @@ import { useWorldStore } from "../stores/world-store";
 import { loadProceduralGeometry } from "../viewer/procedural-loader";
 import { applyBuildingTextures } from "../viewer/building-textures";
 import {
-  generateGridGeoJSON,
-  getPlotCenter,
+  plotCenterMeters,
   gridIndexToColRow,
   type PlotState,
 } from "../grid/grid-geometry";
@@ -67,7 +66,7 @@ export function useGridSync() {
 
       try {
         const { col, row } = gridIndexToColRow(b.plotIndex);
-        const [lng, lat] = getPlotCenter(col, row);
+        const [mx, mz] = plotCenterMeters(col, row);
 
         const offset: [number, number, number] = b.position
           ? [b.position.x, b.position.y, b.position.z]
@@ -84,8 +83,8 @@ export function useGridSync() {
           {
             id,
             name: b.prompt,
-            lng,
-            lat,
+            x: mx,
+            z: mz,
             path: "A",
             scale: b.scale ?? 1,
             offset,
@@ -125,15 +124,10 @@ export function useGridSync() {
     }));
   }, [plots]);
 
-  const gridGeoJSON = useMemo(() => {
-    return generateGridGeoJSON(plotStates);
-  }, [plotStates]);
-
   return {
     plots,
     buildings,
     plotStates,
-    gridGeoJSON,
     localPendingUpdates: localPendingUpdates.current,
   };
 }

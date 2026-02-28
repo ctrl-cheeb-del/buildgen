@@ -2,8 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
-import mapboxgl from "mapbox-gl";
-import type { ThreeJSMapboxLayer } from "../viewer/mapbox-layer";
+import type { SceneLayer } from "../viewer/scene-layer";
 import { useWorldStore } from "../stores/world-store";
 import { GRASS_HALF_M } from "../grid/grid-constants";
 
@@ -43,16 +42,23 @@ function measureHalfExtents(
   return { halfX: size.x / 2, halfZ: size.z / 2 };
 }
 
+// Pre-allocated objects for raycasting
+const _raycaster = new THREE.Raycaster();
+const _ndc = new THREE.Vector2();
+const _groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+const _groundHit = new THREE.Vector3();
+
 /**
  * Click-to-select and drag-to-move buildings on the map.
+ * Pure Three.js — no Mapbox dependencies.
+ *
  * - Only allows dragging buildings the current user owns
  * - Dynamic boundary clamping based on building bounding box
  * - AABB collision detection against sibling buildings on the same plot
  * - Click on empty space to deselect
  */
 export function useBuildingDrag(
-  mapRef: React.RefObject<mapboxgl.Map | null>,
-  layer: ThreeJSMapboxLayer | null,
+  layer: SceneLayer | null,
   ownedBuildingIds: Set<string>,
   plotCenters: Map<string, [number, number]>
 ) {
@@ -66,7 +72,7 @@ export function useBuildingDrag(
   const startPixelRef = useRef({ x: 0, y: 0 });
   const dragBuildingIdRef = useRef<string | null>(null);
   const dragStartOffsetRef = useRef<[number, number, number]>([0, 0, 0]);
-  const dragAnchorRef = useRef({ x: 0, y: 0 });
+  const dragAnchorRef = useRef({ x: 0, z: 0 });
   const dragYRef = useRef(0);
 
   // Per-drag cached data
@@ -74,13 +80,16 @@ export function useBuildingDrag(
   const dragMaxOffsetRef = useRef({ x: GRASS_HALF_M, z: GRASS_HALF_M });
   const dragObstaclesRef = useRef<Obstacle[]>([]);
 
-  const raycaster = useRef(new THREE.Raycaster());
-
   useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !layer) return;
+    if (!layer) return;
 
-    const canvas = map.getCanvas();
+    const canvas = layer.getCanvas();
+
+    function screenToNDC(px: number, py: number) {
+      const rect = canvas.getBoundingClientRect();
+      _ndc.x = ((px - rect.left) / rect.width) * 2 - 1;
+      _ndc.y = -((py - rect.top) / rect.height) * 2 + 1;
+    }
 
     function findBuildingId(obj: THREE.Object3D): string | null {
       let cur: THREE.Object3D | null = obj;
@@ -98,22 +107,10 @@ export function useBuildingDrag(
       const camera = layer!.getCamera();
       if (!scene || !camera) return null;
 
-      const rect = canvas.getBoundingClientRect();
-      const ndcX = ((px - rect.left) / rect.width) * 2 - 1;
-      const ndcY = -((py - rect.top) / rect.height) * 2 + 1;
+      screenToNDC(px, py);
+      _raycaster.setFromCamera(_ndc, camera);
 
-      const origin = new THREE.Vector3(ndcX, ndcY, -1).applyMatrix4(
-        camera.projectionMatrixInverse
-      );
-      const far = new THREE.Vector3(ndcX, ndcY, 1).applyMatrix4(
-        camera.projectionMatrixInverse
-      );
-      raycaster.current.set(origin, far.sub(origin).normalize());
-
-      const intersects = raycaster.current.intersectObjects(
-        scene.children,
-        true
-      );
+      const intersects = _raycaster.intersectObjects(scene.children, true);
       for (const hit of intersects) {
         if (hit.object.parent?.name === "ground-planes") continue;
         const id = findBuildingId(hit.object);
@@ -122,20 +119,20 @@ export function useBuildingDrag(
       return null;
     }
 
+    /**
+     * Convert screen pixel to meter-space XZ by raycasting against ground plane.
+     * Returns offset from a given plot center.
+     */
     function pixelToPlotOffset(
       px: number,
       py: number,
-      plotLng: number,
-      plotLat: number
+      plotX: number,
+      plotZ: number
     ): [number, number] {
-      const lngLat = map!.unproject(new mapboxgl.Point(px, py));
-      const merc = mapboxgl.MercatorCoordinate.fromLngLat(lngLat, 0);
-      const plotMerc = mapboxgl.MercatorCoordinate.fromLngLat(
-        [plotLng, plotLat],
-        0
-      );
-      const s = plotMerc.meterInMercatorCoordinateUnits();
-      return [(merc.x - plotMerc.x) / s, (merc.y - plotMerc.y) / s];
+      screenToNDC(px, py);
+      _raycaster.setFromCamera(_ndc, layer!.getCamera());
+      _raycaster.ray.intersectPlane(_groundPlane, _groundHit);
+      return [_groundHit.x - plotX, _groundHit.z - plotZ];
     }
 
     /**
@@ -158,14 +155,13 @@ export function useBuildingDrag(
         z: Math.max(0, GRASS_HALF_M - selfHalf.halfZ),
       };
 
-      // Find sibling buildings on the same plot (same lng,lat in plotCenters)
+      // Find sibling buildings on the same plot (same center in plotCenters)
       const myPlotCenter = centersRef.current.get(buildingId);
       const obstacles: Obstacle[] = [];
 
       if (myPlotCenter) {
         for (const [otherId, otherCenter] of centersRef.current) {
           if (otherId === buildingId) continue;
-          // Same plot = same center coordinates
           if (
             otherCenter[0] !== myPlotCenter[0] ||
             otherCenter[1] !== myPlotCenter[1]
@@ -194,9 +190,7 @@ export function useBuildingDrag(
     }
 
     /**
-     * Resolve AABB collisions: given a proposed position for the dragged
-     * building, push it out of any overlapping siblings.
-     * Uses iterative resolution (up to 4 passes) for multi-body pileups.
+     * Resolve AABB collisions: push dragged building out of overlapping siblings.
      */
     function resolveCollisions(proposedX: number, proposedZ: number): [number, number] {
       let x = proposedX;
@@ -204,21 +198,16 @@ export function useBuildingDrag(
       const selfHX = dragSelfHalfRef.current.halfX;
       const selfHZ = dragSelfHalfRef.current.halfZ;
       const obstacles = dragObstaclesRef.current;
-
-      // Small gap (1m) to prevent buildings from touching flush
       const GAP = 1;
 
       for (let pass = 0; pass < 4; pass++) {
         let resolved = true;
         for (const obs of obstacles) {
-          const overlapX =
-            selfHX + obs.halfX + GAP - Math.abs(x - obs.cx);
-          const overlapZ =
-            selfHZ + obs.halfZ + GAP - Math.abs(z - obs.cz);
+          const overlapX = selfHX + obs.halfX + GAP - Math.abs(x - obs.cx);
+          const overlapZ = selfHZ + obs.halfZ + GAP - Math.abs(z - obs.cz);
 
           if (overlapX > 0 && overlapZ > 0) {
             resolved = false;
-            // Push along the axis with least penetration
             if (overlapX < overlapZ) {
               x += x >= obs.cx ? overlapX : -overlapX;
             } else {
@@ -253,7 +242,6 @@ export function useBuildingDrag(
       e.stopPropagation();
       useWorldStore.getState().selectBuilding(hitId);
 
-      // Snapshot drag data: self extents, boundary limits, sibling obstacles
       prepareDragData(hitId);
 
       stateRef.current = "pending";
@@ -270,7 +258,7 @@ export function useBuildingDrag(
           plotCenter[0],
           plotCenter[1]
         );
-        dragAnchorRef.current = { x: ox, y: oz };
+        dragAnchorRef.current = { x: ox, z: oz };
       }
     };
 
@@ -290,7 +278,6 @@ export function useBuildingDrag(
         stateRef.current = "dragging";
         useWorldStore.getState().setIsDragging(true);
         canvas.style.cursor = "grabbing";
-        map!.dragPan.disable();
       }
 
       if (stateRef.current === "dragging") {
@@ -308,10 +295,8 @@ export function useBuildingDrag(
         );
 
         // 1. Compute raw proposed position
-        let newX =
-          dragStartOffsetRef.current[0] + (mx - dragAnchorRef.current.x);
-        let newZ =
-          dragStartOffsetRef.current[2] + (mz - dragAnchorRef.current.y);
+        let newX = dragStartOffsetRef.current[0] + (mx - dragAnchorRef.current.x);
+        let newZ = dragStartOffsetRef.current[2] + (mz - dragAnchorRef.current.z);
 
         // 2. Clamp to grass boundary
         const maxX = dragMaxOffsetRef.current.x;
@@ -322,7 +307,7 @@ export function useBuildingDrag(
         // 3. Resolve collisions with sibling buildings
         [newX, newZ] = resolveCollisions(newX, newZ);
 
-        // 4. Re-clamp after collision resolution (push might exceed boundary)
+        // 4. Re-clamp after collision resolution
         newX = Math.max(-maxX, Math.min(maxX, newX));
         newZ = Math.max(-maxZ, Math.min(maxZ, newZ));
 
@@ -338,7 +323,6 @@ export function useBuildingDrag(
       const prev = stateRef.current;
 
       if (prev === "dragging" || prev === "pending") {
-        map!.dragPan.enable();
         useWorldStore.getState().setIsDragging(false);
       }
 
@@ -356,10 +340,7 @@ export function useBuildingDrag(
       canvas.removeEventListener("mousedown", onMouseDown);
       window.removeEventListener("mousemove", onMouseMove);
       window.removeEventListener("mouseup", onMouseUp);
-      if (stateRef.current === "dragging") {
-        map!.dragPan.enable();
-      }
       stateRef.current = "idle";
     };
-  }, [mapRef, layer]);
+  }, [layer]);
 }
