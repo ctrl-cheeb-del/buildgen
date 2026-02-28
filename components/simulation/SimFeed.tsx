@@ -67,7 +67,7 @@ function AgentTooltip({
         <div className="text-center">
           <div className="text-[9px] text-white/35">Wealth</div>
           <div className="text-[11px] font-bold text-amber-300">
-            {agent.wealth}g
+            ${agent.wealth}
           </div>
         </div>
         <div className="text-center">

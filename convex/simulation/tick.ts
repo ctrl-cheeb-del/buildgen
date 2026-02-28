@@ -94,13 +94,13 @@ Your story: ${agent.personality}
 
 You own plot #${agent.plotIndex}. Your plot has: ${plotStatus}.${plotBuildingCount > 0 ? ` Types: ${agent.buildingCategory ?? "mixed"}.` : ""}
 Each plot can hold up to ${MAX_BUILDINGS_PER_PLOT} buildings arranged around the perimeter.
-Your wealth: ${agent.wealth} gold. Your satisfaction: ${agent.satisfaction}/100.
+Your wealth: $${agent.wealth}. Your satisfaction: ${agent.satisfaction}/100.
 
 What you remember:
 ${agent.memoryBuffer.length > 0 ? agent.memoryBuffer.map((m) => `- ${m}`).join("\n") : "- Nothing notable yet."}
 
 The city today:
-- Treasury: ${city.treasury} gold, Happiness: ${city.happiness}, Crime: ${city.crimeRate}
+- Treasury: $${city.treasury}, Happiness: ${city.happiness}, Crime: ${city.crimeRate}
 - Tax rates: residential ${Math.round(city.taxRates.residential * 100)}%, commercial ${Math.round(city.taxRates.commercial * 100)}%, industrial ${Math.round(city.taxRates.industrial * 100)}%
 - Mayor's latest decree: "${city.activeDecree?.title ?? "none"}"
 - Builds in progress: ${city.activeBuildCount}/4${city.activeBuildCount >= 4 ? " — FULL! No new builds can start until current ones finish. Building takes a LONG time." : ""}
@@ -169,14 +169,14 @@ function buildMayorPrompt(
 ): string {
   const slotsAvailable = Math.max(0, 4 - city.activeBuildCount);
   const treasuryWarning = city.treasury < 2000
-    ? `\n⚠️ TREASURY CRITICAL: Only ${city.treasury}g left! Treasury CANNOT go below 0. If expenses exceed income, emergency austerity kicks in. Consider raising taxes or cutting budget.`
+    ? `\n⚠️ TREASURY CRITICAL: Only $${city.treasury} left! Treasury CANNOT go below 0. If expenses exceed income, emergency austerity kicks in. Consider raising taxes or cutting budget.`
     : "";
 
   return `You are King Mistral, ruler of KingdomCity. You have 40 citizens on 40 plots.
 Each plot can hold up to 8 buildings arranged around the perimeter. Citizens can build multiple buildings to develop their plots.
 
 City state:
-- Treasury: ${city.treasury} gold (income: ${income}/tick, expenses: ${expenses}/tick, net: ${income - expenses}/tick)
+- Treasury: $${city.treasury} (income: $${income}/tick, expenses: $${expenses}/tick, net: $${income - expenses}/tick)
 - Happiness: ${city.happiness}/100, Crime: ${city.crimeRate}/100, Pollution: ${city.pollutionLevel}/100
 - Approval rating: ${city.approvalRating}/100
 - Builds in progress: ${city.activeBuildCount}/4 — ${slotsAvailable} slots available
@@ -369,7 +369,7 @@ export const run = internalAction({
     const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
     // ── TREASURY STRESS: when money is low, can't fund services → crime rises ──
-    // Below 5000g treasury, crime starts creeping up. At 0g → +25 crime.
+    // Below $5000 treasury, crime starts creeping up. At $0 → +25 crime.
     const treasuryStress = Math.max(0, 1 - city.treasury / 5000) * 25;
     const crimeRate = clamp(30 + census.industrial * 8 - census.civic * 15 - budget.security * 40 + treasuryStress, 0, 100);
     const pollutionLevel = clamp(10 + census.industrial * 12 + census.commercial * 3 - budget.infrastructure * 20, 0, 100);
@@ -659,7 +659,7 @@ export const run = internalAction({
           const salePrice = buildingValues[victim.category ?? "residential"] ?? 800;
           newTreasury += salePrice;
 
-          console.log(`[tick ${tickNumber}] FORCED SALE: Building on plot #${victim.plotIndex} sold for ${salePrice}g`);
+          console.log(`[tick ${tickNumber}] FORCED SALE: Building on plot #${victim.plotIndex} sold for $${salePrice}`);
 
           // Delete the building + reset the plot
           await ctx.runMutation(internal.simulation._simBuildHelpers.liquidateBuilding, {
@@ -693,7 +693,7 @@ export const run = internalAction({
             await ctx.runMutation(internal.simulation.agentMessages.create, {
               senderPlotIndex: mayor.plotIndex,
               senderName: mayor.name,
-              content: `Emergency: Sold ${victimAgent?.name ?? "a citizen"}'s ${victim.category ?? "building"} for ${salePrice}g`,
+              content: `Emergency: Sold ${victimAgent?.name ?? "a citizen"}'s ${victim.category ?? "building"} for $${salePrice}`,
               messageType: "announcement" as const,
               tickNumber,
             });

@@ -68,7 +68,7 @@ export default function MetricsBar() {
         {/* Inner highlight gradient for depth */}
         <div className="absolute inset-0 rounded-full bg-gradient-to-b from-white/[0.08] to-transparent pointer-events-none" />
 
-        {badge("Treasury", `${city.treasury.toLocaleString()}g`)}
+        {badge("Treasury", `$${city.treasury.toLocaleString()}`)}
         {separator()}
         {badge("Happy", city.happiness, { green: 60, yellow: 30 })}
         {separator()}

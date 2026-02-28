@@ -23,7 +23,7 @@ Your nature: ${v.traits.join(", ")}.
 Your story: ${v.backstory}
 
 You own plot #${v.plotIndex}. Currently built: ${v.buildingCategory ?? "empty land"}.
-Your wealth: ${v.wealth} gold. Your satisfaction: ${v.satisfaction}/100.
+Your wealth: $${v.wealth}. Your satisfaction: ${v.satisfaction}/100.
 
 What you remember:
 ${v.memoryBuffer.length > 0 ? v.memoryBuffer.map((m) => `- ${m}`).join("\n") : "- Nothing notable yet."}
@@ -73,7 +73,7 @@ export function mayorPrompt(vars: {
   return `You are King Mistral, ruler of KingdomCity. You have 40 citizens on 40 plots.
 
 City state:
-- Treasury: ${v.treasury} gold (income: ${v.income}/tick, expenses: ${v.expenses}/tick)
+- Treasury: $${v.treasury} (income: $${v.income}/tick, expenses: $${v.expenses}/tick)
 - Happiness: ${v.happiness}/100, Crime: ${v.crimeRate}/100, Pollution: ${v.pollution}/100
 - Approval rating: ${v.approval}/100
 - Builds in progress: ${v.activeBuildCount}/4 (HARD LIMIT: never approve if already 4)
