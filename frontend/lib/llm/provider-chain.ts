@@ -109,14 +109,14 @@ export async function callOpenRouter(
 
 export const providers: Provider[] = [
   {
+    name: "Bedrock (Claude Sonnet 4.5)",
+    call: (prompt, imageUrls) =>
+      callBedrock("us.anthropic.claude-sonnet-4-5-20250929-v1:0", prompt, imageUrls),
+  },
+  {
     name: "Bedrock (Claude Opus 4.6)",
     call: (prompt, imageUrls) =>
       callBedrock("us.anthropic.claude-opus-4-6-v1", prompt, imageUrls),
-  },
-  {
-    name: "Bedrock (Claude Sonnet 4.6)",
-    call: (prompt, imageUrls) =>
-      callBedrock("us.anthropic.claude-sonnet-4-6", prompt, imageUrls),
   },
   {
     name: "OpenRouter (Claude Opus 4.6)",
