@@ -13,7 +13,11 @@ import ImagePreview from "@/components/ImagePreview";
 import CachedPreviewPicker from "@/components/CachedPreviewPicker";
 import AuthButton from "@/components/AuthButton";
 import CarModeButton from "@/components/CarModeButton";
+import WalkModeButton from "@/components/fp/WalkModeButton";
+import CharacterModal from "@/components/fp/CharacterModal";
+import FirstPersonOverlay from "@/components/fp/FirstPersonOverlay";
 import ControlPanel from "@/components/ControlPanel";
+import { useFPStore } from "@/lib/stores/fp-store";
 import { usePipeline } from "@/lib/hooks/usePipeline";
 import { useGridSync } from "@/lib/hooks/useGridSync";
 import { useBuildingDrag } from "@/lib/hooks/useBuildingDrag";
@@ -184,6 +188,43 @@ export default function Home() {
   useCarMode(mapRef, layer, handleCarSync, handleCarExit);
   useRemoteCars(carUserId);
 
+  // First-person walk mode
+  const fpMode = useFPStore((s) => s.fpMode);
+  const fpCharacter = useFPStore((s) => s.character);
+  const setFPMode = useFPStore((s) => s.setFPMode);
+  const setFPCharacter = useFPStore((s) => s.setCharacter);
+  const [showCharacterModal, setShowCharacterModal] = useState(false);
+
+  const handleWalkClick = useCallback(() => {
+    setShowCharacterModal(true);
+  }, []);
+
+  const handleCharacterConfirm = useCallback(
+    (name: string, color: string) => {
+      setFPCharacter({ name, color });
+      setShowCharacterModal(false);
+      setFPMode(true);
+    },
+    [setFPCharacter, setFPMode]
+  );
+
+  const handleCharacterCancel = useCallback(() => {
+    setShowCharacterModal(false);
+  }, []);
+
+  // Map buildings data for FP scene
+  const fpBuildings = useMemo(() => {
+    if (!buildings) return [];
+    return buildings.map((b) => ({
+      _id: b._id as string,
+      plotIndex: b.plotIndex,
+      proceduralCode: b.proceduralCode,
+      position: b.position ?? null,
+      rotation: b.rotation ?? null,
+      scale: b.scale ?? null,
+    }));
+  }, [buildings]);
+
   const isOwnerOfSelected = !!(
     selectedId &&
     myBuildings?.some((b) => (b._id as string) === selectedId)
@@ -197,13 +238,28 @@ export default function Home() {
         onPlotClick={handlePlotClick}
       />
 
-      {/* Auth button + car mode — top right */}
-      <div className="absolute top-4 right-4 z-10 flex flex-col items-end gap-2">
-        <AuthButton />
-        <CarModeButton />
-      </div>
+      {/* Auth button + car/walk mode — top right */}
+      {!fpMode && (
+        <div className="absolute top-4 right-4 z-10 flex flex-col items-end gap-2">
+          <AuthButton />
+          <CarModeButton />
+          <WalkModeButton onClick={handleWalkClick} />
+        </div>
+      )}
+
+      {/* Character creation modal */}
+      {showCharacterModal && (
+        <CharacterModal
+          onConfirm={handleCharacterConfirm}
+          onCancel={handleCharacterCancel}
+        />
+      )}
+
+      {/* First-person overlay */}
+      {fpMode && <FirstPersonOverlay buildings={fpBuildings} />}
 
       {/* Main panel */}
+      {!fpMode && (
       <div className="absolute top-4 left-4 z-10 bg-white/95 backdrop-blur-sm rounded-xl p-5 w-[340px] max-h-[calc(100vh-32px)] overflow-y-auto shadow-lg">
         <h1 className="text-lg font-bold text-gray-900 mb-3">City Builder</h1>
 
@@ -306,6 +362,7 @@ export default function Home() {
           </div>
         )}
       </div>
+      )}
     </div>
   );
 }

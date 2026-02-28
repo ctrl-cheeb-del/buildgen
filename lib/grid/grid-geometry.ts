@@ -53,7 +53,7 @@ export function gridIndexToColRow(index: number): { col: number; row: number } {
 }
 
 /** Center of a plot cell in meters relative to city origin */
-function plotCenterMeters(col: number, row: number): [number, number] {
+export function plotCenterMeters(col: number, row: number): [number, number] {
   const { startX, startZ } = gridOffsets();
   const x = startX + ROAD_WIDTH_M + col * GRID_STEP_M + PLOT_SIZE_M / 2;
   const z = startZ + ROAD_WIDTH_M + row * GRID_STEP_M + PLOT_SIZE_M / 2;
