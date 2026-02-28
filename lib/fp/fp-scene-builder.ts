@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { buildGroundPlanes } from "../viewer/ground-planes";
+import { createOcean } from "../viewer/ocean";
 import { createEnvironmentMap } from "../viewer/environment";
 import { loadProceduralGeometry } from "../viewer/procedural-loader";
 import { applyBuildingTextures } from "../viewer/building-textures";
@@ -38,7 +39,7 @@ export function buildFPScene(
 
   // Sky + fog
   scene.background = new THREE.Color(0x87ceeb);
-  scene.fog = new THREE.FogExp2(0xc8ddf0, 0.0015);
+  scene.fog = new THREE.FogExp2(0xc8ddf0, 0.0006);
 
   // Environment map for PBR
   const envMap = createEnvironmentMap(renderer);
@@ -78,6 +79,10 @@ export function buildFPScene(
   // Ground planes (roads, pavements, grass)
   const ground = buildGroundPlanes();
   scene.add(ground);
+
+  // Ocean (surrounds city edges)
+  const ocean = createOcean();
+  scene.add(ocean.mesh);
 
   // Buildings
   for (const b of buildings) {
@@ -143,6 +148,7 @@ export function buildFPScene(
 
   const dispose = () => {
     envMap.dispose();
+    ocean.dispose();
     scene.traverse((child) => {
       if (child instanceof THREE.Mesh) {
         child.geometry.dispose();
