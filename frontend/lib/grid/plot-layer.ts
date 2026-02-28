@@ -6,8 +6,9 @@ const OUTLINE_COLOR = "#9ca3af";
 
 const PLOT_COLORS: Record<string, string> = {
   empty: "#f3f4f6",
+  claimed: "#dbeafe",
   generating: "#fef3c7",
-  complete: "#ecfdf5",
+  occupied: "#ecfdf5",
 };
 
 export function initGridLayers(
@@ -56,10 +57,12 @@ export function initGridLayers(
         ["get", "plotStatus"],
         "empty",
         PLOT_COLORS.empty,
+        "claimed",
+        PLOT_COLORS.claimed,
         "generating",
         PLOT_COLORS.generating,
-        "complete",
-        PLOT_COLORS.complete,
+        "occupied",
+        PLOT_COLORS.occupied,
         PLOT_COLORS.empty,
       ],
       "fill-opacity": [

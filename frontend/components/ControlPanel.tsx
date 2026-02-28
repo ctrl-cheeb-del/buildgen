@@ -3,7 +3,11 @@
 import { useState, useCallback, useEffect } from "react";
 import { useWorldStore } from "@/lib/stores/world-store";
 
-export default function ControlPanel() {
+interface ControlPanelProps {
+  isOwner: boolean;
+}
+
+export default function ControlPanel({ isOwner }: ControlPanelProps) {
   const selectedId = useWorldStore((s) => s.selectedId);
   const buildings = useWorldStore((s) => s.buildings);
   const updateTransform = useWorldStore((s) => s.updateTransform);
@@ -52,6 +56,14 @@ export default function ControlPanel() {
     [rotation, selectedId, updateTransform]
   );
 
+  if (!isOwner) {
+    return (
+      <div className="text-xs text-gray-400 italic py-2">
+        You can only adjust buildings on your own plot.
+      </div>
+    );
+  }
+
   const scaleDisplay = Math.pow(10, scale);
 
   return (
@@ -91,7 +103,7 @@ export default function ControlPanel() {
 
         {isOpen && (
           <div className="px-3 py-2 space-y-2">
-            {/* Offset */}
+            {/* Offset — X/Z constrained to [-30, 30] */}
             <div className="flex items-center text-[10px] text-gray-400 uppercase tracking-wider">
               Position Offset
               <button
@@ -104,31 +116,36 @@ export default function ControlPanel() {
                 reset
               </button>
             </div>
-            {(["X", "Y", "Z"] as const).map((axis, i) => (
-              <div key={`off-${axis}`} className="flex items-center gap-1.5">
-                <span
-                  className={`text-xs font-semibold w-3.5 text-center ${
-                    i === 0 ? "text-red-500" : i === 1 ? "text-green-500" : "text-blue-500"
-                  }`}
-                >
-                  {axis}
-                </span>
-                <input
-                  type="range"
-                  min={-500}
-                  max={500}
-                  step={1}
-                  value={offset[i]}
-                  onChange={(e) =>
-                    handleOffsetChange(i as 0 | 1 | 2, parseFloat(e.target.value))
-                  }
-                  className="flex-1 h-1 accent-blue-600"
-                />
-                <span className="text-xs text-gray-600 min-w-[36px] text-right tabular-nums">
-                  {offset[i]}
-                </span>
-              </div>
-            ))}
+            {(["X", "Y", "Z"] as const).map((axis, i) => {
+              const isXZ = i === 0 || i === 2;
+              const min = isXZ ? -30 : -500;
+              const max = isXZ ? 30 : 500;
+              return (
+                <div key={`off-${axis}`} className="flex items-center gap-1.5">
+                  <span
+                    className={`text-xs font-semibold w-3.5 text-center ${
+                      i === 0 ? "text-red-500" : i === 1 ? "text-green-500" : "text-blue-500"
+                    }`}
+                  >
+                    {axis}
+                  </span>
+                  <input
+                    type="range"
+                    min={min}
+                    max={max}
+                    step={1}
+                    value={offset[i]}
+                    onChange={(e) =>
+                      handleOffsetChange(i as 0 | 1 | 2, parseFloat(e.target.value))
+                    }
+                    className="flex-1 h-1 accent-blue-600"
+                  />
+                  <span className="text-xs text-gray-600 min-w-[36px] text-right tabular-nums">
+                    {offset[i]}
+                  </span>
+                </div>
+              );
+            })}
 
             {/* Rotation */}
             <div className="flex items-center text-[10px] text-gray-400 uppercase tracking-wider mt-1.5">

@@ -18,20 +18,21 @@ export function useGridSync() {
   const initializePlots = useMutation(api.plots.initializePlots);
   const initialized = useRef(false);
 
-  // Initialize plots on first load if empty
+  // Initialize plots on first load if empty or wrong count
   useEffect(() => {
     if (initialized.current) return;
-    if (plots !== undefined && plots.length === 0) {
+    if (plots !== undefined) {
       initialized.current = true;
-      initializePlots();
-    } else if (plots !== undefined && plots.length > 0) {
-      initialized.current = true;
+      if (plots.length === 0 || plots.length !== 80) {
+        initializePlots();
+      }
     }
   }, [plots, initializePlots]);
 
   // Sync buildings from Convex to Zustand/Three.js
-  const { addBuilding, removeBuilding, layer } = useWorldStore();
+  const { addBuilding, removeBuilding, updateTransform, layer } = useWorldStore();
   const syncedIds = useRef(new Set<string>());
+  const localPendingUpdates = useRef(new Map<string, number>());
 
   useEffect(() => {
     if (!buildings || !layer) return;
@@ -41,11 +42,39 @@ export function useGridSync() {
     // Add new buildings
     for (const b of buildings) {
       const id = b._id as string;
-      if (syncedIds.current.has(id)) continue;
+
+      if (syncedIds.current.has(id)) {
+        // Check for transform updates from Convex (other users' changes)
+        const pendingTs = localPendingUpdates.current.get(id);
+        if (pendingTs && Date.now() - pendingTs < 500) {
+          // Skip echo: this is our own update bouncing back
+          continue;
+        }
+
+        // Apply persisted transform updates
+        const offset: [number, number, number] = b.position
+          ? [b.position.x, b.position.y, b.position.z]
+          : [0, 0, 0];
+        const rotation: [number, number, number] = b.rotation
+          ? [b.rotation.x, b.rotation.y, b.rotation.z]
+          : [0, 0, 0];
+        const scale = b.scale ?? 1;
+
+        updateTransform(id, { offset, rotation, scale });
+        continue;
+      }
 
       try {
         const { col, row } = gridIndexToColRow(b.plotIndex);
         const [lng, lat] = getPlotCenter(col, row);
+
+        const offset: [number, number, number] = b.position
+          ? [b.position.x, b.position.y, b.position.z]
+          : [0, 0, 0];
+        const rotation: [number, number, number] = b.rotation
+          ? [b.rotation.x, b.rotation.y, b.rotation.z]
+          : [0, 0, 0];
+
         const group = loadProceduralGeometry(b.proceduralCode);
 
         addBuilding(
@@ -55,9 +84,9 @@ export function useGridSync() {
             lng,
             lat,
             path: "A",
-            scale: 1,
-            offset: [0, 0, 0],
-            rotation: [0, 0, 0],
+            scale: b.scale ?? 1,
+            offset,
+            rotation,
             visible: true,
             proceduralCode: b.proceduralCode,
           },
@@ -76,7 +105,7 @@ export function useGridSync() {
         syncedIds.current.delete(id);
       }
     }
-  }, [buildings, layer, addBuilding, removeBuilding]);
+  }, [buildings, layer, addBuilding, removeBuilding, updateTransform]);
 
   // Generate plot states for GeoJSON
   const plotStates: PlotState[] = useMemo(() => {
@@ -86,7 +115,10 @@ export function useGridSync() {
       col: p.col,
       row: p.row,
       status: p.status,
-      buildingId: p.buildingId ?? undefined,
+      ownerId: p.ownerId ?? undefined,
+      ownerName: p.ownerName ?? undefined,
+      ownerUsername: p.ownerUsername ?? undefined,
+      ownerAvatar: p.ownerAvatar ?? undefined,
     }));
   }, [plots]);
 
@@ -94,5 +126,11 @@ export function useGridSync() {
     return generateGridGeoJSON(plotStates);
   }, [plotStates]);
 
-  return { plots, buildings, plotStates, gridGeoJSON };
+  return {
+    plots,
+    buildings,
+    plotStates,
+    gridGeoJSON,
+    localPendingUpdates: localPendingUpdates.current,
+  };
 }

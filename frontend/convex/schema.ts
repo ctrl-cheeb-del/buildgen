@@ -8,17 +8,31 @@ export default defineSchema({
     row: v.number(),
     status: v.union(
       v.literal("empty"),
+      v.literal("claimed"),
       v.literal("generating"),
-      v.literal("complete")
+      v.literal("occupied")
     ),
-    buildingId: v.optional(v.id("buildings")),
-  }).index("by_index", ["index"]),
+    ownerId: v.optional(v.string()),
+    ownerName: v.optional(v.string()),
+    ownerUsername: v.optional(v.string()),
+    ownerAvatar: v.optional(v.string()),
+  })
+    .index("by_index", ["index"])
+    .index("by_ownerId", ["ownerId"]),
 
   buildings: defineTable({
     plotIndex: v.number(),
+    ownerId: v.string(),
     prompt: v.string(),
     proceduralCode: v.string(),
     multiViewGrid: v.optional(v.string()),
+    position: v.optional(
+      v.object({ x: v.number(), y: v.number(), z: v.number() })
+    ),
+    rotation: v.optional(
+      v.object({ x: v.number(), y: v.number(), z: v.number() })
+    ),
+    scale: v.optional(v.number()),
     createdAt: v.number(),
   }).index("by_plotIndex", ["plotIndex"]),
 

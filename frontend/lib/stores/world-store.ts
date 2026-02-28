@@ -5,14 +5,23 @@ import type { WorldBuilding } from "../types";
 import type { ThreeJSMapboxLayer } from "../viewer/mapbox-layer";
 import { CITY_ORIGIN_LNG, CITY_ORIGIN_LAT } from "../grid/grid-constants";
 
+type ConvexUpdateFn = (
+  buildingId: string,
+  position?: { x: number; y: number; z: number },
+  rotation?: { x: number; y: number; z: number },
+  scale?: number
+) => void;
+
 interface WorldState {
   buildings: Map<string, WorldBuilding>;
   containers: Map<string, THREE.Group>;
   selectedId: string | null;
   layer: ThreeJSMapboxLayer | null;
   origin: [number, number];
+  convexUpdateTransform: ConvexUpdateFn | null;
 
   setLayer: (layer: ThreeJSMapboxLayer) => void;
+  setConvexUpdateTransform: (fn: ConvexUpdateFn) => void;
   addBuilding: (building: WorldBuilding, modelGroup: THREE.Group) => void;
   removeBuilding: (id: string) => void;
   selectBuilding: (id: string | null) => void;
@@ -55,15 +64,23 @@ function applyTransforms(
   );
 }
 
+// Debounce map for Convex sync
+const debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
 export const useWorldStore = create<WorldState>((set, get) => ({
   buildings: new Map(),
   containers: new Map(),
   selectedId: null,
   layer: null,
   origin: [CITY_ORIGIN_LNG, CITY_ORIGIN_LAT] as [number, number],
+  convexUpdateTransform: null,
 
   setLayer: (layer) => {
     set({ layer, origin: layer.getOrigin() });
+  },
+
+  setConvexUpdateTransform: (fn) => {
+    set({ convexUpdateTransform: fn });
   },
 
   addBuilding: (building, modelGroup) => {
@@ -146,6 +163,25 @@ export const useWorldStore = create<WorldState>((set, get) => ({
     const newBuildings = new Map(state.buildings);
     newBuildings.set(id, updated);
     set({ buildings: newBuildings });
+
+    // Debounced Convex sync
+    const syncFn = state.convexUpdateTransform;
+    if (syncFn) {
+      const existing = debounceTimers.get(id);
+      if (existing) clearTimeout(existing);
+      debounceTimers.set(
+        id,
+        setTimeout(() => {
+          debounceTimers.delete(id);
+          syncFn(
+            id,
+            { x: updated.offset[0], y: updated.offset[1], z: updated.offset[2] },
+            { x: updated.rotation[0], y: updated.rotation[1], z: updated.rotation[2] },
+            updated.scale
+          );
+        }, 200)
+      );
+    }
   },
 
   getAllBuildings: () => {

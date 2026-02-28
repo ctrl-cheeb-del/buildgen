@@ -4,7 +4,6 @@ import { useState, useCallback } from "react";
 import { useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import type { MultiViewImages, PipelineStatus } from "../types";
-import { gridIndexToColRow, getPlotCenter } from "../grid/grid-geometry";
 
 interface PipelineState {
   isRunning: boolean;
@@ -43,9 +42,8 @@ export function usePipeline() {
     },
   });
 
-  const claimNextEmpty = useMutation(api.plots.claimNextEmpty);
   const createBuilding = useMutation(api.buildings.createBuilding);
-  const markComplete = useMutation(api.plots.markComplete);
+  const markGenerating = useMutation(api.plots.markGenerating);
   const resetPlot = useMutation(api.plots.resetPlot);
   const generateUploadUrl = useMutation(api.multiViewPreviews.generateUploadUrl);
   const savePreview = useMutation(api.multiViewPreviews.save);
@@ -75,7 +73,7 @@ export function usePipeline() {
   }, []);
 
   const runPipeline = useCallback(
-    async (buildingName: string, cachedViews?: MultiViewImages) => {
+    async (buildingName: string, plotIndex: number, cachedViews?: MultiViewImages) => {
       if (!buildingName.trim()) return;
 
       setState((prev) => ({
@@ -85,17 +83,9 @@ export function usePipeline() {
       }));
       resetSteps();
 
-      let plotIndex: number | null = null;
-
       try {
-        // Claim next empty plot
-        plotIndex = await claimNextEmpty();
-        if (plotIndex === null) {
-          throw new Error("No empty plots available");
-        }
-
-        const { col, row } = gridIndexToColRow(plotIndex);
-        const [lng, lat] = getPlotCenter(col, row);
+        // Mark the user's plot as generating
+        await markGenerating({ plotIndex });
 
         let views: MultiViewImages;
 
@@ -205,26 +195,22 @@ export function usePipeline() {
         // Step 3: Store in Convex (rendering happens via useGridSync subscription)
         setStep("render", "running", "Saving building...");
 
-        const buildingId = await createBuilding({
+        await createBuilding({
           plotIndex,
           prompt: buildingName,
           proceduralCode: code,
           multiViewGrid: views.gridUrl,
         });
 
-        await markComplete({ plotIndex, buildingId });
-
         setStep("render", "done", `Placed in Plot #${plotIndex}`);
       } catch (err) {
         console.error("[Pipeline] Error:", err);
 
-        // Rollback the claimed plot so it can be reused
-        if (plotIndex !== null) {
-          try {
-            await resetPlot({ plotIndex });
-          } catch (rollbackErr) {
-            console.error("[Pipeline] Failed to rollback plot:", rollbackErr);
-          }
+        // Rollback the plot status
+        try {
+          await resetPlot({ plotIndex });
+        } catch (rollbackErr) {
+          console.error("[Pipeline] Failed to rollback plot:", rollbackErr);
         }
 
         setState((prev) => {
@@ -245,7 +231,7 @@ export function usePipeline() {
         setState((prev) => ({ ...prev, isRunning: false }));
       }
     },
-    [claimNextEmpty, createBuilding, markComplete, resetPlot, resetSteps, setStep, generateUploadUrl, savePreview]
+    [createBuilding, markGenerating, resetPlot, resetSteps, setStep, generateUploadUrl, savePreview]
   );
 
   return {

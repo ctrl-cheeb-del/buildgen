@@ -16,7 +16,10 @@ export interface PlotState {
   col: number;
   row: number;
   status: PlotStatus;
-  buildingId?: string;
+  ownerId?: string;
+  ownerName?: string;
+  ownerUsername?: string;
+  ownerAvatar?: string;
 }
 
 /**
@@ -194,12 +197,19 @@ export function generateGridGeoJSON(
       const pz = startZ + ROAD_WIDTH_M + r * GRID_STEP_M + PAVEMENT_WIDTH_M;
       const innerSize = PLOT_SIZE_M - 2 * PAVEMENT_WIDTH_M;
 
+      const ownerName = state?.ownerName ?? "";
+      const ownerUsername = state?.ownerUsername ?? "";
+      const ownerAvatar = state?.ownerAvatar ?? "";
+
       features.push({
         type: "Feature",
         properties: {
           layerType: "plot",
           plotIndex: index,
           plotStatus: status,
+          ownerName,
+          ownerUsername,
+          ownerAvatar,
         },
         geometry: {
           type: "Polygon",
