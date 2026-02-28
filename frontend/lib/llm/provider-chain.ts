@@ -1,4 +1,8 @@
 import { Mistral } from "@mistralai/mistralai";
+import {
+  BedrockRuntimeClient,
+  InvokeModelCommand,
+} from "@aws-sdk/client-bedrock-runtime";
 
 let _mistral: Mistral | null = null;
 function getMistral(): Mistral {
@@ -6,6 +10,59 @@ function getMistral(): Mistral {
     _mistral = new Mistral({ apiKey: process.env.MISTRAL_API_KEY });
   }
   return _mistral;
+}
+
+let _bedrock: BedrockRuntimeClient | null = null;
+function getBedrock(): BedrockRuntimeClient {
+  if (!_bedrock) {
+    _bedrock = new BedrockRuntimeClient({
+      region: process.env.AWS_DEFAULT_REGION || "us-west-2",
+      credentials: {
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+        sessionToken: process.env.AWS_SESSION_TOKEN,
+      },
+    });
+  }
+  return _bedrock;
+}
+
+async function callBedrock(
+  modelId: string,
+  prompt: string,
+  imageUrls: string[]
+): Promise<string> {
+  const content: Array<Record<string, unknown>> = [];
+
+  for (const url of imageUrls) {
+    const res = await fetch(url);
+    const buf = Buffer.from(await res.arrayBuffer());
+    const mediaType = res.headers.get("content-type") || "image/png";
+    content.push({
+      type: "image",
+      source: { type: "base64", media_type: mediaType, data: buf.toString("base64") },
+    });
+  }
+
+  content.push({ type: "text", text: prompt });
+
+  const body = JSON.stringify({
+    anthropic_version: "bedrock-2023-05-31",
+    max_tokens: 8192,
+    messages: [{ role: "user", content }],
+  });
+
+  const command = new InvokeModelCommand({
+    modelId,
+    contentType: "application/json",
+    body: new TextEncoder().encode(body),
+  });
+
+  const response = await getBedrock().send(command);
+  const result = JSON.parse(new TextDecoder().decode(response.body));
+  const text = result.content?.[0]?.text;
+  if (!text) throw new Error(`Bedrock ${modelId} returned no content`);
+  return text;
 }
 
 export type Provider = {
@@ -52,6 +109,21 @@ export async function callOpenRouter(
 
 export const providers: Provider[] = [
   {
+    name: "Bedrock (Claude Opus 4.6)",
+    call: (prompt, imageUrls) =>
+      callBedrock("us.anthropic.claude-opus-4-6-v1", prompt, imageUrls),
+  },
+  {
+    name: "Bedrock (Claude Sonnet 4.6)",
+    call: (prompt, imageUrls) =>
+      callBedrock("us.anthropic.claude-sonnet-4-6", prompt, imageUrls),
+  },
+  {
+    name: "OpenRouter (Claude Opus 4.6)",
+    call: (prompt, imageUrls) =>
+      callOpenRouter("anthropic/claude-opus-4-6", prompt, imageUrls),
+  },
+  {
     name: "Mistral (direct)",
     call: async (prompt, imageUrls) => {
       const imageContent = imageUrls.map((url) => ({
@@ -79,11 +151,6 @@ export const providers: Provider[] = [
     name: "OpenRouter (Mistral Large)",
     call: (prompt, imageUrls) =>
       callOpenRouter("mistralai/mistral-large-2512", prompt, imageUrls),
-  },
-  {
-    name: "OpenRouter (Claude Opus 4.6)",
-    call: (prompt, imageUrls) =>
-      callOpenRouter("anthropic/claude-opus-4-6", prompt, imageUrls),
   },
 ];
 
