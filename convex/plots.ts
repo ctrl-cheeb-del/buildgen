@@ -237,7 +237,7 @@ export const markOccupiedInternal = internalMutation({
     await ctx.db.patch(plot._id, {
       status: "occupied",
       pipelineStep: undefined,
-      pipelineMultiViewUrl: undefined,
+      // Keep pipelineMultiViewUrl — iteration loop needs it after generation
     });
   },
 });

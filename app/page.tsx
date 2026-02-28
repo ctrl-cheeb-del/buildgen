@@ -77,30 +77,6 @@ export default function Home() {
   const multiViewUrl = myPlot?.pipelineMultiViewUrl;
   const prevPlotStatus = useRef(plotStatus);
 
-  useEffect(() => {
-    const { setNodeStatus, setActive, reset } = usePipelineStore.getState();
-
-    if (plotStatus === "generating") {
-      setActive(true);
-      const stepOrder = ["generating-views", "generating-code", "placing"];
-      const nodeIds = ["generate-views", "generate-code", "place-on-map"] as const;
-      const stepIdx = stepOrder.indexOf(pipelineStep ?? "");
-
-      for (let i = 0; i < nodeIds.length; i++) {
-        if (i < stepIdx) setNodeStatus(nodeIds[i], "done");
-        else if (i === stepIdx) setNodeStatus(nodeIds[i], "active");
-        else setNodeStatus(nodeIds[i], "pending");
-      }
-    } else if (plotStatus === "occupied" && prevPlotStatus.current === "generating") {
-      // Generation just completed — mark initial steps done
-      setNodeStatus("generate-views", "done");
-      setNodeStatus("generate-code", "done");
-      setNodeStatus("place-on-map", "done");
-    }
-
-    prevPlotStatus.current = plotStatus;
-  }, [pipelineStep, plotStatus]);
-
   const handlePlotClick = useCallback(
     async (plotIndex: number) => {
       const plot = plotStates.find((p) => p.index === plotIndex);
@@ -141,6 +117,42 @@ export default function Home() {
   const myBuildings = buildings?.filter(
     (b) => myPlot && b.plotIndex === myPlot.index
   );
+
+  // Sync Convex pipeline state → pipeline-store (drives flowchart UI)
+  useEffect(() => {
+    const { setNodeStatus, setActive } = usePipelineStore.getState();
+
+    if (plotStatus === "generating") {
+      setActive(true);
+      const stepOrder = ["generating-views", "generating-code", "placing"];
+      const nodeIds = ["generate-views", "generate-code", "place-on-map"] as const;
+      const stepIdx = stepOrder.indexOf(pipelineStep ?? "");
+
+      for (let i = 0; i < nodeIds.length; i++) {
+        if (i < stepIdx) setNodeStatus(nodeIds[i], "done");
+        else if (i === stepIdx) setNodeStatus(nodeIds[i], "active");
+        else setNodeStatus(nodeIds[i], "pending");
+      }
+    } else if (plotStatus === "occupied" && prevPlotStatus.current === "generating") {
+      // Generation just completed — mark initial steps done
+      setNodeStatus("generate-views", "done");
+      setNodeStatus("generate-code", "done");
+      setNodeStatus("place-on-map", "done");
+
+      // Auto-select the newest building on our plot for iteration
+      if (myBuildings && myBuildings.length > 0) {
+        const newest = myBuildings[myBuildings.length - 1];
+        selectBuilding(newest._id as string);
+      }
+    } else if (plotStatus === "occupied" && multiViewUrl && prevPlotStatus.current === undefined) {
+      // Page refresh — plot is occupied with multiViewUrl, mark gen steps as done
+      setNodeStatus("generate-views", "done");
+      setNodeStatus("generate-code", "done");
+      setNodeStatus("place-on-map", "done");
+    }
+
+    prevPlotStatus.current = plotStatus;
+  }, [pipelineStep, plotStatus, myBuildings, selectBuilding, multiViewUrl]);
 
   // Owned building IDs for drag system
   const ownedKey = myBuildings?.map((b) => b._id).join(",") ?? "";
@@ -342,7 +354,9 @@ export default function Home() {
     pipelineIsActive ||
     pipelineIterationCount > 0 ||
     isRunning ||
+    iteration.isIterating ||
     plotStatus === "generating" ||
+    !!multiViewUrl ||
     !!pipelineError;
   const [isMinimized, setMinimized] = useState(false);
 
