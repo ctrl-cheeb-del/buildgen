@@ -169,21 +169,23 @@ export function loadProceduralGeometry(code: string): THREE.Group {
     return group;
   } catch (err) {
     console.warn("[ProceduralLoader] Failed to execute generated code:", err);
+    console.warn("[ProceduralLoader] First 200 chars:", code.slice(0, 200));
     return createFallbackGroup();
   }
 }
 
 function createFallbackGroup(): THREE.Group {
   const group = new THREE.Group();
-  const geo = new THREE.BoxGeometry(20, 50, 20);
+  // Neutral placeholder — beige concrete block instead of glaring red
+  const geo = new THREE.BoxGeometry(16, 30, 16);
   const mat = new THREE.MeshStandardMaterial({
-    color: 0xff4444,
-    roughness: 0.5,
+    color: 0xc4b5a0,
+    roughness: 0.85,
   });
   const mesh = new THREE.Mesh(geo, mat);
   mesh.castShadow = true;
   mesh.receiveShadow = true;
-  mesh.position.y = 25;
+  mesh.position.y = 15;
   group.add(mesh);
   return group;
 }

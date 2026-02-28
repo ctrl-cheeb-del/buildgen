@@ -377,6 +377,12 @@ The code must create a THREE.Group and return it.`;
     const improved = codeMatch ? codeMatch[1].trim() : text.trim();
     if (!improved || improved.length < 50) return code;
 
+    // Validate: must contain THREE.Group and return statement
+    if (!improved.includes("THREE.Group") || !improved.includes("return")) {
+      console.warn(`[agentBuild] Improved code missing THREE.Group or return, keeping original`);
+      return code;
+    }
+
     console.log(`[agentBuild] Improved code (${improved.length} chars)`);
     return improved;
   } catch {
@@ -439,6 +445,12 @@ ${proceduralCode}
   const codeMatch = text.match(/```(?:javascript|js)?\s*\n([\s\S]*?)```/);
   const code = codeMatch ? codeMatch[1].trim() : text.trim();
   if (!code) throw new Error("Adaptation returned no usable geometry code");
+
+  // Validate: must contain THREE.Group and return statement
+  if (!code.includes("THREE.Group") || !code.includes("return")) {
+    console.warn(`[agentBuild] Adapted code missing THREE.Group or return, using original`);
+    return proceduralCode;
+  }
 
   console.log(`[agentBuild] Adapted code (${code.length} chars)`);
   return code;
