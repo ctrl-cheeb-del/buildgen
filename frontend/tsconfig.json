@@ -8,7 +8,7 @@
     ],
     "allowJs": true,
     "skipLibCheck": true,
-    "types": ["node", "react", "react-dom", "three", "webxr"],
+    "types": ["node", "react", "react-dom", "three"],
     "strict": true,
     "noEmit": true,
     "esModuleInterop": true,

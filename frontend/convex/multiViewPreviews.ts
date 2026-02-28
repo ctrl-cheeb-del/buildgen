@@ -74,6 +74,41 @@ export const list = query({
   },
 });
 
+export const getUrlsByBuildingName = query({
+  args: { buildingName: v.string() },
+  returns: v.union(
+    v.object({
+      front: v.union(v.string(), v.null()),
+      right: v.union(v.string(), v.null()),
+      back: v.union(v.string(), v.null()),
+      left: v.union(v.string(), v.null()),
+      gridUrl: v.union(v.string(), v.null()),
+    }),
+    v.null()
+  ),
+  handler: async (ctx, args) => {
+    // Find the most recent preview for this building name
+    const previews = await ctx.db
+      .query("multiViewPreviews")
+      .filter((q) => q.eq(q.field("buildingName"), args.buildingName))
+      .order("desc")
+      .take(1);
+
+    const preview = previews[0];
+    if (!preview) return null;
+
+    const [front, right, back, left, gridUrl] = await Promise.all([
+      ctx.storage.getUrl(preview.frontStorageId),
+      ctx.storage.getUrl(preview.rightStorageId),
+      ctx.storage.getUrl(preview.backStorageId),
+      ctx.storage.getUrl(preview.leftStorageId),
+      ctx.storage.getUrl(preview.gridStorageId),
+    ]);
+
+    return { front, right, back, left, gridUrl };
+  },
+});
+
 export const getUrls = query({
   args: { id: v.id("multiViewPreviews") },
   returns: v.union(

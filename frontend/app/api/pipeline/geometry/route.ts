@@ -1,124 +1,5 @@
 import { NextResponse } from "next/server";
-import { Mistral } from "@mistralai/mistralai";
-
-const mistral = new Mistral({ apiKey: process.env.MISTRAL_API_KEY });
-
-/* ------------------------------------------------------------------ */
-/*  Provider chain: Mistral direct → OpenRouter Mistral → OpenRouter Opus  */
-/* ------------------------------------------------------------------ */
-
-type Provider = {
-  name: string;
-  call: (prompt: string, imageUrls: string[]) => Promise<string>;
-};
-
-async function callOpenRouter(
-  model: string,
-  prompt: string,
-  imageUrls: string[]
-): Promise<string> {
-  const apiKey = process.env.OPENROUTER_API_KEY;
-  if (!apiKey) throw new Error("OPENROUTER_API_KEY not set");
-
-  const content: Array<Record<string, unknown>> = imageUrls.map((url) => ({
-    type: "image_url",
-    image_url: { url },
-  }));
-  content.push({ type: "text", text: prompt });
-
-  const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model,
-      messages: [{ role: "user", content }],
-    }),
-  });
-
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`OpenRouter ${model} error ${res.status}: ${body}`);
-  }
-
-  const json = await res.json();
-  const text = json.choices?.[0]?.message?.content;
-  if (!text) throw new Error(`OpenRouter ${model} returned no content`);
-  return text;
-}
-
-const providers: Provider[] = [
-  {
-    name: "Mistral (direct)",
-    call: async (prompt, imageUrls) => {
-      const imageContent = imageUrls.map((url) => ({
-        type: "image_url" as const,
-        imageUrl: url,
-      }));
-
-      const response = await mistral.chat.complete({
-        model: "mistral-large-latest",
-        messages: [
-          {
-            role: "user",
-            content: [...imageContent, { type: "text" as const, text: prompt }],
-          },
-        ],
-      });
-
-      const text = response?.choices?.[0]?.message?.content;
-      if (!text || typeof text !== "string")
-        throw new Error("Mistral returned no content");
-      return text;
-    },
-  },
-  {
-    name: "OpenRouter (Mistral Large)",
-    call: (prompt, imageUrls) =>
-      callOpenRouter("mistralai/mistral-large-2512", prompt, imageUrls),
-  },
-  {
-    name: "OpenRouter (Claude Opus 4.6)",
-    call: (prompt, imageUrls) =>
-      callOpenRouter("anthropic/claude-opus-4-6", prompt, imageUrls),
-  },
-];
-
-async function callWithFallback(
-  prompt: string,
-  imageUrls: string[]
-): Promise<string> {
-  for (let i = 0; i < providers.length; i++) {
-    const provider = providers[i];
-    try {
-      console.log(`[API/geometry] Trying ${provider.name}...`);
-      const result = await provider.call(prompt, imageUrls);
-      console.log(`[API/geometry] Success with ${provider.name}`);
-      return result;
-    } catch (err) {
-      const isRateLimit =
-        err instanceof Error &&
-        (("statusCode" in err &&
-          (err as { statusCode: number }).statusCode === 429) ||
-          err.message.includes("429") ||
-          err.message.includes("rate_limit") ||
-          err.message.includes("Rate limit"));
-
-      console.error(
-        `[API/geometry] ${provider.name} failed:`,
-        err instanceof Error ? err.message : err
-      );
-
-      // Only fall through to next provider on rate limits
-      if (!isRateLimit || i === providers.length - 1) throw err;
-
-      console.log(`[API/geometry] Rate limited, falling back to next provider...`);
-    }
-  }
-  throw new Error("All providers exhausted");
-}
+import { callWithFallback } from "@/lib/llm/provider-chain";
 
 export async function POST(request: Request) {
   try {
@@ -144,19 +25,28 @@ Generate JavaScript code that creates a THREE.Group representing this building u
 IMPORTANT: The description may be creative or fantastical (e.g. "a beaver-shaped building", "a mushroom tower", "a building that looks like a guitar"). Study the reference images carefully and recreate the unique shape, silhouette, and features you see. The 3D model should clearly look like the subject described — capture its distinctive outline, proportions, and character.
 
 REQUIREMENTS:
-- The building must fit within a 60m x 60m footprint. Keep the base dimensions under 50m x 50m to leave margin.
+- CRITICAL SIZING: The building sits on a 24×24 unit plot. The XZ footprint must stay within 24×24.
+- HEIGHT MUST MATCH REAL-WORLD SCALE relative to the building type. Use 1 unit ≈ 1 meter:
+  - Small house / cabin / shed: 5–10 units tall
+  - Regular house / villa / bungalow: 8–15 units tall
+  - Townhouse / small apartment: 15–25 units tall
+  - Mid-rise office / apartment block: 30–60 units tall
+  - Tall office tower / skyscraper: 80–150 units tall
+  - Supertall skyscraper (Burj Khalifa, etc.): 200–400+ units tall
+  Pick the height that matches what "${buildingName}" would actually be in real life. A cottage must NOT be the same height as a skyscraper!
 - Return ONLY a JavaScript function body that will be wrapped in: function(THREE) { ... return group; }
 - Create a THREE.Group as the root
 - Use THREE.BoxGeometry, THREE.CylinderGeometry, THREE.SphereGeometry, THREE.ExtrudeGeometry, THREE.Shape, THREE.LatheGeometry, etc. — use whatever geometry types best capture the shape
-- Use THREE.MeshPhysicalMaterial with appropriate colors matching what you see in the images:
-  - Glass: { color: 0x88ccee, transparent: true, opacity: 0.4, metalness: 0.9, roughness: 0.1 }
-  - Concrete: { color: 0xcccccc, roughness: 0.8, metalness: 0.1 }
-  - Steel: { color: 0xaaaaaa, metalness: 0.8, roughness: 0.3 }
-  - Stone: { color: 0xd4c5a9, roughness: 0.9, metalness: 0.0 }
-  - Use any other colors that match the reference images
+- IMPORTANT: Use THREE.MeshStandardMaterial (NOT MeshPhysicalMaterial). Always set side: THREE.DoubleSide on every material.
+- Appropriate material colors matching what you see in the images:
+  - Glass: { color: 0x88ccee, transparent: true, opacity: 0.4, metalness: 0.5, roughness: 0.1, side: THREE.DoubleSide }
+  - Concrete: { color: 0xcccccc, roughness: 0.8, metalness: 0.1, side: THREE.DoubleSide }
+  - Steel: { color: 0xaaaaaa, metalness: 0.5, roughness: 0.3, side: THREE.DoubleSide }
+  - Stone: { color: 0xd4c5a9, roughness: 0.9, metalness: 0.0, side: THREE.DoubleSide }
+  - Use any other colors that match the reference images, always with side: THREE.DoubleSide
 - NO texture loading, NO external files
-- Build the model centered at origin, Y-up
-- Scale so the building is approximately 100 units tall
+- Build the model centered at origin (0,0,0) on XZ, with the base at Y=0 (Y-up)
+- Keep the footprint within ±12 on X and ±12 on Z (24×24 total).
 - Focus on capturing the overall silhouette and distinctive features — make it immediately recognizable as "${buildingName}"
 - Use THREE.Shape + ExtrudeGeometry for organic or curved cross-sections
 - The code must be valid JavaScript that can run in a Function constructor
@@ -165,10 +55,10 @@ EXAMPLE OUTPUT FORMAT:
 \`\`\`javascript
 const group = new THREE.Group();
 
-const baseMat = new THREE.MeshPhysicalMaterial({ color: 0xcccccc, roughness: 0.8 });
-const baseGeo = new THREE.BoxGeometry(40, 60, 40);
+const baseMat = new THREE.MeshStandardMaterial({ color: 0xcccccc, roughness: 0.8, side: THREE.DoubleSide });
+const baseGeo = new THREE.BoxGeometry(20, 50, 20);
 const base = new THREE.Mesh(baseGeo, baseMat);
-base.position.y = 30;
+base.position.y = 25;
 group.add(base);
 
 // ... more geometry ...

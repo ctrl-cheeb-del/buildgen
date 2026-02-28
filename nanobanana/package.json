@@ -4,7 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "bun run src/index.ts",
-    "build": "bun build src/index.ts --outdir dist --target bun"
+    "build": "bun build src/index.ts --outdir dist --target bun",
+    "gen:textures": "bun run src/generate-textures.ts",
+    "gen:textures:list": "bun run src/generate-textures.ts --list"
   },
   "dependencies": {
     "hono": "^4.7.0",

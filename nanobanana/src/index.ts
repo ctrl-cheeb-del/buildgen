@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { generateMultiView } from "./multi-view";
+import { generateTextureImage, TEXTURE_DEFS } from "./texture-gen";
 import type { GenerateRequest } from "./types";
 
 const app = new Hono();
@@ -27,6 +28,44 @@ app.post("/generate", async (c) => {
     console.error("[NanoBanana] Generation failed:", err);
     return c.json(
       { error: err instanceof Error ? err.message : "Generation failed" },
+      500
+    );
+  }
+});
+
+// ── Texture generation endpoints ──────────────────────────────
+
+app.get("/textures", (c) => {
+  return c.json({
+    textures: TEXTURE_DEFS.map((d) => ({
+      id: d.id,
+      name: d.name,
+      repeat: d.repeat,
+      roughness: d.roughness,
+      metalness: d.metalness,
+    })),
+  });
+});
+
+app.post("/texture", async (c) => {
+  const body = await c.req.json<{ textureId: string }>();
+
+  if (!body.textureId || typeof body.textureId !== "string") {
+    return c.json({ error: "textureId is required" }, 400);
+  }
+
+  console.log(`[NanoBanana] Generating texture: "${body.textureId}"`);
+
+  try {
+    const result = await generateTextureImage(body.textureId);
+    return c.json({
+      base64: result.base64,
+      definition: result.definition,
+    });
+  } catch (err) {
+    console.error("[NanoBanana] Texture generation failed:", err);
+    return c.json(
+      { error: err instanceof Error ? err.message : "Texture generation failed" },
       500
     );
   }

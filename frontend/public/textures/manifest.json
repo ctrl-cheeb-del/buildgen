@@ -1,0 +1,98 @@
+[
+  {
+    "id": "asphalt",
+    "name": "Asphalt Road",
+    "file": "/textures/asphalt.webp",
+    "repeat": 6,
+    "roughness": 0.92,
+    "metalness": 0
+  },
+  {
+    "id": "brick-red",
+    "name": "Red Brick Wall",
+    "file": "/textures/brick-red.webp",
+    "repeat": 6,
+    "roughness": 0.85,
+    "metalness": 0
+  },
+  {
+    "id": "cobblestone",
+    "name": "Cobblestone",
+    "file": "/textures/cobblestone.webp",
+    "repeat": 6,
+    "roughness": 0.9,
+    "metalness": 0
+  },
+  {
+    "id": "concrete-smooth",
+    "name": "Smooth Concrete",
+    "file": "/textures/concrete-smooth.webp",
+    "repeat": 3,
+    "roughness": 0.75,
+    "metalness": 0.05
+  },
+  {
+    "id": "dirt",
+    "name": "Packed Dirt / Soil",
+    "file": "/textures/dirt.webp",
+    "repeat": 4,
+    "roughness": 0.95,
+    "metalness": 0
+  },
+  {
+    "id": "grass",
+    "name": "Green Grass Lawn",
+    "file": "/textures/grass.webp",
+    "repeat": 4,
+    "roughness": 0.95,
+    "metalness": 0
+  },
+  {
+    "id": "gravel",
+    "name": "Gravel Path",
+    "file": "/textures/gravel.webp",
+    "repeat": 5,
+    "roughness": 0.95,
+    "metalness": 0
+  },
+  {
+    "id": "metal-grating",
+    "name": "Metal Grating",
+    "file": "/textures/metal-grating.webp",
+    "repeat": 8,
+    "roughness": 0.4,
+    "metalness": 0.8
+  },
+  {
+    "id": "pavement-slabs",
+    "name": "Concrete Pavement Slabs",
+    "file": "/textures/pavement-slabs.webp",
+    "repeat": 8,
+    "roughness": 0.85,
+    "metalness": 0
+  },
+  {
+    "id": "roof-tiles",
+    "name": "Clay Roof Tiles",
+    "file": "/textures/roof-tiles.webp",
+    "repeat": 8,
+    "roughness": 0.8,
+    "metalness": 0
+  },
+  {
+    "id": "sand",
+    "name": "Sand",
+    "file": "/textures/sand.webp",
+    "repeat": 4,
+    "roughness": 0.98,
+    "metalness": 0
+  },
+  {
+    "id": "wood-decking",
+    "name": "Wood Decking",
+    "file": "/textures/wood-decking.webp",
+    "repeat": 6,
+    "roughness": 0.8,
+    "metalness": 0
+  }
+]
