@@ -128,8 +128,11 @@ function GlassConnector({ status }: { status: NodeStatus }) {
 
 interface DetailPanelProps {
   nodeId: PipelineNodeId;
+  nodeStatus: NodeStatus;
+  nodeDetail?: string;
   multiView: MultiViewImages | null;
   iterations: IterationResult[];
+  latestScore: ScoreBreakdown | null;
   selectedBuilding: {
     proceduralCode: string;
     prompt: string;
@@ -137,158 +140,200 @@ interface DetailPanelProps {
   } | null;
 }
 
+function StatusBadge({ status, text }: { status: NodeStatus; text: string }) {
+  const color =
+    status === "done"
+      ? "text-green-300"
+      : status === "active"
+        ? "text-blue-300"
+        : status === "error"
+          ? "text-red-300"
+          : "text-white/50";
+  const icon =
+    status === "done" ? "\u2713" : status === "active" ? "\u2022" : "";
+
+  return (
+    <span className={`text-xs font-medium ${color}`}>
+      {icon} {text}
+    </span>
+  );
+}
+
 function NodeDetailPanel({
   nodeId,
+  nodeStatus,
+  nodeDetail,
   multiView,
   iterations,
+  latestScore,
   selectedBuilding,
 }: DetailPanelProps) {
   const latest =
     iterations.length > 0 ? iterations[iterations.length - 1] : null;
 
+  const isDone = nodeStatus === "done";
+  const isActive = nodeStatus === "active";
+
   return (
     <div
       className={`absolute left-full ml-2 top-0 w-56 rounded-2xl ${GLASS_PILL} p-3 z-50 animate-fade-in`}
     >
-      {nodeId === "generate-views" && multiView && (
-        <div>
-          <div className="text-[10px] text-white/50 mb-1.5">
-            Blueprint Views
+      {/* Generate Views — show blueprint thumbnails */}
+      {nodeId === "generate-views" &&
+        (multiView ? (
+          <div>
+            <div className="text-[10px] text-white/50 mb-1.5">
+              Blueprint Views
+            </div>
+            <div className="grid grid-cols-2 gap-1">
+              {(["front", "right", "back", "left"] as const).map((angle) => (
+                <div
+                  key={angle}
+                  className="relative aspect-square rounded-lg overflow-hidden bg-black/30"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={multiView[angle]}
+                    alt={angle}
+                    className="w-full h-full object-cover"
+                  />
+                  <span className="absolute bottom-0.5 left-0.5 text-[8px] text-white/60 bg-black/40 px-1 rounded">
+                    {angle}
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
-          <div className="grid grid-cols-2 gap-1">
-            {(["front", "right", "back", "left"] as const).map((angle) => (
-              <div
-                key={angle}
-                className="relative aspect-square rounded-lg overflow-hidden bg-black/30"
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={multiView[angle]}
-                  alt={angle}
-                  className="w-full h-full object-cover"
-                />
-                <span className="absolute bottom-0.5 left-0.5 text-[8px] text-white/60 bg-black/40 px-1 rounded">
-                  {angle}
-                </span>
+        ) : isActive ? (
+          <StatusBadge status="active" text="Generating views..." />
+        ) : (
+          <div className="text-[10px] text-white/40">Waiting</div>
+        ))}
+
+      {/* Generate Code — simple success message */}
+      {nodeId === "generate-code" &&
+        (isDone ? (
+          <StatusBadge status="done" text="Code generated" />
+        ) : isActive ? (
+          <StatusBadge status="active" text={nodeDetail || "Generating..."} />
+        ) : (
+          <div className="text-[10px] text-white/40">Waiting</div>
+        ))}
+
+      {/* Place on Map — simple success message */}
+      {nodeId === "place-on-map" &&
+        (isDone ? (
+          <StatusBadge status="done" text="Placed on map" />
+        ) : isActive ? (
+          <StatusBadge status="active" text={nodeDetail || "Placing..."} />
+        ) : (
+          <div className="text-[10px] text-white/40">Waiting</div>
+        ))}
+
+      {/* Capture — show screenshots from latest iteration, or live status */}
+      {nodeId === "capture" &&
+        (latest?.screenshots ? (
+          <div>
+            <div className="text-[10px] text-white/50 mb-1.5">
+              Render Screenshots
+            </div>
+            <div className="grid grid-cols-2 gap-1">
+              {(["front", "right", "back", "left"] as const).map((angle) => (
+                <div
+                  key={angle}
+                  className="relative aspect-square rounded-lg overflow-hidden bg-black/30"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={latest.screenshots[angle]}
+                    alt={angle}
+                    className="w-full h-full object-cover"
+                  />
+                  <span className="absolute bottom-0.5 left-0.5 text-[8px] text-white/60 bg-black/40 px-1 rounded">
+                    {angle}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : isDone ? (
+          <StatusBadge status="done" text={nodeDetail || "Captured"} />
+        ) : isActive ? (
+          <StatusBadge status="active" text={nodeDetail || "Capturing..."} />
+        ) : (
+          <div className="text-[10px] text-white/40">Waiting</div>
+        ))}
+
+      {/* Score — show score card from latest iteration or live latestScore, or status */}
+      {nodeId === "score" &&
+        (latest ? (
+          <div>
+            <div className="text-[10px] text-white/50 mb-1.5">
+              Score Breakdown
+            </div>
+            <ScoreCard score={latest.score} />
+            {latest.feedback && (
+              <div className="mt-2 text-[9px] text-white/50 leading-relaxed line-clamp-4">
+                {latest.feedback}
               </div>
-            ))}
+            )}
           </div>
-        </div>
-      )}
+        ) : latestScore ? (
+          <div>
+            <div className="text-[10px] text-white/50 mb-1.5">
+              Score Breakdown
+            </div>
+            <ScoreCard score={latestScore} />
+          </div>
+        ) : isDone ? (
+          <StatusBadge status="done" text="Scored" />
+        ) : isActive ? (
+          <StatusBadge status="active" text={nodeDetail || "Scoring..."} />
+        ) : (
+          <div className="text-[10px] text-white/40">Waiting</div>
+        ))}
 
-      {nodeId === "generate-code" && selectedBuilding && (
-        <div>
-          <div className="text-[10px] text-white/50 mb-1.5">Code Preview</div>
-          <pre className="text-[9px] text-white/70 font-mono bg-black/20 rounded-lg p-2 overflow-hidden max-h-40 leading-relaxed">
-            {selectedBuilding.proceduralCode
-              .split("\n")
-              .slice(0, 12)
-              .join("\n")}
-            {selectedBuilding.proceduralCode.split("\n").length > 12 && "\n..."}
-          </pre>
-        </div>
-      )}
-
-      {nodeId === "place-on-map" && selectedBuilding && (
-        <div>
-          <div className="text-[10px] text-white/50 mb-1.5">Plot Info</div>
-          <div className="text-xs text-white/80">
-            Plot #{selectedBuilding.plotIndex}
-          </div>
-          <div className="text-[11px] text-white/60 mt-0.5">
-            {selectedBuilding.prompt}
-          </div>
-        </div>
-      )}
-
-      {nodeId === "capture" && latest?.screenshots && (
-        <div>
-          <div className="text-[10px] text-white/50 mb-1.5">
-            Render Screenshots
-          </div>
-          <div className="grid grid-cols-2 gap-1">
-            {(["front", "right", "back", "left"] as const).map((angle) => (
-              <div
-                key={angle}
-                className="relative aspect-square rounded-lg overflow-hidden bg-black/30"
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={latest.screenshots[angle]}
-                  alt={angle}
-                  className="w-full h-full object-cover"
-                />
-                <span className="absolute bottom-0.5 left-0.5 text-[8px] text-white/60 bg-black/40 px-1 rounded">
-                  {angle}
-                </span>
+      {/* Improve — show improvement result or live status */}
+      {nodeId === "improve" &&
+        (latest ? (
+          <div>
+            <div className="text-[10px] text-white/50 mb-1.5">Improvement</div>
+            <span
+              className={`text-xs font-medium ${latest.improved ? "text-green-300" : "text-red-300"}`}
+            >
+              {latest.improved ? "\u2713 Improved" : "\u2717 No improvement"}
+            </span>
+            {latest.feedback && (
+              <div className="mt-1.5 text-[9px] text-white/50 leading-relaxed line-clamp-3">
+                {latest.feedback}
               </div>
-            ))}
+            )}
           </div>
-        </div>
-      )}
+        ) : isDone ? (
+          <StatusBadge status="done" text="Applied" />
+        ) : isActive ? (
+          <StatusBadge status="active" text={nodeDetail || "Improving..."} />
+        ) : (
+          <div className="text-[10px] text-white/40">Waiting</div>
+        ))}
 
-      {nodeId === "score" && latest && (
-        <div>
-          <div className="text-[10px] text-white/50 mb-1.5">
-            Score Breakdown
+      {/* Update — show save confirmation */}
+      {nodeId === "update" &&
+        (isDone || iterations.length > 0 ? (
+          <div>
+            <StatusBadge status="done" text="Saved to map" />
+            {iterations.length > 0 && (
+              <div className="text-[10px] text-white/50 mt-0.5">
+                {iterations.length} iteration
+                {iterations.length !== 1 ? "s" : ""} complete
+              </div>
+            )}
           </div>
-          <ScoreCard score={latest.score} />
-          {latest.feedback && (
-            <div className="mt-2 text-[9px] text-white/50 leading-relaxed line-clamp-4">
-              {latest.feedback}
-            </div>
-          )}
-        </div>
-      )}
-
-      {nodeId === "improve" && latest && (
-        <div>
-          <div className="text-[10px] text-white/50 mb-1.5">Improvement</div>
-          <span
-            className={`text-xs font-medium ${latest.improved ? "text-green-300" : "text-red-300"}`}
-          >
-            {latest.improved ? "Improved" : "No improvement"}
-          </span>
-          {latest.feedback && (
-            <div className="mt-1.5 text-[9px] text-white/50 leading-relaxed line-clamp-3">
-              {latest.feedback}
-            </div>
-          )}
-        </div>
-      )}
-
-      {nodeId === "update" && (
-        <div>
-          <div className="text-[10px] text-white/50 mb-1.5">Update</div>
-          <div className="text-xs text-white/80">Saved to map</div>
-          {iterations.length > 0 && (
-            <div className="text-[10px] text-white/50 mt-0.5">
-              {iterations.length} iteration
-              {iterations.length !== 1 ? "s" : ""} complete
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Fallback if no data yet */}
-      {nodeId === "generate-views" && !multiView && (
-        <div className="text-[10px] text-white/40">No views generated yet</div>
-      )}
-      {nodeId === "generate-code" && !selectedBuilding && (
-        <div className="text-[10px] text-white/40">No code generated yet</div>
-      )}
-      {nodeId === "place-on-map" && !selectedBuilding && (
-        <div className="text-[10px] text-white/40">Not placed yet</div>
-      )}
-      {nodeId === "capture" && !latest?.screenshots && (
-        <div className="text-[10px] text-white/40">No captures yet</div>
-      )}
-      {nodeId === "score" && !latest && (
-        <div className="text-[10px] text-white/40">No scores yet</div>
-      )}
-      {nodeId === "improve" && !latest && (
-        <div className="text-[10px] text-white/40">No improvements yet</div>
-      )}
+        ) : isActive ? (
+          <StatusBadge status="active" text={nodeDetail || "Saving..."} />
+        ) : (
+          <div className="text-[10px] text-white/40">Waiting</div>
+        ))}
     </div>
   );
 }
@@ -679,11 +724,17 @@ export default function PipelineFlowchart({
   const genNodes = nodes.slice(0, 3);
   const iterNodes = nodes.slice(3);
 
-  const detailProps: Omit<DetailPanelProps, "nodeId"> = {
+  const makeDetailProps = (
+    node: { id: PipelineNodeId; status: NodeStatus; detail?: string },
+  ): DetailPanelProps => ({
+    nodeId: node.id,
+    nodeStatus: node.status,
+    nodeDetail: node.detail,
     multiView,
     iterations,
+    latestScore,
     selectedBuilding,
-  };
+  });
 
   const hasIterations = iterationCount > 0;
 
@@ -738,7 +789,7 @@ export default function PipelineFlowchart({
             node={node}
             isExpanded={expandedNode === node.id}
             onToggle={() => toggleNode(node.id)}
-            detailProps={{ ...detailProps, nodeId: node.id }}
+            detailProps={makeDetailProps(node)}
           />
           <GlassConnector
             status={
@@ -760,7 +811,7 @@ export default function PipelineFlowchart({
               node={node}
               isExpanded={expandedNode === node.id}
               onToggle={() => toggleNode(node.id)}
-              detailProps={{ ...detailProps, nodeId: node.id }}
+              detailProps={makeDetailProps(node)}
             />
             {i < iterNodes.length - 1 && (
               <GlassConnector status={iterNodes[i + 1].status} />
