@@ -1,16 +1,21 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 
 interface PromptBarProps {
   onGenerate: (buildingName: string, lng: number, lat: number) => void;
   isRunning: boolean;
+  overrideName?: string;
 }
 
-export default function PromptBar({ onGenerate, isRunning }: PromptBarProps) {
+export default function PromptBar({ onGenerate, isRunning, overrideName }: PromptBarProps) {
   const [buildingName, setBuildingName] = useState("");
   const [lng, setLng] = useState(-73.9857);
   const [lat, setLat] = useState(40.7484);
+
+  useEffect(() => {
+    if (overrideName) setBuildingName(overrideName);
+  }, [overrideName]);
 
   const handleGenerate = useCallback(() => {
     if (!buildingName.trim() || isRunning) return;

@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import { useMutation } from "convex/react";
+import { api } from "../../convex/_generated/api";
 import type { MultiViewImages, PipelineStatus, WorldBuilding } from "../types";
 import { loadProceduralGeometry } from "../viewer/procedural-loader";
 import { useWorldStore } from "../stores/world-store";
@@ -9,6 +11,26 @@ interface PipelineState {
   isRunning: boolean;
   multiView: MultiViewImages | null;
   steps: Record<string, PipelineStatus>;
+}
+
+async function base64ToBlob(dataUrl: string): Promise<Blob> {
+  const res = await fetch(dataUrl);
+  return res.blob();
+}
+
+async function uploadToConvex(
+  generateUploadUrl: () => Promise<string>,
+  blob: Blob
+): Promise<string> {
+  const url = await generateUploadUrl();
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": blob.type },
+    body: blob,
+  });
+  if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
+  const { storageId } = await res.json();
+  return storageId;
 }
 
 export function usePipeline() {
@@ -23,6 +45,8 @@ export function usePipeline() {
   });
 
   const { addBuilding, generateId } = useWorldStore();
+  const generateUploadUrl = useMutation(api.multiViewPreviews.generateUploadUrl);
+  const savePreview = useMutation(api.multiViewPreviews.save);
 
   const setStep = useCallback(
     (step: string, s: "idle" | "running" | "done" | "error", detail?: string) => {
@@ -49,7 +73,12 @@ export function usePipeline() {
   }, []);
 
   const runPipeline = useCallback(
-    async (buildingName: string, lng: number, lat: number) => {
+    async (
+      buildingName: string,
+      lng: number,
+      lat: number,
+      cachedViews?: MultiViewImages
+    ) => {
       if (!buildingName.trim()) return;
 
       setState((prev) => ({
@@ -60,25 +89,95 @@ export function usePipeline() {
       resetSteps();
 
       try {
-        // Step 1: Multi-view generation via nanobanana
-        setStep("multiview", "running", "Generating views...");
+        let views: MultiViewImages;
 
-        const mvRes = await fetch("/api/pipeline/multiview", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ buildingName }),
-        });
+        if (cachedViews) {
+          // Reuse cached views — skip generation entirely
+          views = cachedViews;
+          setState((prev) => ({ ...prev, multiView: views }));
+          setStep("multiview", "done", "Using cached preview");
+        } else {
+          // Step 1: Multi-view generation via nanobanana
+          setStep("multiview", "running", "Generating views...");
 
-        if (!mvRes.ok) {
-          const err = await mvRes.json().catch(() => ({ error: "Unknown error" }));
-          throw new Error(err.error || `Multi-view failed: ${mvRes.status}`);
+          const mvRes = await fetch("/api/pipeline/multiview", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ buildingName }),
+          });
+
+          if (!mvRes.ok) {
+            const err = await mvRes.json().catch(() => ({ error: "Unknown error" }));
+            throw new Error(err.error || `Multi-view failed: ${mvRes.status}`);
+          }
+
+          const mvData = (await mvRes.json()) as { views: MultiViewImages };
+          views = mvData.views;
+          setState((prev) => ({ ...prev, multiView: views }));
+          setStep("multiview", "done", "Views ready");
+
+          // Upload to Convex file storage and swap base64 for HTTP URLs
+          if (views.front.startsWith("data:")) {
+            setStep("multiview", "done", "Saving to cache...");
+            try {
+              const [frontBlob, rightBlob, backBlob, leftBlob, gridBlob] =
+                await Promise.all([
+                  base64ToBlob(views.front),
+                  base64ToBlob(views.right),
+                  base64ToBlob(views.back),
+                  base64ToBlob(views.left),
+                  views.gridUrl
+                    ? base64ToBlob(views.gridUrl)
+                    : base64ToBlob(views.front),
+                ]);
+
+              console.log("[Pipeline] Uploading 5 images to Convex...");
+              const [frontId, rightId, backId, leftId, gridId] =
+                await Promise.all([
+                  uploadToConvex(generateUploadUrl, frontBlob),
+                  uploadToConvex(generateUploadUrl, rightBlob),
+                  uploadToConvex(generateUploadUrl, backBlob),
+                  uploadToConvex(generateUploadUrl, leftBlob),
+                  uploadToConvex(generateUploadUrl, gridBlob),
+                ]);
+              console.log("[Pipeline] Uploads done, saving preview record...");
+
+              const result = await savePreview({
+                buildingName,
+                frontStorageId: frontId as any,
+                rightStorageId: rightId as any,
+                backStorageId: backId as any,
+                leftStorageId: leftId as any,
+                gridStorageId: gridId as any,
+              });
+              console.log("[Pipeline] Preview saved, URLs:", {
+                front: result.front?.slice(0, 60),
+                right: result.right?.slice(0, 60),
+              });
+
+              if (result.front && result.right && result.back && result.left) {
+                views = {
+                  front: result.front,
+                  right: result.right,
+                  back: result.back,
+                  left: result.left,
+                  gridUrl: result.gridUrl ?? undefined,
+                };
+                setState((prev) => ({ ...prev, multiView: views }));
+                console.log("[Pipeline] Swapped base64 views for HTTP URLs");
+              } else {
+                console.warn("[Pipeline] Save returned null URLs, keeping base64");
+              }
+
+              setStep("multiview", "done", "Views ready (cached)");
+            } catch (uploadErr) {
+              console.error("[Pipeline] Cache upload failed:", uploadErr);
+              setStep("multiview", "done", "Views ready (cache failed)");
+            }
+          }
         }
 
-        const { views } = (await mvRes.json()) as { views: MultiViewImages };
-        setState((prev) => ({ ...prev, multiView: views }));
-        setStep("multiview", "done", "Views ready");
-
-        // Step 2: Geometry generation via Mistral Codestral
+        // Step 2: Geometry generation via Mistral
         setStep("generate", "running", "Generating 3D code...");
 
         const geoRes = await fetch("/api/pipeline/geometry", {
@@ -116,7 +215,6 @@ export function usePipeline() {
         setStep("render", "done", "Rendered");
       } catch (err) {
         console.error("[Pipeline] Error:", err);
-        // Mark the first running step as errored
         setState((prev) => {
           const newSteps = { ...prev.steps };
           for (const key of Object.keys(newSteps)) {
@@ -135,7 +233,7 @@ export function usePipeline() {
         setState((prev) => ({ ...prev, isRunning: false }));
       }
     },
-    [addBuilding, generateId, resetSteps, setStep]
+    [addBuilding, generateId, resetSteps, setStep, generateUploadUrl, savePreview]
   );
 
   return {
