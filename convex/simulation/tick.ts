@@ -146,6 +146,7 @@ export async function callCitizenAgent(
     messages: [{ role: "user", content: prompt }],
     maxTokens: 200,
     temperature: 0.9,
+    responseFormat: { type: "json_object" },
   });
 
   const text = response?.choices?.[0]?.message?.content;
@@ -154,7 +155,7 @@ export async function callCitizenAgent(
   }
 
   try {
-    const parsed = JSON.parse(extractJSON(text)) as CitizenAction;
+    const parsed = JSON.parse(text) as CitizenAction;
     // Validate and clamp message
     const validActions = ["REQUEST_BUILD", "PROTEST", "PETITION", "PRAISE", "CHAT", "IDLE"];
     if (!validActions.includes(parsed.action)) parsed.action = "IDLE";
@@ -237,6 +238,7 @@ export async function callMayor(
     messages: [{ role: "user", content: prompt }],
     maxTokens: 800,
     temperature: 0.7,
+    responseFormat: { type: "json_object" },
   });
 
   const text = response?.choices?.[0]?.message?.content;
@@ -252,38 +254,49 @@ export async function callMayor(
   }
 
   try {
-    const parsed = JSON.parse(extractJSON(text)) as MayorDecision;
+    const raw = JSON.parse(text);
 
-    // HARD CAP: enforce build limit in code
+    // Normalize build_approvals: force correct types
+    const approvals: MayorDecision["build_approvals"] = [];
+    if (Array.isArray(raw.build_approvals)) {
+      for (const a of raw.build_approvals) {
+        approvals.push({
+          agentPlot: Number(a.agentPlot ?? a.agent_plot ?? a.plot ?? 0),
+          approved: a.approved === true || a.approved === "true",
+          reason: String(a.reason ?? ""),
+        });
+      }
+    }
+
+    // Enforce build cap
     const isLiveMode = city.simMode === "live";
     const cap = isLiveMode ? 12 : 4;
-    if (Array.isArray(parsed.build_approvals)) {
-      let remainingSlots = cap - city.activeBuildCount;
-      for (const approval of parsed.build_approvals) {
-        // Normalize: LLM sometimes returns "true" string instead of boolean
-        if (typeof approval.approved === "string") {
-          approval.approved = (approval.approved as any) === "true";
-        }
-        if (remainingSlots <= 0) {
-          approval.approved = false;
-          approval.reason = `Build queue full (${cap}/${cap})`;
-        } else if (approval.approved) {
-          remainingSlots--;
-        }
-      }
-    } else {
-      parsed.build_approvals = [];
-    }
-
-    // Clamp tax changes to ±0.02
-    if (parsed.tax_changes && typeof parsed.tax_changes === "object") {
-      for (const [key, val] of Object.entries(parsed.tax_changes)) {
-        parsed.tax_changes[key] = Math.max(-0.02, Math.min(0.02, val));
+    let remainingSlots = cap - city.activeBuildCount;
+    for (const approval of approvals) {
+      if (remainingSlots <= 0) {
+        approval.approved = false;
+        approval.reason = `Build queue full (${cap}/${cap})`;
+      } else if (approval.approved) {
+        remainingSlots--;
       }
     }
 
-    if (typeof parsed.public_message !== "string") parsed.public_message = "";
-    parsed.public_message = parsed.public_message.slice(0, 80);
+    // Normalize tax changes
+    const taxChanges: Record<string, number> | null =
+      raw.tax_changes && typeof raw.tax_changes === "object"
+        ? Object.fromEntries(
+            Object.entries(raw.tax_changes).map(([k, v]) => [k, Math.max(-0.02, Math.min(0.02, Number(v)))])
+          )
+        : null;
+
+    const parsed: MayorDecision = {
+      build_approvals: approvals,
+      tax_changes: taxChanges,
+      budget_changes: raw.budget_changes ?? null,
+      decree: raw.decree ?? null,
+      public_message: String(raw.public_message ?? "").slice(0, 80),
+      mood: String(raw.mood ?? "concerned"),
+    };
 
     return parsed;
   } catch {
@@ -595,11 +608,9 @@ export const run = internalAction({
     const usedPlots = new Set<number>();
     for (const approval of mayorDecision.build_approvals) {
       if (isLive) break; // Already handled above
-      const isApproved = approval.approved === true || (approval.approved as any) === "true";
-      if (isApproved && city.activeBuildCount + newBuildsApproved < buildCap) {
-        // Robust matching: try plotIndex first, then loose match by coercing to number
-        const plotNum = typeof approval.agentPlot === "string" ? parseInt(approval.agentPlot, 10) : approval.agentPlot;
-        let req = buildRequests.find((r) => r.agent.plotIndex === plotNum && !usedPlots.has(r.agent.plotIndex));
+      if (approval.approved && city.activeBuildCount + newBuildsApproved < buildCap) {
+        // Match by plot number, fallback to next unmatched request
+        let req = buildRequests.find((r) => r.agent.plotIndex === approval.agentPlot && !usedPlots.has(r.agent.plotIndex));
         // Fallback: if no match, just take the next unmatched build request
         if (!req) {
           req = buildRequests.find((r) => !usedPlots.has(r.agent.plotIndex));
