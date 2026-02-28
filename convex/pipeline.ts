@@ -1,7 +1,7 @@
 "use node";
 
 import { v } from "convex/values";
-import { action } from "./_generated/server";
+import { action, internalAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import Replicate from "replicate";
 import { Mistral } from "@mistralai/mistralai";
@@ -410,6 +410,42 @@ export const generateBuilding = action({
     await ctx.runMutation(internal.plots.markGeneratingInternal, { plotIndex });
 
     try {
+      // 1.5. Check for similar existing buildings to reuse
+      const similar = await ctx.runQuery(internal.buildings.searchSimilarBuildings, {
+        searchTerm: buildingName,
+      });
+
+      if (similar) {
+        console.log(`[Pipeline] Found similar building "${similar.prompt}", adapting...`);
+        await ctx.runMutation(internal.plots.setPipelineStepInternal, {
+          plotIndex,
+          step: "generating-code",
+        });
+
+        const adaptedCode = await adaptExistingCode(
+          similar.proceduralCode,
+          similar.prompt,
+          buildingName,
+        );
+
+        await ctx.runMutation(internal.plots.setPipelineStepInternal, {
+          plotIndex,
+          step: "placing",
+        });
+
+        await ctx.runMutation(internal.buildings.createBuildingInternal, {
+          plotIndex,
+          ownerId,
+          prompt: buildingName,
+          proceduralCode: adaptedCode,
+          multiViewGrid: undefined,
+        });
+
+        await ctx.runMutation(internal.plots.markOccupiedInternal, { plotIndex });
+        console.log(`[Pipeline] Building "${buildingName}" (adapted) complete!`);
+        return;
+      }
+
       // 2. Generate multi-view grid image via Replicate
       await ctx.runMutation(internal.plots.setPipelineStepInternal, {
         plotIndex,
@@ -483,3 +519,40 @@ export const generateBuilding = action({
     }
   },
 });
+
+/**
+ * Takes existing procedural geometry code and adapts it for a new building description
+ * using a lightweight LLM call (Sonnet instead of Opus).
+ */
+async function adaptExistingCode(
+  proceduralCode: string,
+  originalPrompt: string,
+  newDescription: string,
+): Promise<string> {
+  const adaptPrompt = `You have existing Three.js geometry code for a "${originalPrompt}".
+Adapt it to create a "${newDescription}" instead.
+
+Make meaningful but contained modifications:
+- Adjust proportions (height, width, depth)
+- Change material colors/textures where appropriate
+- Add or remove small architectural details
+- Keep the same general structure as foundation
+
+Return ONLY the modified JavaScript function body (no markdown fences, no explanation).
+The code must create a THREE.Group and return it.
+
+Existing code:
+\`\`\`javascript
+${proceduralCode}
+\`\`\``;
+
+  const text = await callMistralDirect(adaptPrompt, []);
+
+  // Extract code — handle both fenced and raw responses
+  const codeMatch = text.match(/```(?:javascript|js)?\s*\n([\s\S]*?)```/);
+  const code = codeMatch ? codeMatch[1].trim() : text.trim();
+  if (!code) throw new Error("Adaptation returned no usable geometry code");
+
+  console.log(`[Pipeline] Adapted code (${code.length} chars)`);
+  return code;
+}

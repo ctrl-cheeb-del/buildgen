@@ -48,7 +48,12 @@ export default defineSchema({
       )
     ),
     createdAt: v.number(),
-  }).index("by_plotIndex", ["plotIndex"]),
+  })
+    .index("by_plotIndex", ["plotIndex"])
+    .searchIndex("search_prompt", {
+      searchField: "prompt",
+      filterFields: ["category"],
+    }),
 
   cars: defineTable({
     userId: v.string(),
