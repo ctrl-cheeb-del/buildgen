@@ -343,7 +343,7 @@ REQUIREMENTS:
 - Return ONLY a JavaScript function body that will be wrapped in: function(THREE) { ... return group; }
 - Create a THREE.Group as the root
 - Use THREE.BoxGeometry, THREE.CylinderGeometry, THREE.SphereGeometry, THREE.ExtrudeGeometry, THREE.Shape, THREE.LatheGeometry, etc. — use whatever geometry types best capture the shape
-- IMPORTANT: Use THREE.MeshStandardMaterial (NOT MeshPhysicalMaterial). Always set side: THREE.DoubleSide on every material.
+- IMPORTANT: Use THREE.MeshStandardMaterial (NOT MeshPhysicalMaterial). Do NOT set side: THREE.DoubleSide.
 - NO texture loading, NO external files
 - Build the model centered at origin (0,0,0) on XZ, with the base at Y=0 (Y-up)
 - Maximum footprint: ±25 on X and ±25 on Z (50×50 hard limit). Most buildings should be MUCH smaller than this.
@@ -380,14 +380,14 @@ EXAMPLE OUTPUT FORMAT:
 \`\`\`javascript
 const group = new THREE.Group();
 
-const baseMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8, side: THREE.DoubleSide });
+const baseMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8, });
 const baseGeo = new THREE.BoxGeometry(20, 50, 20);
 const base = new THREE.Mesh(baseGeo, baseMat);
 base.userData.textureId = "concrete-smooth";
 base.position.y = 25;
 group.add(base);
 
-const glassMat = new THREE.MeshStandardMaterial({ color: 0xffffff, transparent: true, opacity: 0.4, metalness: 0.5, roughness: 0.1, side: THREE.DoubleSide });
+const glassMat = new THREE.MeshStandardMaterial({ color: 0xffffff, transparent: true, opacity: 0.4, metalness: 0.5, roughness: 0.1, });
 const glassGeo = new THREE.BoxGeometry(18, 3, 18);
 const glass = new THREE.Mesh(glassGeo, glassMat);
 glass.userData.textureId = "glass-curtainwall";

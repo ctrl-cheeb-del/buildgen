@@ -100,7 +100,11 @@ export function mergeBuildingGeometry(group: THREE.Group): void {
   const savedRot = group.rotation.clone();
   const savedScale = group.scale.clone();
 
-  // Create merged meshes
+  // Create merged meshes.
+  // Assign each material bucket a unique polygonOffset so coplanar faces
+  // from different materials (e.g. wall + window at same position) resolve
+  // deterministically instead of z-fighting.
+  let offsetIndex = 0;
   for (const bucket of buckets.values()) {
     if (bucket.geometries.length === 0) continue;
 
@@ -114,6 +118,12 @@ export function mergeBuildingGeometry(group: THREE.Group): void {
     }
 
     if (!mergedGeo) continue;
+
+    // Stagger depth per material so coplanar faces don't z-fight
+    bucket.material.polygonOffset = true;
+    bucket.material.polygonOffsetFactor = offsetIndex;
+    bucket.material.polygonOffsetUnits = offsetIndex;
+    offsetIndex++;
 
     const mesh = new THREE.Mesh(mergedGeo, bucket.material);
     mesh.castShadow = bucket.castShadow;
