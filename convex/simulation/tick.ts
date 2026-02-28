@@ -108,13 +108,20 @@ The city today:
 - Builds in progress: ${city.activeBuildCount}/${buildCap}${city.activeBuildCount >= buildCap ? " — FULL! No new builds can start until current ones finish." : ""}
 - Recent neighbor activity: "${nearbyActions}"
 
-Speak your mind. Be authentic. You can:
-- REQUEST_BUILD: ask the mayor to approve a building (describe what + why)${city.activeBuildCount >= buildCap ? `\n  ⚠️ Building capacity is FULL (${buildCap}/${buildCap}). DO NOT request a build right now — it will be denied.` : slotsLeft <= 0 ? "\n  ⚠️ Your plot is FULL (8/8 buildings). You cannot build more." : `\n  You have ${slotsLeft} open slot${slotsLeft > 1 ? "s" : ""} on your plot.${isLive ? " The city is BOOMING — now is the perfect time to build! Think big!" : " Think about what would complement your existing buildings!"}`}
+${isLive && slotsLeft > 0 && city.activeBuildCount < buildCap ? `You are EAGER to develop your plot. Your top priority is REQUEST_BUILD — you want to build something amazing!
+If you already have buildings, think about what would complement them. Be creative and specific.
+
+You can:
+- REQUEST_BUILD: ⭐ YOUR TOP PRIORITY — describe what you want to build and why (be creative!)
+  You have ${slotsLeft} open slot${slotsLeft > 1 ? "s" : ""} on your plot. BUILD SOMETHING!
+- CHAT: say something to another citizen (only if you truly have nothing to build)
+- PRAISE: commend something good (rare)` : `Speak your mind. Be authentic. You can:
+- REQUEST_BUILD: ask the mayor to approve a building (describe what + why)${city.activeBuildCount >= buildCap ? `\n  ⚠️ Building capacity is FULL (${buildCap}/${buildCap}). DO NOT request a build right now — it will be denied.` : slotsLeft <= 0 ? "\n  ⚠️ Your plot is FULL (8/8 buildings). You cannot build more." : `\n  You have ${slotsLeft} open slot${slotsLeft > 1 ? "s" : ""} on your plot. Think about what would complement your existing buildings!`}
 - PROTEST: publicly voice discontent (say why)
 - PETITION: formally ask the mayor to change something
 - PRAISE: commend something good
 - CHAT: say something to another citizen or the public
-- IDLE: do nothing this turn
+- IDLE: do nothing this turn`}
 
 Reply ONLY as JSON:
 {
@@ -183,9 +190,8 @@ City state:
 - Treasury: $${city.treasury} (income: $${income}/tick, expenses: $${expenses}/tick, net: $${income - expenses}/tick)
 - Happiness: ${city.happiness}/100, Crime: ${city.crimeRate}/100, Pollution: ${city.pollutionLevel}/100
 - Approval rating: ${city.approvalRating}/100
-- Builds in progress: ${city.activeBuildCount}/${buildCap} — ${slotsAvailable} slots available${city.activeBuildCount >= buildCap ? "\n  🚫 ALL BUILD SLOTS FULL. You MUST deny all build requests this tick." : isLive ? "\n  🏗️ The city is in GROWTH MODE! Approve as many builds as possible — fill those slots!" : "\n  Each build takes 1-3 minutes. Build slots are precious. Be selective."}
-  Think strategically: what does the city NEED most? Revenue buildings (commercial, industrial, luxury) or population/happiness (residential, civic, entertainment)?
-  ECONOMICS: Buildings generate base income automatically. Taxes add citizen revenue on top. But maintenance grows QUADRATICALLY — more buildings = exponentially higher costs. You MUST balance growth with fiscal discipline.
+- Builds in progress: ${city.activeBuildCount}/${buildCap} — ${slotsAvailable} slots available${city.activeBuildCount >= buildCap ? "\n  🚫 ALL BUILD SLOTS FULL. You MUST deny all build requests this tick." : isLive ? `\n  🏗️ GROWTH MODE is active! You should approve most build requests — the city thrives when citizens build. Only deny if clearly harmful.` : "\n  Each build takes 1-3 minutes. Build slots are precious. Be selective."}
+  ${isLive ? "Buildings generate income and make citizens happy. More buildings = a thriving city. Be generous with approvals!" : "Think strategically: what does the city NEED most? Revenue buildings (commercial, industrial, luxury) or population/happiness (residential, civic, entertainment)?\n  ECONOMICS: Buildings generate base income automatically. Taxes add citizen revenue on top. But maintenance grows QUADRATICALLY — more buildings = exponentially higher costs. You MUST balance growth with fiscal discipline."}
 - Current tax rates: res ${Math.round(city.taxRates.residential * 100)}%, com ${Math.round(city.taxRates.commercial * 100)}%, ind ${Math.round(city.taxRates.industrial * 100)}%, lux ${Math.round(city.taxRates.luxury * 100)}%
   WARNING: Taxes above 20% trigger tax fatigue (evasion). Above 30% citizens get unhappy. But too low = deficit!
 - Budget: edu ${Math.round(city.budgetAllocation.education * 100)}%, health ${Math.round(city.budgetAllocation.healthcare * 100)}%, security ${Math.round(city.budgetAllocation.security * 100)}%, infra ${Math.round(city.budgetAllocation.infrastructure * 100)}%
@@ -496,6 +502,8 @@ export const run = internalAction({
       }
     }
 
+    console.log(`[tick ${tickNumber}] ${citizenResults.length} agents acted, ${buildRequests.length} requested builds`);
+
     // Step 4: Mayor decision
     const buildRequestText = buildRequests
       .map((r) => `${r.agent.name} (plot #${r.agent.plotIndex}): wants to build "${r.action.build_description}"`)
@@ -525,8 +533,9 @@ export const run = internalAction({
     // Step 5: Resolve
     // Apply build approvals — fire actual geometry pipeline
     let newBuildsApproved = 0;
+    const buildCap = isLive ? 12 : 4;
     for (const approval of mayorDecision.build_approvals) {
-      if (approval.approved && city.activeBuildCount + newBuildsApproved < (isLive ? 12 : 4)) {
+      if (approval.approved && city.activeBuildCount + newBuildsApproved < buildCap) {
         const req = buildRequests.find((r) => r.agent.plotIndex === approval.agentPlot);
         if (req && req.action.build_description) {
           console.log(`[tick ${tickNumber}] BUILD APPROVED: ${req.agent.name} → "${req.action.build_description}"`);
