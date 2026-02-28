@@ -123,17 +123,17 @@ IMPORTANT: The description may be creative or fantastical (e.g. "a beaver-shaped
 REQUIREMENTS:
 - CRITICAL: Use 1 unit = 1 meter. ALL dimensions (height, width, depth) must match real-world scale. The plot is 100×100 but most buildings should NOT fill it — use realistic footprints:
   FOOTPRINT (width × depth):
-  - Small house / cabin / shed: ~10×8
-  - Regular house / villa: ~15×12
-  - Pub / shop / small restaurant: ~15×12
-  - Church / temple: ~20×35
-  - Townhouse: ~8×15
-  - Mansion / estate: ~30×25
-  - Mid-rise office / apartment block: ~30×25
-  - Tall office tower / skyscraper: ~40×40
-  - Supertall skyscraper: ~60×60 at base
-  - Stadium / arena: ~80×60
-  - Bridge: ~80×15 (long but narrow)
+  - Small house / cabin / shed: ~5×4
+  - Regular house / villa: ~8×6
+  - Pub / shop / small restaurant: ~8×6
+  - Church / temple: ~10×18
+  - Townhouse: ~4×8
+  - Mansion / estate: ~15×12
+  - Mid-rise office / apartment block: ~15×12
+  - Tall office tower / skyscraper: ~20×20
+  - Supertall skyscraper: ~30×30 at base
+  - Stadium / arena: ~40×30
+  - Bridge: ~40×8 (long but narrow)
   HEIGHT:
   - Small house / cabin / shed: 5–10m
   - Regular house / villa / bungalow: 8–15m
