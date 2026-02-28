@@ -10,6 +10,7 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-pixel: var(--font-geist-pixel-square);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -46,4 +47,323 @@ body {
 }
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
+}
+
+/* Login button with animated gradient glow */
+@keyframes glow-rotate {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.login-btn {
+  position: relative;
+  z-index: 0;
+}
+
+/* Animated conic gradient that sits behind the button */
+.login-btn::before {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg,
+    transparent 120deg,
+    rgba(100, 130, 255, 0.4) 160deg,
+    rgba(180, 120, 255, 0.5) 180deg,
+    rgba(100, 130, 255, 0.4) 200deg,
+    transparent 240deg,
+    transparent 360deg
+  );
+  z-index: -2;
+  border-radius: 18px;
+  opacity: 0;
+  animation: glow-rotate 3s linear infinite;
+  transition: opacity 0.4s ease;
+}
+
+/* Black fill that covers the gradient, leaving only the edge visible */
+.login-btn::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: black;
+  border-radius: inherit;
+  z-index: -1;
+  transition: background 0.3s ease;
+}
+
+.login-btn:hover::before {
+  opacity: 1;
+}
+
+.login-btn:hover::after {
+  background: #111;
+}
+
+.login-btn:hover {
+  box-shadow:
+    0 4px 20px rgba(0, 0, 0, 0.2),
+    0 0 30px -8px rgba(140, 120, 255, 0.15);
+}
+
+/* PixelBlast container */
+.pixel-blast-container {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+}
+
+/* ═══════════════════════════════════════════
+   Landing page
+   ═══════════════════════════════════════════ */
+
+.ld {
+  --px: var(--font-geist-pixel-square), "Courier New", monospace;
+  --page-bg: #f5f3f0;
+  --ink: #111;
+  --ink-mid: #555;
+  --ink-light: #999;
+  --accent: #B19EEF;
+  --accent-deep: #7c5fd6;
+  --gutter: 24px;
+
+  background: var(--page-bg);
+  min-height: 100vh;
+  overflow-x: hidden;
+  color: var(--ink);
+}
+
+/* ── Entrance animations ────────────── */
+
+@keyframes ld-fade-up {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes ld-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes ld-scale-in {
+  from { opacity: 0; transform: scale(0.97); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+/* ── Nav ────────────────────────────── */
+
+.ld-nav {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  display: flex;
+  justify-content: center;
+  padding: 16px var(--gutter);
+  pointer-events: none;
+}
+
+.ld-nav-pill {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 8px 8px 8px 20px;
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(16px) saturate(1.6);
+  -webkit-backdrop-filter: blur(16px) saturate(1.6);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 100px;
+  box-shadow:
+    0 1px 2px rgba(0,0,0,0.04),
+    0 4px 16px rgba(0,0,0,0.04);
+  animation: ld-fade-up 0.6s ease-out both;
+}
+
+.ld-nav-wordmark {
+  font-family: var(--px);
+  font-size: 13px;
+  color: var(--ink);
+  letter-spacing: 0.02em;
+  user-select: none;
+}
+
+.ld-nav-right {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.ld-nav-link {
+  font-family: var(--px);
+  font-size: 11px;
+  color: var(--ink-mid);
+  text-decoration: none;
+  padding: 6px 14px;
+  border-radius: 100px;
+  transition: color 0.15s, background 0.15s;
+}
+
+.ld-nav-link:hover {
+  color: var(--ink);
+  background: rgba(0,0,0,0.04);
+}
+
+.ld-nav-enter {
+  font-family: var(--px);
+  font-size: 11px;
+  color: white;
+  background: var(--ink);
+  text-decoration: none;
+  padding: 8px 18px;
+  border-radius: 100px;
+  transition: background 0.2s, transform 0.15s, box-shadow 0.2s;
+}
+
+.ld-nav-enter:hover {
+  background: #333;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+/* ── Hero ───────────────────────────── */
+
+.ld-hero {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: max(520px, 70vh);
+  padding: 100px var(--gutter) 80px;
+  overflow: hidden;
+}
+
+.ld-hero-shader {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  opacity: 0.7;
+}
+
+.ld-hero-content {
+  position: relative;
+  z-index: 1;
+  text-align: center;
+  max-width: 720px;
+  pointer-events: none;
+}
+
+.ld-hero-content a,
+.ld-hero-content button {
+  pointer-events: auto;
+}
+
+.ld-hero-eyebrow {
+  font-family: var(--px);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--accent-deep);
+  margin: 0 0 24px;
+  animation: ld-fade-up 0.6s 0.15s ease-out both;
+}
+
+.ld-hero-h1 {
+  font-family: var(--px);
+  font-size: clamp(32px, 5.5vw, 64px);
+  line-height: 1.15;
+  color: var(--ink);
+  margin: 0 0 24px;
+  animation: ld-fade-up 0.6s 0.25s ease-out both;
+}
+
+.ld-hero-h1-em {
+  color: var(--accent-deep);
+}
+
+.ld-hero-sub {
+  font-family: var(--px);
+  font-size: 13px;
+  line-height: 1.8;
+  color: var(--ink-mid);
+  margin: 0 0 40px;
+  animation: ld-fade-up 0.6s 0.35s ease-out both;
+}
+
+.ld-hero-cta {
+  display: inline-block;
+  font-family: var(--px);
+  font-size: 13px;
+  color: white;
+  background: var(--ink);
+  text-decoration: none;
+  padding: 14px 36px;
+  border-radius: 100px;
+  transition: background 0.2s, transform 0.15s, box-shadow 0.25s;
+  animation: ld-fade-up 0.6s 0.45s ease-out both;
+}
+
+.ld-hero-cta:hover {
+  background: var(--accent-deep);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 28px rgba(124, 95, 214, 0.3);
+}
+
+/* ── Glass card utility ─────────────── */
+
+.glass-card {
+  background: rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(20px) saturate(1.4);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+}
+
+/* ── Liquid glass — big frosted pill ── */
+
+.liquid-glass {
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(40px) saturate(1.6) brightness(1.1);
+  -webkit-backdrop-filter: blur(40px) saturate(1.6) brightness(1.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 24px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.15),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.05),
+    0 8px 32px rgba(0, 0, 0, 0.2),
+    0 0 0 0.5px rgba(255, 255, 255, 0.08);
+}
+
+/* ── Frosted glass — heavier blur for readability ── */
+
+.frosted-glass {
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(48px) saturate(1.5);
+  -webkit-backdrop-filter: blur(48px) saturate(1.5);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 28px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 12px 40px rgba(0, 0, 0, 0.3);
+}
+
+/* ── Showcase entrance ──────────────── */
+
+.ld-showcase-anim {
+  animation: ld-scale-in 0.8s 0.5s ease-out both;
+}
+
+/* ── Mobile ─────────────────────────── */
+
+@media (max-width: 640px) {
+  .ld { --gutter: 16px; }
+
+  .ld-hero {
+    min-height: max(440px, 60vh);
+    padding: 88px var(--gutter) 56px;
+  }
+
+  .ld-hero-sub br { display: none; }
+
+  .ld-nav-link { display: none; }
 }
