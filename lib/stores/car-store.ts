@@ -8,6 +8,7 @@ interface RemoteCar {
   heading: number;
   userId: string;
   userName: string;
+  userAvatar?: string;
 }
 
 interface CarStore {

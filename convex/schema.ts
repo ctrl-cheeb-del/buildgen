@@ -42,6 +42,7 @@ export default defineSchema({
     z: v.number(),
     heading: v.number(),
     userName: v.string(),
+    userAvatar: v.optional(v.string()),
     updatedAt: v.number(),
   }).index("by_userId", ["userId"]),
 

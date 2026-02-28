@@ -14,7 +14,6 @@ import CachedPreviewPicker from "@/components/CachedPreviewPicker";
 import AuthButton from "@/components/AuthButton";
 import CarModeButton from "@/components/CarModeButton";
 import WalkModeButton from "@/components/fp/WalkModeButton";
-import CharacterModal from "@/components/fp/CharacterModal";
 import FirstPersonOverlay from "@/components/fp/FirstPersonOverlay";
 import ControlPanel from "@/components/ControlPanel";
 import { useFPStore } from "@/lib/stores/fp-store";
@@ -170,14 +169,15 @@ export default function Home() {
   const updateCarPosition = useMutation(api.cars.updateCarPosition);
   const removeCarPosition = useMutation(api.cars.removeCarPosition);
   const carUserId = user?.id ?? null;
-  const carUserName = user?.firstName ?? user?.username ?? "Anonymous";
+  const carUserName = user?.username ?? "Anonymous";
+  const carUserAvatar = user?.imageUrl;
 
   const handleCarSync = useCallback(
     (x: number, z: number, heading: number) => {
       if (!carUserId) return;
-      updateCarPosition({ userId: carUserId, x, z, heading, userName: carUserName });
+      updateCarPosition({ userId: carUserId, x, z, heading, userName: carUserName, userAvatar: carUserAvatar });
     },
-    [carUserId, carUserName, updateCarPosition]
+    [carUserId, carUserName, carUserAvatar, updateCarPosition]
   );
 
   const handleCarExit = useCallback(() => {
@@ -190,27 +190,13 @@ export default function Home() {
 
   // First-person walk mode
   const fpMode = useFPStore((s) => s.fpMode);
-  const fpCharacter = useFPStore((s) => s.character);
   const setFPMode = useFPStore((s) => s.setFPMode);
   const setFPCharacter = useFPStore((s) => s.setCharacter);
-  const [showCharacterModal, setShowCharacterModal] = useState(false);
-
   const handleWalkClick = useCallback(() => {
-    setShowCharacterModal(true);
-  }, []);
-
-  const handleCharacterConfirm = useCallback(
-    (name: string, color: string) => {
-      setFPCharacter({ name, color });
-      setShowCharacterModal(false);
-      setFPMode(true);
-    },
-    [setFPCharacter, setFPMode]
-  );
-
-  const handleCharacterCancel = useCallback(() => {
-    setShowCharacterModal(false);
-  }, []);
+    const handle = user?.username ?? "Anonymous";
+    setFPCharacter({ handle, avatarUrl: user?.imageUrl });
+    setFPMode(true);
+  }, [user, setFPCharacter, setFPMode]);
 
   // Map buildings data for FP scene
   const fpBuildings = useMemo(() => {
@@ -245,14 +231,6 @@ export default function Home() {
           <CarModeButton />
           <WalkModeButton onClick={handleWalkClick} />
         </div>
-      )}
-
-      {/* Character creation modal */}
-      {showCharacterModal && (
-        <CharacterModal
-          onConfirm={handleCharacterConfirm}
-          onCancel={handleCharacterCancel}
-        />
       )}
 
       {/* First-person overlay */}

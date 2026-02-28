@@ -131,8 +131,8 @@ export default function FirstPersonOverlay({
       />
       {character && (
         <FPHud
-          characterName={character.name}
-          characterColor={character.color}
+          handle={character.handle}
+          avatarUrl={character.avatarUrl}
           isLocked={isLocked}
           onExit={handleExit}
         />

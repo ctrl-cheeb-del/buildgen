@@ -20,7 +20,7 @@ export function useRemoteCars(userId: string | null) {
 
     const remoteCarsMap = new Map<
       string,
-      { x: number; z: number; heading: number; userId: string; userName: string }
+      { x: number; z: number; heading: number; userId: string; userName: string; userAvatar?: string }
     >();
 
     const seenIds = new Set<string>();
@@ -34,6 +34,7 @@ export function useRemoteCars(userId: string | null) {
         heading: car.heading,
         userId: car.userId,
         userName: car.userName,
+        userAvatar: car.userAvatar,
       });
 
       // Create or update remote car group

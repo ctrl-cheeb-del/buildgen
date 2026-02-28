@@ -8,6 +8,7 @@ export const updateCarPosition = mutation({
     z: v.number(),
     heading: v.number(),
     userName: v.string(),
+    userAvatar: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const existing = await ctx.db
@@ -21,6 +22,7 @@ export const updateCarPosition = mutation({
         z: args.z,
         heading: args.heading,
         userName: args.userName,
+        userAvatar: args.userAvatar,
         updatedAt: Date.now(),
       });
     } else {
@@ -30,6 +32,7 @@ export const updateCarPosition = mutation({
         z: args.z,
         heading: args.heading,
         userName: args.userName,
+        userAvatar: args.userAvatar,
         updatedAt: Date.now(),
       });
     }

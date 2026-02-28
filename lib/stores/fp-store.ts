@@ -1,8 +1,8 @@
 import { create } from "zustand";
 
 interface FPCharacter {
-  name: string;
-  color: string;
+  handle: string;
+  avatarUrl?: string;
 }
 
 interface FPStore {

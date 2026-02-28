@@ -3,15 +3,15 @@
 import { useEffect, useState } from "react";
 
 interface FPHudProps {
-  characterName: string;
-  characterColor: string;
+  handle: string;
+  avatarUrl?: string;
   isLocked: boolean;
   onExit: () => void;
 }
 
 export default function FPHud({
-  characterName,
-  characterColor,
+  handle,
+  avatarUrl,
   isLocked,
   onExit,
 }: FPHudProps) {
@@ -44,14 +44,20 @@ export default function FPHud({
         </div>
       )}
 
-      {/* Character name — top left */}
+      {/* Handle badge — top left */}
       <div className="absolute top-4 left-4">
-        <span
-          className="px-3 py-1.5 rounded-lg text-xs font-bold text-white"
-          style={{ backgroundColor: characterColor }}
-        >
-          {characterName}
-        </span>
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-black/60 backdrop-blur-sm">
+          {avatarUrl && (
+            <img
+              src={avatarUrl}
+              alt=""
+              className="w-5 h-5 rounded-full"
+            />
+          )}
+          <span className="text-xs font-semibold text-white">
+            @{handle}
+          </span>
+        </div>
       </div>
 
       {/* Exit button — top right */}
