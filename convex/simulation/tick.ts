@@ -180,8 +180,10 @@ City state:
 - Approval rating: ${city.approvalRating}/100
 - Builds in progress: ${city.activeBuildCount}/4 — ${slotsAvailable} slots available
   IMPORTANT: Each build takes a LONG time (1-3 minutes). Build slots are precious.${city.activeBuildCount >= 4 ? "\n  🚫 ALL BUILD SLOTS FULL. You MUST deny all build requests this tick." : ""}
-  Think strategically: what does the city NEED most? Residential for population? Commercial for tax revenue? Civic for happiness?
+  Think strategically: what does the city NEED most? Revenue buildings (commercial, industrial, luxury) or population/happiness (residential, civic, entertainment)?
+  ECONOMICS: Buildings generate base income automatically. Taxes add citizen revenue on top. But maintenance grows QUADRATICALLY — more buildings = exponentially higher costs. You MUST balance growth with fiscal discipline.
 - Current tax rates: res ${Math.round(city.taxRates.residential * 100)}%, com ${Math.round(city.taxRates.commercial * 100)}%, ind ${Math.round(city.taxRates.industrial * 100)}%, lux ${Math.round(city.taxRates.luxury * 100)}%
+  WARNING: Taxes above 20% trigger tax fatigue (evasion). Above 30% citizens get unhappy. But too low = deficit!
 - Budget: edu ${Math.round(city.budgetAllocation.education * 100)}%, health ${Math.round(city.budgetAllocation.healthcare * 100)}%, security ${Math.round(city.budgetAllocation.security * 100)}%, infra ${Math.round(city.budgetAllocation.infrastructure * 100)}%
 - Active decree: ${city.activeDecree?.title ?? "none"}
 - Next election in: ${city.mayorTerm} ticks${treasuryWarning}
@@ -326,45 +328,48 @@ export const run = internalAction({
 
     const population = census.residential * 120 + census.luxury * 40 + 200;
 
-    // ── TAX FATIGUE: High taxes reduce effective revenue (evasion + economic slowdown)
-    // At 20% tax → full revenue. At 40% → 80%. At 50% → 60%.
+    // ── TAX FATIGUE: High taxes reduce effective revenue
     function taxEfficiency(rate: number): number {
       if (rate <= 0.2) return 1.0;
       return Math.max(0.4, 1.0 - (rate - 0.2) * 1.3);
     }
 
-    // INCOME: head tax + building revenue (with tax fatigue)
-    const avgTaxRate = (taxRates.residential + taxRates.commercial + taxRates.industrial + taxRates.luxury) / 4;
-    const headTax = Math.round(population * 0.15 * taxEfficiency(avgTaxRate));
-
-    const buildingRevenueBase: Record<string, number> = {
-      residential: 60, commercial: 150, industrial: 220, office: 180,
-      civic: 0, entertainment: 100, luxury: 350,
+    // ── INCOME (dual sources) ──
+    // 1. Base building income — economic activity, always flows to treasury
+    const baseIncomeMap: Record<string, number> = {
+      residential: 40, commercial: 80, industrial: 100, office: 90,
+      civic: -30, entertainment: 50, luxury: 120,
     };
-    const taxMap: Record<string, string> = {
-      residential: "residential", commercial: "commercial", industrial: "industrial",
-      office: "commercial", civic: "residential", entertainment: "commercial", luxury: "luxury",
-    };
-    let buildingRevenue = 0;
+    // Crime penalty: high crime from LAST tick scares away businesses
+    // At 100 crime → 50% revenue cut on commercial/office/luxury
+    const prevCrime = city.crimeRate ?? 0;
+    const crimePenalty = 1 - prevCrime / 200;
+    const crimeAffected = new Set(["commercial", "office", "luxury"]);
+    let baseIncome = 0;
     for (const [cat, count] of Object.entries(census)) {
-      const base = buildingRevenueBase[cat] || 0;
-      const rateKey = taxMap[cat] as keyof typeof taxRates;
-      const rate = taxRates[rateKey] || 0.1;
-      buildingRevenue += count * base * rate * taxEfficiency(rate);
+      const raw = count * (baseIncomeMap[cat] || 0);
+      baseIncome += crimeAffected.has(cat) ? raw * crimePenalty : raw;
     }
-    buildingRevenue = Math.round(buildingRevenue);
-    const taxRevenue = headTax + buildingRevenue;
 
-    // EXPENSES: population-scaled + quadratic building maintenance + inflation
-    const baseUpkeep = Math.round(population * 0.35);
+    // 2. Tax revenue — scales with population and average tax rate (with fatigue)
+    const avgTaxRate = (taxRates.residential + taxRates.commercial + taxRates.industrial + taxRates.luxury) / 4;
+    const citizenTaxRevenue = Math.round(population * avgTaxRate * 0.5 * taxEfficiency(avgTaxRate));
+    const taxRevenue = Math.round(baseIncome) + citizenTaxRevenue;
+
+    // ── EXPENSES: population-scaled + QUADRATIC building maintenance + inflation ──
+    const baseUpkeep = Math.round(population * 0.15);
     const budgetTotal = budget.education + budget.healthcare + budget.security + budget.infrastructure;
-    const serviceCosts = Math.round(budgetTotal * population * 1.2);
-    const maintenanceCost = Math.round(totalBuildings * 20 + totalBuildings * totalBuildings * 2);
+    const serviceCosts = Math.round(budgetTotal * population * 0.3);
+    const maintenanceCost = Math.round(totalBuildings * 15 + totalBuildings * totalBuildings * 1.5);
     const inflationMultiplier = 1 + Math.floor(tickNumber / 10) * 0.01;
     const totalExpenses = Math.round((baseUpkeep + serviceCosts + maintenanceCost) * inflationMultiplier);
 
     const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
-    const crimeRate = clamp(30 + census.industrial * 8 - census.civic * 15 - budget.security * 40, 0, 100);
+
+    // ── TREASURY STRESS: when money is low, can't fund services → crime rises ──
+    // Below 5000g treasury, crime starts creeping up. At 0g → +25 crime.
+    const treasuryStress = Math.max(0, 1 - city.treasury / 5000) * 25;
+    const crimeRate = clamp(30 + census.industrial * 8 - census.civic * 15 - budget.security * 40 + treasuryStress, 0, 100);
     const pollutionLevel = clamp(10 + census.industrial * 12 + census.commercial * 3 - budget.infrastructure * 20, 0, 100);
     const educationLevel = clamp(20 + census.civic * 10 + budget.education * 60, 0, 100);
     const healthLevel = clamp(20 + census.civic * 8 + budget.healthcare * 60, 0, 100);
