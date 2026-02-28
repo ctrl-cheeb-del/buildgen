@@ -12,7 +12,7 @@ function getMistral(): Mistral {
 
 export async function POST(req: NextRequest) {
   try {
-    const { messages } = await req.json();
+    const { messages, currentMode } = await req.json();
 
     if (!Array.isArray(messages)) {
       return NextResponse.json(
@@ -23,8 +23,15 @@ export async function POST(req: NextRequest) {
 
     const mistral = getMistral();
 
+    const modeContext =
+      currentMode === "driving"
+        ? "\n\n[state] player is currently in driving mode. don't call drive again unless they ask to restart."
+        : currentMode === "walking"
+          ? "\n\n[state] player is currently in first-person walking mode. don't call walk again unless they ask to restart."
+          : "\n\n[state] player is in default map view (not driving or walking).";
+
     const fullMessages = [
-      { role: "system" as const, content: systemPrompt },
+      { role: "system" as const, content: systemPrompt + modeContext },
       ...messages,
     ];
 

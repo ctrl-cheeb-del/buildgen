@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { useUser } from "@clerk/nextjs";
-import type { MultiViewImages, WorkbenchScreenshots } from "@/lib/types";
 import { api } from "../convex/_generated/api";
+import type { WorkbenchScreenshots } from "@/lib/types";
 import ThreeMapCanvas from "@/components/ThreeMapCanvas";
 import AuthButton from "@/components/AuthButton";
 import FirstPersonOverlay from "@/components/fp/FirstPersonOverlay";
@@ -38,13 +38,12 @@ const TOTAL_PLOTS = GRID_COLS * GRID_ROWS;
 
 export default function Home() {
   const iterationViewerRef = useRef<IsolatedViewerHandle>(null);
-  const { isRunning, multiView, sessionId, steps, runPipeline, iterationConfig } = usePipeline();
+  const { isRunning, runPipeline } = usePipeline();
   const iteration = useIteration();
   const pipelineIsActive = usePipelineStore((s) => s.isActive);
   const pipelineIterationCount = usePipelineStore((s) => s.iterationCount);
   const { isSignedIn, user } = useUser();
-  const { plotStates, buildings, localPendingUpdates } =
-    useGridSync();
+  const { plotStates, buildings, localPendingUpdates } = useGridSync();
 
   const myPlot = useQuery(api.plots.getMyPlot);
   const claimPlot = useMutation(api.plots.claimPlot);
@@ -76,18 +75,45 @@ export default function Home() {
     (p) => p.status === "occupied" || p.status === "claimed"
   ).length;
 
-  const [cachedViews, setCachedViews] = useState<{
-    views: MultiViewImages;
-    buildingName: string;
-  } | null>(null);
+  // Derive generating state from Convex (persists across refresh) + local state (instant feedback)
+  const isGenerating = isRunning || myPlot?.status === "generating";
+
+  // --- Convex-driven pipeline-store sync ---
+  const pipelineStep = myPlot?.pipelineStep;
+  const plotStatus = myPlot?.status;
+  const multiViewUrl = myPlot?.pipelineMultiViewUrl;
+  const prevPlotStatus = useRef(plotStatus);
+
+  useEffect(() => {
+    const { setNodeStatus, setActive, reset } = usePipelineStore.getState();
+
+    if (plotStatus === "generating") {
+      setActive(true);
+      const stepOrder = ["generating-views", "generating-code", "placing"];
+      const nodeIds = ["generate-views", "generate-code", "place-on-map"] as const;
+      const stepIdx = stepOrder.indexOf(pipelineStep ?? "");
+
+      for (let i = 0; i < nodeIds.length; i++) {
+        if (i < stepIdx) setNodeStatus(nodeIds[i], "done");
+        else if (i === stepIdx) setNodeStatus(nodeIds[i], "active");
+        else setNodeStatus(nodeIds[i], "pending");
+      }
+    } else if (plotStatus === "occupied" && prevPlotStatus.current === "generating") {
+      // Generation just completed — mark initial steps done
+      setNodeStatus("generate-views", "done");
+      setNodeStatus("generate-code", "done");
+      setNodeStatus("place-on-map", "done");
+    }
+
+    prevPlotStatus.current = plotStatus;
+  }, [pipelineStep, plotStatus]);
 
   const handleGenerate = useCallback(
     (buildingName: string) => {
       if (!myPlot) return;
-      const cached = cachedViews?.views;
-      runPipeline(buildingName, myPlot.index, cached);
+      runPipeline(buildingName, myPlot.index);
     },
-    [runPipeline, cachedViews, myPlot]
+    [runPipeline, myPlot]
   );
 
   const handlePlotClick = useCallback(
@@ -105,17 +131,6 @@ export default function Home() {
     },
     [plotStates, claimPlot]
   );
-
-  const handleSelectCached = useCallback(
-    (views: MultiViewImages, buildingName: string) => {
-      setCachedViews({ views, buildingName });
-    },
-    []
-  );
-
-  const handleClearCached = useCallback(() => {
-    setCachedViews(null);
-  }, []);
 
   const handleDeleteBuilding = useCallback(
     async (buildingId: string) => {
@@ -232,13 +247,14 @@ export default function Home() {
   const addMessage = useChatStore((s) => s.addMessage);
   const removeStatusMessages = useChatStore((s) => s.removeStatusMessages);
 
-  const prevIsRunning = useRef(false);
+  // Clear status messages when generation finishes
+  const prevIsGenerating = useRef(false);
   useEffect(() => {
-    if (prevIsRunning.current && !isRunning) {
+    if (prevIsGenerating.current && !isGenerating) {
       removeStatusMessages();
     }
-    prevIsRunning.current = isRunning;
-  }, [isRunning, removeStatusMessages]);
+    prevIsGenerating.current = isGenerating;
+  }, [isGenerating, removeStatusMessages]);
 
   const chatDeps = useMemo(
     () => ({
@@ -272,7 +288,9 @@ export default function Home() {
     ? myBuildings?.find((b) => (b._id as string) === selectedId)
     : null;
 
-  const generationComplete = steps.render?.state === "done";
+  // Generation complete when plot transitions from generating to occupied
+  const generationComplete =
+    plotStatus === "occupied" && prevPlotStatus.current === "generating";
 
   const captureScreenshotsForCode = useCallback(
     (code: string): WorkbenchScreenshots => {
@@ -284,47 +302,70 @@ export default function Home() {
     []
   );
 
+  // Auto-start iteration when generation completes (if a building exists)
   const autoStartedRef = useRef(false);
   useEffect(() => {
     if (
-      generationComplete &&
+      plotStatus === "occupied" &&
       selectedBuilding &&
-      sessionId &&
       !autoStartedRef.current &&
       !iteration.isIterating
     ) {
-      autoStartedRef.current = true;
-      iteration.startSession({
-        sessionId,
-        buildingId: selectedBuilding._id as string,
-        initialCode: selectedBuilding.proceduralCode,
-        captureScreenshots: captureScreenshotsForCode,
-        maxIterations: iterationConfig?.maxIterations,
-        qualityTarget: iterationConfig?.qualityTarget,
-      });
+      // Only auto-start once — check if the building was just generated
+      const genNodes = usePipelineStore.getState().nodes.slice(0, 3);
+      const allGenDone = genNodes.every((n) => n.status === "done");
+      if (allGenDone) {
+        autoStartedRef.current = true;
+        // Create a session for iteration
+        fetch("/api/iterate/session", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ buildingName: selectedBuilding.prompt, views: null }),
+        })
+          .then((res) => (res.ok ? res.json() : null))
+          .then((data) => {
+            if (data?.sessionId) {
+              iteration.startSession({
+                sessionId: data.sessionId,
+                buildingId: selectedBuilding._id as string,
+                initialCode: selectedBuilding.proceduralCode,
+                captureScreenshots: captureScreenshotsForCode,
+              });
+            }
+          })
+          .catch((err) => console.warn("[Iteration] Failed to create session:", err));
+      }
     }
     if (isRunning) {
       autoStartedRef.current = false;
     }
   }, [
-    generationComplete,
+    plotStatus,
     selectedBuilding,
-    sessionId,
     iteration,
     captureScreenshotsForCode,
     isRunning,
-    iterationConfig,
   ]);
 
-  // --- Bottom pipeline panel state ---
+  // --- Pipeline panel state ---
   const pipelineError = usePipelineStore((s) => s.error);
-  const pipelineHasRun = pipelineIsActive || pipelineIterationCount > 0 || isRunning || !!pipelineError;
+  const pipelineHasRun =
+    pipelineIsActive ||
+    pipelineIterationCount > 0 ||
+    isRunning ||
+    plotStatus === "generating" ||
+    !!pipelineError;
   const [isMinimized, setMinimized] = useState(false);
 
   // Auto-minimize when pipeline finishes (but NOT on error)
   const prevActiveRef = useRef(false);
   useEffect(() => {
-    if (prevActiveRef.current && !pipelineIsActive && !isRunning && !pipelineError) {
+    if (
+      prevActiveRef.current &&
+      !pipelineIsActive &&
+      !isRunning &&
+      !pipelineError
+    ) {
       const t = setTimeout(() => setMinimized(true), 2000);
       return () => clearTimeout(t);
     }
@@ -365,9 +406,7 @@ export default function Home() {
         <div className="absolute top-4 right-4 z-10 flex items-center gap-2">
           <AuthButton />
           <SettingsPanel
-            isRunning={isRunning}
-            multiView={multiView}
-            steps={steps}
+            isRunning={isGenerating}
             onGenerate={handleGenerate}
             myPlot={myPlot}
             totalPlots={TOTAL_PLOTS}
@@ -381,9 +420,6 @@ export default function Home() {
             onSelectBuilding={selectBuilding}
             onDeleteBuilding={handleDeleteBuilding}
             isOwnerOfSelected={isOwnerOfSelected}
-            cachedViews={cachedViews}
-            onSelectCached={handleSelectCached}
-            onClearCached={handleClearCached}
           />
         </div>
       )}
@@ -393,7 +429,11 @@ export default function Home() {
 
       {/* Chat UI */}
       <ChatMessages />
-      <ChatInput onSend={sendMessage} isLoading={chatIsLoading} />
+      <ChatInput
+        onSend={sendMessage}
+        isLoading={chatIsLoading}
+        isGenerating={isGenerating}
+      />
 
       {/* Pipeline panel — top-left individual glass pills */}
       {pipelineHasRun && !fpMode && (
@@ -405,7 +445,7 @@ export default function Home() {
               onMinimize={() => setMinimized(true)}
               onStop={iteration.stop}
               onTogglePause={iteration.togglePause}
-              multiView={multiView}
+              multiViewUrl={multiViewUrl ?? null}
               iterations={iteration.iterations}
               selectedBuilding={
                 selectedBuilding

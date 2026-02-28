@@ -15,6 +15,8 @@ export interface PlotState {
   ownerName?: string;
   ownerUsername?: string;
   ownerAvatar?: string;
+  pipelineStep?: string;
+  pipelineMultiViewUrl?: string;
 }
 
 export function gridIndexToColRow(index: number): { col: number; row: number } {

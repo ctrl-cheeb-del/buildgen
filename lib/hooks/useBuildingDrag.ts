@@ -277,6 +277,7 @@ export function useBuildingDrag(
 
         stateRef.current = "dragging";
         useWorldStore.getState().setIsDragging(true);
+        layer!.setControlsEnabled(false);
         canvas.style.cursor = "grabbing";
       }
 
@@ -324,6 +325,7 @@ export function useBuildingDrag(
 
       if (prev === "dragging" || prev === "pending") {
         useWorldStore.getState().setIsDragging(false);
+        layer!.setControlsEnabled(true);
       }
 
       stateRef.current = "idle";

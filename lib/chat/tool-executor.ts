@@ -9,9 +9,7 @@ export interface ToolDeps {
   setCharacter: (c: { handle: string; avatarUrl?: string } | null) => void;
   runPipeline: (
     buildingName: string,
-    plotIndex: number,
-    cachedViews?: undefined,
-    iterationConfig?: IterationConfig
+    plotIndex: number
   ) => Promise<void>;
   myPlotIndex: number | null;
   userHandle: string;
@@ -56,7 +54,7 @@ export function executeTool(
         iterationConfig.qualityTarget = args.quality_target;
       }
       // Fire and forget — pipeline runs in background
-      deps.runPipeline(description, deps.myPlotIndex, undefined, iterationConfig);
+      deps.runPipeline(description, deps.myPlotIndex);
       deps.addStatusMessage(
         `Generating "${description}"${iterationConfig.maxIterations != null ? ` (${iterationConfig.maxIterations} iterations)` : ""}...`,
         toolName

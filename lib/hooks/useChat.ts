@@ -2,6 +2,8 @@
 
 import { useCallback, useRef } from "react";
 import { useChatStore } from "@/lib/stores/chat-store";
+import { useCarStore } from "@/lib/stores/car-store";
+import { useFPStore } from "@/lib/stores/fp-store";
 import { executeTool, type ToolDeps } from "@/lib/chat/tool-executor";
 
 interface MistralMessage {
@@ -42,10 +44,15 @@ export function useChat(deps: ToolDeps) {
 
           let res: Response;
           try {
+            const carMode = useCarStore.getState().carMode;
+            const fpMode = useFPStore.getState().fpMode;
             res = await fetch("/api/chat", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ messages: historyRef.current }),
+              body: JSON.stringify({
+                messages: historyRef.current,
+                currentMode: carMode ? "driving" : fpMode ? "walking" : "default",
+              }),
               signal: controller.signal,
             });
           } catch (fetchErr) {

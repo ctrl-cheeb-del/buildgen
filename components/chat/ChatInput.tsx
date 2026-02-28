@@ -8,9 +8,10 @@ import { useChatStore } from "@/lib/stores/chat-store";
 interface ChatInputProps {
   onSend: (text: string) => void;
   isLoading: boolean;
+  isGenerating?: boolean;
 }
 
-export default function ChatInput({ onSend, isLoading }: ChatInputProps) {
+export default function ChatInput({ onSend, isLoading, isGenerating }: ChatInputProps) {
   const [text, setText] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const carMode = useCarStore((s) => s.carMode);
@@ -18,7 +19,7 @@ export default function ChatInput({ onSend, isLoading }: ChatInputProps) {
   const messages = useChatStore((s) => s.messages);
 
   const statusMessages = messages.filter((m) => m.role === "status");
-  const hasStatus = statusMessages.length > 0;
+  const hasStatus = statusMessages.length > 0 || !!isGenerating;
 
   useEffect(() => {
     if ((carMode || fpMode) && inputRef.current) {
@@ -68,27 +69,15 @@ export default function ChatInput({ onSend, isLoading }: ChatInputProps) {
   const tabLeft = (W - tabW) / 2;
   const tabRight = tabLeft + tabW;
 
-  // The tab shape: top rounded corners, bottom has inverse flare ears that
-  // extend outward and curve down, sitting flush on top of the pill.
-  // The "ears" are the concave fillets connecting the tab to the pill surface.
   const tabPath = [
-    // Start at bottom-left ear
     `M ${tabLeft - flareR} ${tabH}`,
-    // Concave curve up to tab left side
     `A ${flareR} ${flareR} 0 0 0 ${tabLeft} ${tabH - flareR}`,
-    // Left side up
     `L ${tabLeft} ${tabR}`,
-    // Top-left corner
     `A ${tabR} ${tabR} 0 0 1 ${tabLeft + tabR} ${0}`,
-    // Top edge
     `L ${tabRight - tabR} ${0}`,
-    // Top-right corner
     `A ${tabR} ${tabR} 0 0 1 ${tabRight} ${tabR}`,
-    // Right side down
     `L ${tabRight} ${tabH - flareR}`,
-    // Concave curve to bottom-right ear
     `A ${flareR} ${flareR} 0 0 0 ${tabRight + flareR} ${tabH}`,
-    // Close bottom (flat line across bottom, behind the pill)
     `L ${tabLeft - flareR} ${tabH}`,
     `Z`,
   ].join(" ");
@@ -100,7 +89,7 @@ export default function ChatInput({ onSend, isLoading }: ChatInputProps) {
         <div
           className="absolute left-0 right-0 pointer-events-none"
           style={{
-            bottom: pillH - 1, // overlap 1px into pill so no gap
+            bottom: pillH - 1,
             height: tabH,
             opacity: hasStatus ? 1 : 0,
             transform: hasStatus ? "translateY(0)" : `translateY(${tabH * 0.6}px)`,
@@ -136,7 +125,6 @@ export default function ChatInput({ onSend, isLoading }: ChatInputProps) {
               strokeWidth="1.5"
               vectorEffect="non-scaling-stroke"
             />
-            {/* Cover the bottom stroke so it doesn't show a line on the pill */}
             <line
               x1={tabLeft - flareR}
               y1={tabH}
@@ -149,10 +137,22 @@ export default function ChatInput({ onSend, isLoading }: ChatInputProps) {
           </svg>
           {/* Tab content */}
           <div className="absolute inset-0 flex items-center justify-center px-5">
-            <div className="flex items-center gap-2 text-xs text-white/80">
-              <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse flex-shrink-0" />
-              <span>Generating</span>
-            </div>
+            {statusMessages.length > 0 ? (
+              statusMessages.map((msg) => (
+                <div
+                  key={msg.id}
+                  className="flex items-center gap-2 text-xs text-white/80"
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse flex-shrink-0" />
+                  <span className="truncate">{msg.content}</span>
+                </div>
+              ))
+            ) : isGenerating ? (
+              <div className="flex items-center gap-2 text-xs text-white/80">
+                <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse flex-shrink-0" />
+                <span className="truncate">Generating building...</span>
+              </div>
+            ) : null}
           </div>
         </div>
 

@@ -7,7 +7,6 @@ import {
   type NodeStatus,
 } from "@/lib/stores/pipeline-store";
 import type {
-  MultiViewImages,
   IterationResult,
   ScoreBreakdown,
 } from "@/lib/types";
@@ -130,7 +129,7 @@ interface DetailPanelProps {
   nodeId: PipelineNodeId;
   nodeStatus: NodeStatus;
   nodeDetail?: string;
-  multiView: MultiViewImages | null;
+  multiViewUrl: string | null;
   iterations: IterationResult[];
   latestScore: ScoreBreakdown | null;
   selectedBuilding: {
@@ -163,7 +162,7 @@ function NodeDetailPanel({
   nodeId,
   nodeStatus,
   nodeDetail,
-  multiView,
+  multiViewUrl,
   iterations,
   latestScore,
   selectedBuilding,
@@ -178,30 +177,20 @@ function NodeDetailPanel({
     <div
       className={`absolute left-full ml-2 top-0 w-56 rounded-2xl ${GLASS_PILL} p-3 z-50 animate-fade-in`}
     >
-      {/* Generate Views — show blueprint thumbnails */}
+      {/* Generate Views — show grid image from Convex storage */}
       {nodeId === "generate-views" &&
-        (multiView ? (
+        (multiViewUrl ? (
           <div>
             <div className="text-[10px] text-white/50 mb-1.5">
               Blueprint Views
             </div>
-            <div className="grid grid-cols-2 gap-1">
-              {(["front", "right", "back", "left"] as const).map((angle) => (
-                <div
-                  key={angle}
-                  className="relative aspect-square rounded-lg overflow-hidden bg-black/30"
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={multiView[angle]}
-                    alt={angle}
-                    className="w-full h-full object-cover"
-                  />
-                  <span className="absolute bottom-0.5 left-0.5 text-[8px] text-white/60 bg-black/40 px-1 rounded">
-                    {angle}
-                  </span>
-                </div>
-              ))}
+            <div className="rounded-lg overflow-hidden bg-black/30">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={multiViewUrl}
+                alt="Multi-view grid"
+                className="w-full h-auto object-cover"
+              />
             </div>
           </div>
         ) : isActive ? (
@@ -690,7 +679,7 @@ export interface PipelineFlowchartProps {
   onMinimize: () => void;
   onStop: () => void;
   onTogglePause: () => void;
-  multiView: MultiViewImages | null;
+  multiViewUrl: string | null;
   iterations: IterationResult[];
   selectedBuilding: {
     proceduralCode: string;
@@ -703,7 +692,7 @@ export default function PipelineFlowchart({
   onMinimize,
   onStop,
   onTogglePause,
-  multiView,
+  multiViewUrl,
   iterations,
   selectedBuilding,
 }: PipelineFlowchartProps) {
@@ -730,7 +719,7 @@ export default function PipelineFlowchart({
     nodeId: node.id,
     nodeStatus: node.status,
     nodeDetail: node.detail,
-    multiView,
+    multiViewUrl,
     iterations,
     latestScore,
     selectedBuilding,

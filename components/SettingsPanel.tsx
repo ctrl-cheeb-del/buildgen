@@ -1,18 +1,12 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef } from "react";
-import type { MultiViewImages, PipelineStatus } from "@/lib/types";
 import PromptBar from "./PromptBar";
-import StatusPanel from "./StatusPanel";
-import ImagePreview from "./ImagePreview";
-import CachedPreviewPicker from "./CachedPreviewPicker";
 import ControlPanel from "./ControlPanel";
 
 interface SettingsPanelProps {
   // Pipeline
   isRunning: boolean;
-  multiView: MultiViewImages | null;
-  steps: Record<string, PipelineStatus>;
   onGenerate: (name: string) => void;
   // Plot
   myPlot: { index: number; status: string } | null | undefined;
@@ -25,10 +19,6 @@ interface SettingsPanelProps {
   onSelectBuilding: (id: string) => void;
   onDeleteBuilding: (id: string) => void;
   isOwnerOfSelected: boolean;
-  // Cached views
-  cachedViews: { views: MultiViewImages; buildingName: string } | null;
-  onSelectCached: (views: MultiViewImages, name: string) => void;
-  onClearCached: () => void;
 }
 
 export default function SettingsPanel(props: SettingsPanelProps) {
@@ -37,8 +27,6 @@ export default function SettingsPanel(props: SettingsPanelProps) {
 
   const {
     isRunning,
-    multiView,
-    steps,
     onGenerate,
     myPlot,
     totalPlots,
@@ -49,9 +37,6 @@ export default function SettingsPanel(props: SettingsPanelProps) {
     onSelectBuilding,
     onDeleteBuilding,
     isOwnerOfSelected,
-    cachedViews,
-    onSelectCached,
-    onClearCached,
   } = props;
 
   // Close on click outside
@@ -148,38 +133,19 @@ export default function SettingsPanel(props: SettingsPanelProps) {
           <PromptBar
             onGenerate={onGenerate}
             isRunning={isRunning}
-            overrideName={cachedViews?.buildingName}
             nextPlotIndex={myPlot?.index ?? null}
             totalPlots={totalPlots}
             filledPlots={filledPlots}
           />
 
-          {cachedViews && (
-            <div className="mt-2 flex items-center gap-2 px-2 py-1.5 bg-blue-500/20 border border-blue-400/30 rounded-lg">
-              <span className="text-xs text-blue-200 flex-1 truncate">
-                Using cached: <strong>{cachedViews.buildingName}</strong>
+          {isRunning && (
+            <div className="mt-2 flex items-center gap-2 px-2 py-1.5 bg-amber-500/20 border border-amber-400/30 rounded-lg">
+              <div className="w-3 h-3 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+              <span className="text-xs text-amber-200">
+                Generating building server-side...
               </span>
-              <button
-                onClick={onClearCached}
-                className="text-xs text-blue-300 hover:text-blue-100 font-medium"
-              >
-                Clear
-              </button>
             </div>
           )}
-
-          <div className="mt-3">
-            <CachedPreviewPicker
-              onSelect={onSelectCached}
-              disabled={isRunning}
-            />
-          </div>
-
-          <div className="mt-3">
-            <StatusPanel steps={steps} />
-          </div>
-
-          <ImagePreview multiView={multiView} />
 
           {/* Building list */}
           {myBuildings && myBuildings.length > 0 && (

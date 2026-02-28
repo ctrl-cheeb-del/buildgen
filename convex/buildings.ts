@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { query, mutation } from "./_generated/server";
+import { query, mutation, internalMutation } from "./_generated/server";
 
 export const createBuilding = mutation({
   args: {
@@ -11,12 +11,101 @@ export const createBuilding = mutation({
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
     const ownerId = identity?.subject ?? "anonymous";
+
+    // Find a free position on the plot using candidate grid
+    const CANDIDATES: [number, number][] = [
+      [0, 0],
+      [-27, -27],
+      [27, -27],
+      [-27, 27],
+      [27, 27],
+    ];
+    const MIN_SPACING = 30;
+
+    const existing = await ctx.db
+      .query("buildings")
+      .withIndex("by_plotIndex", (q) => q.eq("plotIndex", args.plotIndex))
+      .collect();
+
+    const occupied = existing.map((b) => ({
+      x: b.position?.x ?? 0,
+      z: b.position?.z ?? 0,
+    }));
+
+    let freeX = 0;
+    let freeZ = 0;
+    for (const [cx, cz] of CANDIDATES) {
+      const overlaps = occupied.some(
+        (o) => Math.abs(o.x - cx) < MIN_SPACING && Math.abs(o.z - cz) < MIN_SPACING
+      );
+      if (!overlaps) {
+        freeX = cx;
+        freeZ = cz;
+        break;
+      }
+    }
+
     return await ctx.db.insert("buildings", {
       plotIndex: args.plotIndex,
       ownerId,
       prompt: args.prompt,
       proceduralCode: args.proceduralCode,
       multiViewGrid: args.multiViewGrid,
+      position: { x: freeX, y: 0, z: freeZ },
+      createdAt: Date.now(),
+    });
+  },
+});
+
+export const createBuildingInternal = internalMutation({
+  args: {
+    plotIndex: v.number(),
+    ownerId: v.string(),
+    prompt: v.string(),
+    proceduralCode: v.string(),
+    multiViewGrid: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    // Same auto-placement logic as createBuilding
+    const CANDIDATES: [number, number][] = [
+      [0, 0],
+      [-27, -27],
+      [27, -27],
+      [-27, 27],
+      [27, 27],
+    ];
+    const MIN_SPACING = 30;
+
+    const existing = await ctx.db
+      .query("buildings")
+      .withIndex("by_plotIndex", (q) => q.eq("plotIndex", args.plotIndex))
+      .collect();
+
+    const occupied = existing.map((b) => ({
+      x: b.position?.x ?? 0,
+      z: b.position?.z ?? 0,
+    }));
+
+    let freeX = 0;
+    let freeZ = 0;
+    for (const [cx, cz] of CANDIDATES) {
+      const overlaps = occupied.some(
+        (o) => Math.abs(o.x - cx) < MIN_SPACING && Math.abs(o.z - cz) < MIN_SPACING
+      );
+      if (!overlaps) {
+        freeX = cx;
+        freeZ = cz;
+        break;
+      }
+    }
+
+    return await ctx.db.insert("buildings", {
+      plotIndex: args.plotIndex,
+      ownerId: args.ownerId,
+      prompt: args.prompt,
+      proceduralCode: args.proceduralCode,
+      multiViewGrid: args.multiViewGrid,
+      position: { x: freeX, y: 0, z: freeZ },
       createdAt: Date.now(),
     });
   },
