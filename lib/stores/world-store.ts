@@ -2,6 +2,7 @@ import { create } from "zustand";
 import * as THREE from "three";
 import type { WorldBuilding } from "../types";
 import type { SceneLayer } from "../viewer/scene-layer";
+import { createBuildingLOD } from "../viewer/building-lod";
 
 type ConvexUpdateFn = (
   buildingId: string,
@@ -90,7 +91,8 @@ export const useWorldStore = create<WorldState>((set, get) => ({
 
     const container = new THREE.Group();
     container.name = `building-${building.id}`;
-    container.add(modelGroup);
+    const lod = createBuildingLOD(modelGroup);
+    container.add(lod);
 
     applyTransforms(building, container);
     container.visible = building.visible;
@@ -133,8 +135,9 @@ export const useWorldStore = create<WorldState>((set, get) => ({
       container.remove(child);
     }
 
-    // Add new geometry
-    container.add(newModelGroup);
+    // Add new geometry wrapped in LOD
+    const lod = createBuildingLOD(newModelGroup);
+    container.add(lod);
     state.layer?.repaint();
   },
 

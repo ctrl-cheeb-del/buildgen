@@ -3,6 +3,7 @@ import {
   PLOT_SIZE_M,
   PAVEMENT_WIDTH_M,
 } from "../grid/grid-constants";
+import { mergeBuildingGeometry } from "./building-merge";
 
 /** Maximum footprint — full grass area of a plot (120m minus 6m pavement each side) */
 const MAX_FOOTPRINT = PLOT_SIZE_M - 2 * PAVEMENT_WIDTH_M; // 108m
@@ -165,6 +166,9 @@ export function loadProceduralGeometry(code: string): THREE.Group {
 
     // Fit the building within the plot footprint
     normalizeToPlot(group);
+
+    // Merge child meshes by material to reduce draw calls
+    mergeBuildingGeometry(group);
 
     return group;
   } catch (err) {

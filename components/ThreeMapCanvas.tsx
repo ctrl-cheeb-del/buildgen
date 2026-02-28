@@ -8,6 +8,8 @@ import { createEnvironmentMap } from "@/lib/viewer/environment";
 import { createCloudDome } from "@/lib/viewer/clouds";
 import { initTextureQuality, disposeTextureCache } from "@/lib/viewer/texture-loader";
 import { useWorldStore } from "@/lib/stores/world-store";
+import { updateShadowCulling } from "@/lib/viewer/shadow-culling";
+import { updateVisibilityCulling } from "@/lib/viewer/visibility-culling";
 import type { SceneLayer } from "@/lib/viewer/scene-layer";
 
 /**
@@ -202,6 +204,11 @@ export default function ThreeMapCanvas() {
       }
 
       if (dirty || controlsUpdated) {
+        // Distance-based culling — skip shadows and hide far buildings
+        const containers = useWorldStore.getState().containers;
+        if (updateVisibilityCulling(containers, camera)) dirty = true;
+        if (updateShadowCulling(containers, camera)) dirty = true;
+
         renderer.render(scene, camera);
         dirty = false;
       }
