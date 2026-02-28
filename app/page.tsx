@@ -314,13 +314,16 @@ export default function Home() {
       // Only auto-start once — check if the building was just generated
       const genNodes = usePipelineStore.getState().nodes.slice(0, 3);
       const allGenDone = genNodes.every((n) => n.status === "done");
-      if (allGenDone) {
+      if (allGenDone && multiViewUrl) {
         autoStartedRef.current = true;
-        // Create a session for iteration
+        // Create a session for iteration using grid URL from Convex storage
         fetch("/api/iterate/session", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ buildingName: selectedBuilding.prompt, views: null }),
+          body: JSON.stringify({
+            buildingName: selectedBuilding.prompt,
+            gridUrl: multiViewUrl,
+          }),
         })
           .then((res) => (res.ok ? res.json() : null))
           .then((data) => {
@@ -345,6 +348,7 @@ export default function Home() {
     iteration,
     captureScreenshotsForCode,
     isRunning,
+    multiViewUrl,
   ]);
 
   // --- Pipeline panel state ---

@@ -100,7 +100,7 @@ export default function ControlPanel({ isOwner }: ControlPanelProps) {
               </span>
             </div>
 
-            {/* Rotation */}
+            {/* Rotation — Y-axis only */}
             <div className="flex items-center text-[10px] text-gray-400 uppercase tracking-wider mt-1.5">
               Rotation
               <button
@@ -113,31 +113,23 @@ export default function ControlPanel({ isOwner }: ControlPanelProps) {
                 reset
               </button>
             </div>
-            {(["X", "Y", "Z"] as const).map((axis, i) => (
-              <div key={`rot-${axis}`} className="flex items-center gap-1.5">
-                <span
-                  className={`text-xs font-semibold w-3.5 text-center ${
-                    i === 0 ? "text-red-500" : i === 1 ? "text-green-500" : "text-blue-500"
-                  }`}
-                >
-                  {axis}
-                </span>
-                <input
-                  type="range"
-                  min={-180}
-                  max={180}
-                  step={1}
-                  value={rotation[i]}
-                  onChange={(e) =>
-                    handleRotationChange(i as 0 | 1 | 2, parseFloat(e.target.value))
-                  }
-                  className="flex-1 h-1 accent-blue-600"
-                />
-                <span className="text-xs text-gray-600 min-w-[36px] text-right tabular-nums">
-                  {rotation[i]}&deg;
-                </span>
-              </div>
-            ))}
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs font-semibold w-3.5 text-center text-green-500">Y</span>
+              <input
+                type="range"
+                min={-180}
+                max={180}
+                step={1}
+                value={rotation[1]}
+                onChange={(e) =>
+                  handleRotationChange(1, parseFloat(e.target.value))
+                }
+                className="flex-1 h-1 accent-blue-600"
+              />
+              <span className="text-xs text-gray-600 min-w-[36px] text-right tabular-nums">
+                {rotation[1]}&deg;
+              </span>
+            </div>
           </div>
         )}
       </div>
