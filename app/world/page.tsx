@@ -402,6 +402,17 @@ export default function Home() {
   // Agent detail panel
   const [selectedAgentPlot, setSelectedAgentPlot] = useState<number | null>(null);
 
+  // Fly camera to agent's plot when clicking in feed
+  const handleAgentClick = useCallback(
+    (plotIndex: number) => {
+      if (!layer) return;
+      const { col, row } = gridIndexToColRow(plotIndex);
+      const [mx, mz] = plotCenterMeters(col, row);
+      layer.flyTo(mx, mz);
+    },
+    [layer]
+  );
+
   // Sim visibility toggle (sim always runs, just show/hide UI)
   const [simVisible, setSimVisible] = useState(true);
 
@@ -481,8 +492,8 @@ export default function Home() {
         />
       )}
       {!fpMode && simVisible && <MetricsBar />}
-      {!fpMode && simVisible && <SimFeed onAgentClick={setSelectedAgentPlot} />}
-      {simVisible && (
+      {!fpMode && simVisible && <SimFeed onAgentClick={handleAgentClick} />}
+      {simVisible && selectedAgentPlot !== null && (
         <AgentDetailPanel
           plotIndex={selectedAgentPlot}
           onClose={() => setSelectedAgentPlot(null)}

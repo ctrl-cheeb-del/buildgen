@@ -261,6 +261,42 @@ export default function ThreeMapCanvas() {
       setControlsEnabled(enabled: boolean) {
         controls.enabled = enabled;
       },
+      flyTo(x: number, z: number, duration = 1.2) {
+        // Animate camera + controls target to center on (x, z)
+        const startTarget = controls.target.clone();
+        const startPos = camera.position.clone();
+        // Offset: maintain same relative camera offset from target
+        const offset = startPos.clone().sub(startTarget);
+        // Bring camera closer for a nice zoom-in (cap at 400 height)
+        const zoomOffset = offset.clone();
+        if (zoomOffset.y > 400) {
+          const scale = 400 / zoomOffset.y;
+          zoomOffset.multiplyScalar(scale);
+        }
+        const endTarget = new THREE.Vector3(x, 0, z);
+        const endPos = endTarget.clone().add(zoomOffset);
+
+        const startTime = performance.now();
+        const durationMs = duration * 1000;
+
+        function easeInOut(t: number): number {
+          return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+        }
+
+        function tick() {
+          const elapsed = performance.now() - startTime;
+          const t = Math.min(elapsed / durationMs, 1);
+          const e = easeInOut(t);
+
+          controls.target.lerpVectors(startTarget, endTarget, e);
+          camera.position.lerpVectors(startPos, endPos, e);
+          controls.update();
+          markDirty();
+
+          if (t < 1) requestAnimationFrame(tick);
+        }
+        requestAnimationFrame(tick);
+      },
     };
 
     layerRef.current = layer;
