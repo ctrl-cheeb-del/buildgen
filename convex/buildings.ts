@@ -36,6 +36,13 @@ export const getAllBuildings = query({
   },
 });
 
+export const deleteBuilding = mutation({
+  args: { buildingId: v.id("buildings") },
+  handler: async (ctx, { buildingId }) => {
+    await ctx.db.delete(buildingId);
+  },
+});
+
 /** Delete all buildings and reset all plots to empty. Preserves multiViewPreviews cache. */
 export const deleteAll = mutation({
   args: {},
