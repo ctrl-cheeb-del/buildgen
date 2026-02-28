@@ -257,13 +257,9 @@ function getLLMProviders(): LLMProvider[] {
         callBedrock("us.anthropic.claude-opus-4-6-v1", prompt, imgs),
     },
     {
-      name: "Bedrock (Claude Sonnet 4.5)",
+      name: "Bedrock (Claude Opus 4.6 InvokeModel)",
       call: (prompt, imgs) =>
-        callBedrock(
-          "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
-          prompt,
-          imgs
-        ),
+        callBedrock("us.anthropic.claude-opus-4-6-v1", prompt, imgs),
     },
     {
       name: "OpenRouter (Claude Opus 4.6)",

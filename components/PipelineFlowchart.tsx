@@ -417,58 +417,39 @@ function NodePill({
 }
 
 /* ------------------------------------------------------------------ */
-/*  LoopBackLine — solid glowing SVG curve, connected to active node    */
+/*  LoopBackLine — CSS vertical bar on right side of iteration nodes    */
 /* ------------------------------------------------------------------ */
 
-function LoopBackLine({
-  activeIndex,
-}: {
-  /** Index of the active node within iteration nodes (0-3), or -1 if none active */
-  activeIndex: number;
-}) {
-  // Each row = pill(~32px) + connector(~20px) = ~52px
-  const rowH = 52;
-  const pillCenter = 16; // vertical center of a pill
-  const x = 12;
-  const r = 8;
-
-  // The line always starts at the top (Capture = index 0)
-  const top = pillCenter;
-  // It extends down to the active node, or to Update if none active
-  const targetIdx = activeIndex >= 0 ? activeIndex : 3;
-  const bottom = targetIdx * rowH + pillCenter;
-
-  // Don't draw if line would be zero height (active is Capture itself)
-  if (targetIdx === 0) return null;
-
-  const totalH = 4 * rowH;
-  const isAnimating = activeIndex >= 0;
-
+function LoopBackLine({ isAnimating }: { isAnimating: boolean }) {
   return (
-    <svg
-      className={`absolute -right-6 top-0 pointer-events-none ${isAnimating ? "animate-loop-glow" : ""}`}
-      width="24"
-      height={totalH}
-      fill="none"
+    <div
+      className={`absolute -right-3 top-3 bottom-3 pointer-events-none flex flex-col items-center ${
+        isAnimating ? "animate-loop-glow" : ""
+      }`}
     >
-      {/* Main solid line from active node up to top, then curve left */}
-      <path
-        d={`M ${x} ${bottom} L ${x} ${top + r} Q ${x} ${top} ${x - r} ${top}`}
-        stroke="rgba(96, 165, 250, 0.6)"
-        strokeWidth={2.5}
-        strokeLinecap="round"
+      {/* Arrow pointing up at top */}
+      <svg
+        className="w-2.5 h-2.5 flex-shrink-0 -mb-px"
+        viewBox="0 0 10 10"
         fill="none"
+      >
+        <path
+          d="M2 7 L5 3 L8 7"
+          stroke="rgba(96, 165, 250, 0.7)"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+      {/* Vertical line that stretches to fill */}
+      <div
+        className={`flex-1 w-[2.5px] rounded-full ${
+          isAnimating
+            ? "bg-blue-400/50 shadow-[0_0_6px_rgba(96,165,250,0.3)]"
+            : "bg-blue-400/25"
+        }`}
       />
-      {/* Arrow pointing left at top */}
-      <path
-        d={`M ${x - r + 4} ${top - 3.5} L ${x - r} ${top} L ${x - r + 4} ${top + 3.5}`}
-        stroke="rgba(96, 165, 250, 0.7)"
-        strokeWidth={2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        fill="none"
-      />
-    </svg>
+    </div>
   );
 }
 
@@ -735,7 +716,7 @@ export default function PipelineFlowchart({
   const activeIterIndex = iterNodes.findIndex((n) => n.status === "active");
 
   return (
-    <div className="flex flex-col items-start animate-slide-in-left">
+    <div className="flex flex-col items-start animate-expand-down">
       {/* Controls pill — only when active */}
       {isActive && (
         <>
@@ -796,7 +777,7 @@ export default function PipelineFlowchart({
 
       {/* Iteration nodes with loop-back line */}
       <div className="relative flex flex-col items-start pr-8">
-        {hasIterations && <LoopBackLine activeIndex={activeIterIndex} />}
+        {hasIterations && <LoopBackLine isAnimating={activeIterIndex >= 0} />}
 
         {iterNodes.map((node, i) => (
           <div key={node.id} className="flex flex-col items-start">

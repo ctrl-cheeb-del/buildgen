@@ -101,6 +101,9 @@ export class WorkbenchRenderer {
   fitCamera() {
     if (!this.currentGroup) return;
 
+    // Ensure world matrices are up to date before computing bounds
+    this.currentGroup.updateMatrixWorld(true);
+
     const box = new THREE.Box3().setFromObject(this.currentGroup);
     const center = box.getCenter(new THREE.Vector3());
     const size = box.getSize(new THREE.Vector3());
@@ -137,7 +140,7 @@ export class WorkbenchRenderer {
   private computeTightDistance(viewWidth: number, viewHeight: number): number {
     const fovRad = THREE.MathUtils.degToRad(this.camera.fov);
     const aspect = this.camera.aspect;
-    const padding = 1.1; // 10% padding
+    const padding = 1.35; // 35% padding — ensures tall towers/spires stay in frame
 
     // Distance needed to fit the height
     const distForHeight = (viewHeight * padding) / (2 * Math.tan(fovRad / 2));
@@ -151,6 +154,7 @@ export class WorkbenchRenderer {
   setCameraAngle(angle: CameraAngle, forCapture = false) {
     if (!this.currentGroup) return;
 
+    this.currentGroup.updateMatrixWorld(true);
     const box = new THREE.Box3().setFromObject(this.currentGroup);
     const center = box.getCenter(new THREE.Vector3());
     const size = box.getSize(new THREE.Vector3());
