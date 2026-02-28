@@ -71,35 +71,6 @@ export default function ControlPanel({ isOwner }: ControlPanelProps) {
 
         {isOpen && (
           <div className="px-3 py-2 space-y-2">
-            {/* Vertical offset only — XZ is handled by dragging */}
-            <div className="flex items-center text-[10px] text-gray-400 uppercase tracking-wider">
-              Height Offset
-              <button
-                onClick={() => {
-                  setOffset([offset[0], 0, offset[2]]);
-                  if (selectedId) updateTransform(selectedId, { offset: [offset[0], 0, offset[2]] });
-                }}
-                className="ml-1.5 text-[10px] text-blue-600 hover:underline"
-              >
-                reset
-              </button>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs font-semibold w-3.5 text-center text-green-500">Y</span>
-              <input
-                type="range"
-                min={-500}
-                max={500}
-                step={1}
-                value={offset[1]}
-                onChange={(e) => handleOffsetChange(1, parseFloat(e.target.value))}
-                className="flex-1 h-1 accent-blue-600"
-              />
-              <span className="text-xs text-gray-600 min-w-[36px] text-right tabular-nums">
-                {offset[1]}
-              </span>
-            </div>
-
             {/* Rotation — Y-axis only */}
             <div className="flex items-center text-[10px] text-gray-400 uppercase tracking-wider mt-1.5">
               Rotation
