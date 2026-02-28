@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
+import { useUser } from "@clerk/nextjs";
 import type mapboxgl from "mapbox-gl";
 import type { MultiViewImages } from "@/lib/types";
 import { api } from "../convex/_generated/api";
@@ -11,10 +12,13 @@ import StatusPanel from "@/components/StatusPanel";
 import ImagePreview from "@/components/ImagePreview";
 import CachedPreviewPicker from "@/components/CachedPreviewPicker";
 import AuthButton from "@/components/AuthButton";
+import CarModeButton from "@/components/CarModeButton";
 import ControlPanel from "@/components/ControlPanel";
 import { usePipeline } from "@/lib/hooks/usePipeline";
 import { useGridSync } from "@/lib/hooks/useGridSync";
 import { useBuildingDrag } from "@/lib/hooks/useBuildingDrag";
+import { useCarMode } from "@/lib/hooks/useCarMode";
+import { useRemoteCars } from "@/lib/hooks/useRemoteCars";
 import { useWorldStore } from "@/lib/stores/world-store";
 import { GRID_COLS, GRID_ROWS } from "@/lib/grid/grid-constants";
 import { gridIndexToColRow, getPlotCenter } from "@/lib/grid/grid-geometry";
@@ -25,6 +29,7 @@ const TOTAL_PLOTS = GRID_COLS * GRID_ROWS;
 export default function Home() {
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const { isRunning, multiView, steps, runPipeline } = usePipeline();
+  const { isSignedIn, user } = useUser();
   const { plotStates, gridGeoJSON, buildings, localPendingUpdates } =
     useGridSync();
 
@@ -157,6 +162,28 @@ export default function Home() {
   // Wire up building drag system
   useBuildingDrag(mapRef, layer, ownedBuildingIds, plotCenters);
 
+  // Car mode
+  const updateCarPosition = useMutation(api.cars.updateCarPosition);
+  const removeCarPosition = useMutation(api.cars.removeCarPosition);
+  const carUserId = user?.id ?? null;
+  const carUserName = user?.firstName ?? user?.username ?? "Anonymous";
+
+  const handleCarSync = useCallback(
+    (x: number, z: number, heading: number) => {
+      if (!carUserId) return;
+      updateCarPosition({ userId: carUserId, x, z, heading, userName: carUserName });
+    },
+    [carUserId, carUserName, updateCarPosition]
+  );
+
+  const handleCarExit = useCallback(() => {
+    if (!carUserId) return;
+    removeCarPosition({ userId: carUserId });
+  }, [carUserId, removeCarPosition]);
+
+  useCarMode(mapRef, layer, handleCarSync, handleCarExit);
+  useRemoteCars(carUserId);
+
   const isOwnerOfSelected = !!(
     selectedId &&
     myBuildings?.some((b) => (b._id as string) === selectedId)
@@ -170,9 +197,10 @@ export default function Home() {
         onPlotClick={handlePlotClick}
       />
 
-      {/* Auth button — top right */}
-      <div className="absolute top-4 right-4 z-10">
+      {/* Auth button + car mode — top right */}
+      <div className="absolute top-4 right-4 z-10 flex flex-col items-end gap-2">
         <AuthButton />
+        <CarModeButton />
       </div>
 
       {/* Main panel */}

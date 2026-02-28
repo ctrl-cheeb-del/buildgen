@@ -36,6 +36,15 @@ export default defineSchema({
     createdAt: v.number(),
   }).index("by_plotIndex", ["plotIndex"]),
 
+  cars: defineTable({
+    userId: v.string(),
+    x: v.number(),
+    z: v.number(),
+    heading: v.number(),
+    userName: v.string(),
+    updatedAt: v.number(),
+  }).index("by_userId", ["userId"]),
+
   multiViewPreviews: defineTable({
     buildingName: v.string(),
     gridStorageId: v.id("_storage"),
