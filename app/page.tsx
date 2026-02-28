@@ -30,11 +30,8 @@ import { useChat } from "@/lib/hooks/useChat";
 import { useChatStore } from "@/lib/stores/chat-store";
 import { useWorldStore } from "@/lib/stores/world-store";
 import { usePipelineStore } from "@/lib/stores/pipeline-store";
-import { GRID_COLS, GRID_ROWS } from "@/lib/grid/grid-constants";
 import { gridIndexToColRow, plotCenterMeters } from "@/lib/grid/grid-geometry";
 import type { Id } from "../convex/_generated/dataModel";
-
-const TOTAL_PLOTS = GRID_COLS * GRID_ROWS;
 
 export default function Home() {
   const iterationViewerRef = useRef<IsolatedViewerHandle>(null);
@@ -71,10 +68,6 @@ export default function Home() {
     });
   }, [setConvexUpdateTransform, convexUpdateTransform, localPendingUpdates]);
 
-  const filledPlots = plotStates.filter(
-    (p) => p.status === "occupied" || p.status === "claimed"
-  ).length;
-
   // Derive generating state from Convex (persists across refresh) + local state (instant feedback)
   const isGenerating = isRunning || myPlot?.status === "generating";
 
@@ -107,14 +100,6 @@ export default function Home() {
 
     prevPlotStatus.current = plotStatus;
   }, [pipelineStep, plotStatus]);
-
-  const handleGenerate = useCallback(
-    (buildingName: string) => {
-      if (!myPlot) return;
-      runPipeline(buildingName, myPlot.index);
-    },
-    [runPipeline, myPlot]
-  );
 
   const handlePlotClick = useCallback(
     async (plotIndex: number) => {
@@ -411,10 +396,7 @@ export default function Home() {
           <AuthButton />
           <SettingsPanel
             isRunning={isGenerating}
-            onGenerate={handleGenerate}
             myPlot={myPlot}
-            totalPlots={TOTAL_PLOTS}
-            filledPlots={filledPlots}
             onReleasePlot={handleReleasePlot}
             myBuildings={myBuildings?.map((b) => ({
               _id: b._id as string,

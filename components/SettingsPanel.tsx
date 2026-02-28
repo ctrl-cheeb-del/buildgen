@@ -1,17 +1,13 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef } from "react";
-import PromptBar from "./PromptBar";
 import ControlPanel from "./ControlPanel";
 
 interface SettingsPanelProps {
   // Pipeline
   isRunning: boolean;
-  onGenerate: (name: string) => void;
   // Plot
   myPlot: { index: number; status: string } | null | undefined;
-  totalPlots: number;
-  filledPlots: number;
   onReleasePlot: () => void;
   // Buildings
   myBuildings: Array<{ _id: string; prompt: string }> | undefined;
@@ -27,10 +23,7 @@ export default function SettingsPanel(props: SettingsPanelProps) {
 
   const {
     isRunning,
-    onGenerate,
     myPlot,
-    totalPlots,
-    filledPlots,
     onReleasePlot,
     myBuildings,
     selectedId,
@@ -130,23 +123,6 @@ export default function SettingsPanel(props: SettingsPanelProps) {
             </div>
           )}
 
-          <PromptBar
-            onGenerate={onGenerate}
-            isRunning={isRunning}
-            nextPlotIndex={myPlot?.index ?? null}
-            totalPlots={totalPlots}
-            filledPlots={filledPlots}
-          />
-
-          {isRunning && (
-            <div className="mt-2 flex items-center gap-2 px-2 py-1.5 bg-amber-500/20 border border-amber-400/30 rounded-lg">
-              <div className="w-3 h-3 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
-              <span className="text-xs text-amber-200">
-                Generating building server-side...
-              </span>
-            </div>
-          )}
-
           {/* Building list */}
           {myBuildings && myBuildings.length > 0 && (
             <div className="mt-3 border border-white/10 rounded-lg overflow-hidden">
@@ -157,7 +133,7 @@ export default function SettingsPanel(props: SettingsPanelProps) {
                 {myBuildings.map((b) => (
                   <div
                     key={b._id}
-                    className={`flex items-center justify-between px-3 py-1.5 cursor-pointer hover:bg-white/5 ${
+                    className={`flex items-center justify-between px-3 py-2.5 cursor-pointer hover:bg-white/5 ${
                       selectedId === b._id ? "bg-blue-500/20" : ""
                     }`}
                     onClick={() => onSelectBuilding(b._id)}
