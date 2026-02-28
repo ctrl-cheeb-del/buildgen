@@ -1,6 +1,0 @@
-# Frontend-specific ignores (common patterns handled by root .gitignore)
-
-# clerk configuration (can include secrets)
-/.clerk/
-
-.env.local
