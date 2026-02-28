@@ -19,9 +19,13 @@ interface WorldState {
   layer: ThreeJSMapboxLayer | null;
   origin: [number, number];
   convexUpdateTransform: ConvexUpdateFn | null;
+  ownedBuildingIds: Set<string>;
+  isDragging: boolean;
 
   setLayer: (layer: ThreeJSMapboxLayer) => void;
   setConvexUpdateTransform: (fn: ConvexUpdateFn) => void;
+  setOwnedBuildingIds: (ids: Set<string>) => void;
+  setIsDragging: (dragging: boolean) => void;
   addBuilding: (building: WorldBuilding, modelGroup: THREE.Group) => void;
   removeBuilding: (id: string) => void;
   selectBuilding: (id: string | null) => void;
@@ -74,6 +78,8 @@ export const useWorldStore = create<WorldState>((set, get) => ({
   layer: null,
   origin: [CITY_ORIGIN_LNG, CITY_ORIGIN_LAT] as [number, number],
   convexUpdateTransform: null,
+  ownedBuildingIds: new Set(),
+  isDragging: false,
 
   setLayer: (layer) => {
     set({ layer, origin: layer.getOrigin() });
@@ -81,6 +87,14 @@ export const useWorldStore = create<WorldState>((set, get) => ({
 
   setConvexUpdateTransform: (fn) => {
     set({ convexUpdateTransform: fn });
+  },
+
+  setOwnedBuildingIds: (ids) => {
+    set({ ownedBuildingIds: ids });
+  },
+
+  setIsDragging: (dragging) => {
+    set({ isDragging: dragging });
   },
 
   addBuilding: (building, modelGroup) => {

@@ -25,7 +25,7 @@ Generate JavaScript code that creates a THREE.Group representing this building u
 IMPORTANT: The description may be creative or fantastical (e.g. "a beaver-shaped building", "a mushroom tower", "a building that looks like a guitar"). Study the reference images carefully and recreate the unique shape, silhouette, and features you see. The 3D model should clearly look like the subject described — capture its distinctive outline, proportions, and character.
 
 REQUIREMENTS:
-- CRITICAL SIZING: The building sits on a 24×24 unit plot. The XZ footprint must stay within 24×24.
+- CRITICAL SIZING: The building sits on a 50×50 unit plot. The XZ footprint must stay within 50×50.
 - HEIGHT MUST MATCH REAL-WORLD SCALE relative to the building type. Use 1 unit ≈ 1 meter:
   - Small house / cabin / shed: 5–10 units tall
   - Regular house / villa / bungalow: 8–15 units tall
@@ -46,7 +46,7 @@ REQUIREMENTS:
   - Use any other colors that match the reference images, always with side: THREE.DoubleSide
 - NO texture loading, NO external files
 - Build the model centered at origin (0,0,0) on XZ, with the base at Y=0 (Y-up)
-- Keep the footprint within ±12 on X and ±12 on Z (24×24 total).
+- Keep the footprint within ±25 on X and ±25 on Z (50×50 total).
 - Focus on capturing the overall silhouette and distinctive features — make it immediately recognizable as "${buildingName}"
 - Use THREE.Shape + ExtrudeGeometry for organic or curved cross-sections
 - The code must be valid JavaScript that can run in a Function constructor

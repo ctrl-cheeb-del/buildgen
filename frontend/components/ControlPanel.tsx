@@ -14,7 +14,6 @@ export default function ControlPanel({ isOwner }: ControlPanelProps) {
 
   const selected = selectedId ? buildings.get(selectedId) : null;
 
-  const [scale, setScale] = useState(0); // log scale
   const [offset, setOffset] = useState<[number, number, number]>([0, 0, 0]);
   const [rotation, setRotation] = useState<[number, number, number]>([0, 0, 0]);
   const [isOpen, setIsOpen] = useState(true);
@@ -22,19 +21,9 @@ export default function ControlPanel({ isOwner }: ControlPanelProps) {
   // Sync sliders when selection changes
   useEffect(() => {
     if (!selected) return;
-    setScale(Math.log10(selected.scale));
     setOffset([...selected.offset]);
     setRotation([...selected.rotation]);
   }, [selected]);
-
-  const handleScaleChange = useCallback(
-    (v: number) => {
-      setScale(v);
-      const s = Math.pow(10, v);
-      if (selectedId) updateTransform(selectedId, { scale: s });
-    },
-    [selectedId, updateTransform]
-  );
 
   const handleOffsetChange = useCallback(
     (axis: 0 | 1 | 2, v: number) => {
@@ -64,29 +53,8 @@ export default function ControlPanel({ isOwner }: ControlPanelProps) {
     );
   }
 
-  const scaleDisplay = Math.pow(10, scale);
-
   return (
     <div className="space-y-3">
-      {/* Scale */}
-      <div className="flex items-center gap-2">
-        <label className="text-xs text-gray-500 shrink-0">Scale</label>
-        <input
-          type="range"
-          min={-1}
-          max={1.5}
-          step={0.01}
-          value={scale}
-          onChange={(e) => handleScaleChange(parseFloat(e.target.value))}
-          className="flex-1 h-1 accent-blue-600"
-        />
-        <span className="text-xs text-gray-600 min-w-[32px] text-right tabular-nums">
-          {scaleDisplay < 10
-            ? `${scaleDisplay.toFixed(1)}x`
-            : `${Math.round(scaleDisplay)}x`}
-        </span>
-      </div>
-
       {/* Transform section */}
       <div className="border border-gray-200 rounded-lg overflow-hidden">
         <button
@@ -103,49 +71,34 @@ export default function ControlPanel({ isOwner }: ControlPanelProps) {
 
         {isOpen && (
           <div className="px-3 py-2 space-y-2">
-            {/* Offset — X/Z constrained to [-30, 30] */}
+            {/* Vertical offset only — XZ is handled by dragging */}
             <div className="flex items-center text-[10px] text-gray-400 uppercase tracking-wider">
-              Position Offset
+              Height Offset
               <button
                 onClick={() => {
-                  setOffset([0, 0, 0]);
-                  if (selectedId) updateTransform(selectedId, { offset: [0, 0, 0] });
+                  setOffset([offset[0], 0, offset[2]]);
+                  if (selectedId) updateTransform(selectedId, { offset: [offset[0], 0, offset[2]] });
                 }}
                 className="ml-1.5 text-[10px] text-blue-600 hover:underline"
               >
                 reset
               </button>
             </div>
-            {(["X", "Y", "Z"] as const).map((axis, i) => {
-              const isXZ = i === 0 || i === 2;
-              const min = isXZ ? -30 : -500;
-              const max = isXZ ? 30 : 500;
-              return (
-                <div key={`off-${axis}`} className="flex items-center gap-1.5">
-                  <span
-                    className={`text-xs font-semibold w-3.5 text-center ${
-                      i === 0 ? "text-red-500" : i === 1 ? "text-green-500" : "text-blue-500"
-                    }`}
-                  >
-                    {axis}
-                  </span>
-                  <input
-                    type="range"
-                    min={min}
-                    max={max}
-                    step={1}
-                    value={offset[i]}
-                    onChange={(e) =>
-                      handleOffsetChange(i as 0 | 1 | 2, parseFloat(e.target.value))
-                    }
-                    className="flex-1 h-1 accent-blue-600"
-                  />
-                  <span className="text-xs text-gray-600 min-w-[36px] text-right tabular-nums">
-                    {offset[i]}
-                  </span>
-                </div>
-              );
-            })}
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs font-semibold w-3.5 text-center text-green-500">Y</span>
+              <input
+                type="range"
+                min={-500}
+                max={500}
+                step={1}
+                value={offset[1]}
+                onChange={(e) => handleOffsetChange(1, parseFloat(e.target.value))}
+                className="flex-1 h-1 accent-blue-600"
+              />
+              <span className="text-xs text-gray-600 min-w-[36px] text-right tabular-nums">
+                {offset[1]}
+              </span>
+            </div>
 
             {/* Rotation */}
             <div className="flex items-center text-[10px] text-gray-400 uppercase tracking-wider mt-1.5">

@@ -23,15 +23,37 @@ export const createBuilding = mutation({
       throw new Error("You don't own this plot");
     }
 
+    // Stagger initial position based on existing building count on the plot
+    const existingBuildings = await ctx.db
+      .query("buildings")
+      .withIndex("by_plotIndex", (q) => q.eq("plotIndex", args.plotIndex))
+      .collect();
+    const count = existingBuildings.length;
+    const staggerGrid: [number, number][] = [
+      [-20, -20],
+      [20, -20],
+      [-20, 20],
+      [20, 20],
+    ];
+    let initX = 0;
+    let initZ = 0;
+    if (count < staggerGrid.length) {
+      [initX, initZ] = staggerGrid[count];
+    } else if (count >= staggerGrid.length) {
+      // Random offset for 5+ buildings
+      initX = Math.round((Math.random() - 0.5) * 40);
+      initZ = Math.round((Math.random() - 0.5) * 40);
+    }
+
     const buildingId = await ctx.db.insert("buildings", {
       plotIndex: args.plotIndex,
       ownerId: identity.subject,
       prompt: args.prompt,
       proceduralCode: args.proceduralCode,
       multiViewGrid: args.multiViewGrid,
-      position: { x: 0, y: 0, z: 0 },
+      position: { x: initX, y: 0, z: initZ },
       rotation: { x: 0, y: 0, z: 0 },
-      scale: 1,
+      scale: 0.5,
       createdAt: Date.now(),
     });
 
@@ -124,11 +146,12 @@ export const updateTransform = mutation({
     const updates: Record<string, unknown> = {};
 
     if (position) {
-      // Clamp position to plot bounds (half of 60m = 30m)
+      // Clamp position to grass area (absolute server-side limit)
+      const GRASS_HALF = 54;
       updates.position = {
-        x: Math.max(-30, Math.min(30, position.x)),
+        x: Math.max(-GRASS_HALF, Math.min(GRASS_HALF, position.x)),
         y: position.y,
-        z: Math.max(-30, Math.min(30, position.z)),
+        z: Math.max(-GRASS_HALF, Math.min(GRASS_HALF, position.z)),
       };
     }
     if (rotation) {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import type mapboxgl from "mapbox-gl";
 import type { MultiViewImages } from "@/lib/types";
@@ -14,8 +14,10 @@ import AuthButton from "@/components/AuthButton";
 import ControlPanel from "@/components/ControlPanel";
 import { usePipeline } from "@/lib/hooks/usePipeline";
 import { useGridSync } from "@/lib/hooks/useGridSync";
+import { useBuildingDrag } from "@/lib/hooks/useBuildingDrag";
 import { useWorldStore } from "@/lib/stores/world-store";
 import { GRID_COLS, GRID_ROWS } from "@/lib/grid/grid-constants";
+import { gridIndexToColRow, getPlotCenter } from "@/lib/grid/grid-geometry";
 import type { Id } from "../convex/_generated/dataModel";
 
 const TOTAL_PLOTS = GRID_COLS * GRID_ROWS;
@@ -37,6 +39,7 @@ export default function Home() {
   const setConvexUpdateTransform = useWorldStore(
     (s) => s.setConvexUpdateTransform
   );
+  const layer = useWorldStore((s) => s.layer);
 
   // Wire up Convex transform sync
   useEffect(() => {
@@ -124,6 +127,35 @@ export default function Home() {
   const myBuildings = buildings?.filter(
     (b) => myPlot && b.plotIndex === myPlot.index
   );
+
+  // Owned building IDs for drag system — stable reference via JSON key
+  const ownedKey = myBuildings?.map((b) => b._id).join(",") ?? "";
+  const ownedBuildingIds = useMemo(() => {
+    const ids = new Set<string>();
+    if (myBuildings) {
+      for (const b of myBuildings) ids.add(b._id as string);
+    }
+    return ids;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ownedKey]);
+
+  // Plot centers for each building (needed for drag offset calculation)
+  const buildingKeys = buildings?.map((b) => `${b._id}:${b.plotIndex}`).join(",") ?? "";
+  const plotCenters = useMemo(() => {
+    const centers = new Map<string, [number, number]>();
+    if (buildings) {
+      for (const b of buildings) {
+        const { col, row } = gridIndexToColRow(b.plotIndex);
+        const [lng, lat] = getPlotCenter(col, row);
+        centers.set(b._id as string, [lng, lat]);
+      }
+    }
+    return centers;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [buildingKeys]);
+
+  // Wire up building drag system
+  useBuildingDrag(mapRef, layer, ownedBuildingIds, plotCenters);
 
   const isOwnerOfSelected = !!(
     selectedId &&

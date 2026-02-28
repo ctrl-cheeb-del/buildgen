@@ -28,12 +28,20 @@ export function buildGroundPlanes(): THREE.Group {
 
   // ── Materials ─────────────────────────────────────────────
 
+  // polygonOffset pushes fragments back in depth buffer so overlapping
+  // coplanar surfaces resolve cleanly at any zoom — eliminates z-fighting
+  // that Y offsets alone can't fix at far distances.
+  // Higher factor/units = pushed further back (rendered behind).
+
   const asphaltTex = loadTileableTexture("/textures/asphalt.webp", 6);
   const roadMat = new THREE.MeshPhysicalMaterial({
     map: asphaltTex,
     roughness: 0.92,
     metalness: 0.0,
     side: THREE.DoubleSide,
+    polygonOffset: true,
+    polygonOffsetFactor: 4,
+    polygonOffsetUnits: 4,
   });
 
   const pavementTex = loadTileableTexture("/textures/pavement-slabs.webp", 8);
@@ -42,6 +50,9 @@ export function buildGroundPlanes(): THREE.Group {
     roughness: 0.85,
     metalness: 0.0,
     side: THREE.DoubleSide,
+    polygonOffset: true,
+    polygonOffsetFactor: 2,
+    polygonOffsetUnits: 2,
   });
 
   const grassTex = loadTileableTexture("/textures/grass.webp", 4);
@@ -91,14 +102,14 @@ export function buildGroundPlanes(): THREE.Group {
 
   for (let r = 0; r <= GRID_ROWS; r++) {
     const z = startZ + r * GRID_STEP_M;
-    addPlane(roadMat, startX, z, totalW, ROAD_WIDTH_M, -0.05, 6);
+    addPlane(roadMat, startX, z, totalW, ROAD_WIDTH_M, -0.3, 6);
   }
 
   // ── Vertical roads (GRID_COLS + 1 strips) ────────────────
 
   for (let c = 0; c <= GRID_COLS; c++) {
     const x = startX + c * GRID_STEP_M;
-    addPlane(roadMat, x, startZ, ROAD_WIDTH_M, totalH, -0.05, 6);
+    addPlane(roadMat, x, startZ, ROAD_WIDTH_M, totalH, -0.3, 6);
   }
 
   // ── Per-plot: pavements + plot ground ─────────────────────
@@ -110,7 +121,7 @@ export function buildGroundPlanes(): THREE.Group {
       const pw = PAVEMENT_WIDTH_M;
 
       // Full plot-size pavement underlay
-      addPlane(pavementMat, px, pz, PLOT_SIZE_M, PLOT_SIZE_M, -0.02, 8);
+      addPlane(pavementMat, px, pz, PLOT_SIZE_M, PLOT_SIZE_M, -0.15, 8);
 
       // Inner plot (grass) on top of pavement
       const innerSize = PLOT_SIZE_M - 2 * PAVEMENT_WIDTH_M;

@@ -65,16 +65,16 @@ export class ThreeJSMapboxLayer implements mapboxgl.CustomLayerInterface {
 
     // Key light (sun) — warm white, with shadows
     const sun = new THREE.DirectionalLight(0xfff4e6, 1.6);
-    sun.position.set(100, 200, 100);
+    sun.position.set(500, 800, 400);
     sun.castShadow = true;
-    sun.shadow.mapSize.width = 2048;
-    sun.shadow.mapSize.height = 2048;
-    sun.shadow.camera.left = -150;
-    sun.shadow.camera.right = 150;
-    sun.shadow.camera.top = 150;
-    sun.shadow.camera.bottom = -150;
+    sun.shadow.mapSize.width = 4096;
+    sun.shadow.mapSize.height = 4096;
+    sun.shadow.camera.left = -800;
+    sun.shadow.camera.right = 800;
+    sun.shadow.camera.top = 800;
+    sun.shadow.camera.bottom = -800;
     sun.shadow.camera.near = 1;
-    sun.shadow.camera.far = 500;
+    sun.shadow.camera.far = 1800;
     sun.shadow.bias = -0.0005;
     sun.shadow.normalBias = 0.02;
     sun.target.position.set(0, 0, 0);
@@ -137,6 +137,9 @@ export class ThreeJSMapboxLayer implements mapboxgl.CustomLayerInterface {
     this.camera.projectionMatrix = new THREE.Matrix4()
       .fromArray(matrix)
       .multiply(modelMatrix);
+    this.camera.projectionMatrixInverse
+      .copy(this.camera.projectionMatrix)
+      .invert();
 
     this.renderer.resetState();
 
@@ -199,5 +202,17 @@ export class ThreeJSMapboxLayer implements mapboxgl.CustomLayerInterface {
 
   getOrigin(): [number, number] {
     return this.modelOrigin;
+  }
+
+  getScene(): THREE.Scene {
+    return this.scene;
+  }
+
+  getCamera(): THREE.Camera {
+    return this.camera;
+  }
+
+  getMap(): mapboxgl.Map {
+    return this.map;
   }
 }
