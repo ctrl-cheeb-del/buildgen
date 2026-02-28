@@ -4,6 +4,7 @@ import { v } from "convex/values";
 import { internalAction } from "../_generated/server";
 import { internal } from "../_generated/api";
 import { Mistral } from "@mistralai/mistralai";
+import { withRetry } from "./mistral-retry";
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -483,7 +484,10 @@ export const run = internalAction({
                 .map((c) => c.lastAction ? `${c.name}: ${c.lastAction}` : `${c.name} is quiet`)
                 .join("; ");
 
-              const action = await callCitizenAgent(mistral, agent, city, nearby || "All quiet", plotBuildingCounts[agent.plotIndex] ?? 0);
+              const action = await withRetry(
+                () => callCitizenAgent(mistral, agent, city, nearby || "All quiet", plotBuildingCounts[agent.plotIndex] ?? 0),
+                `citizen:${agent.name}`,
+              );
               return { agent, action };
             } catch (e) {
               console.error(`[tick ${tickNumber}] Agent ${agent.name} failed:`, e);
@@ -494,7 +498,7 @@ export const run = internalAction({
         allResults.push(...batchResults);
         // Small delay between batches to respect rate limits
         if (i + BATCH_SIZE < activeThisTick.length) {
-          await new Promise((r) => setTimeout(r, 1000));
+          await new Promise((r) => setTimeout(r, 1500));
         }
       }
       const results = allResults;
@@ -540,13 +544,16 @@ export const run = internalAction({
       .map((r) => `${r.agent.name} (plot #${r.agent.plotIndex}): wants to build "${r.action.build_description}"`)
       .join("\n");
 
-    const mayorDecision = await callMayor(
-      mistral,
-      city,
-      taxRevenue,
-      totalExpenses,
-      petitionTexts.join("\n"),
-      buildRequestText
+    const mayorDecision = await withRetry(
+      () => callMayor(
+        mistral,
+        city,
+        taxRevenue,
+        totalExpenses,
+        petitionTexts.join("\n"),
+        buildRequestText,
+      ),
+      "mayor",
     );
 
     // Store mayor's public message

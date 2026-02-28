@@ -10,6 +10,7 @@ import {
   InvokeModelCommand,
 } from "@aws-sdk/client-bedrock-runtime";
 import { Mistral } from "@mistralai/mistralai";
+import { withRetry } from "./mistral-retry";
 
 /**
  * Agent building action: reuses the existing pipeline.generateBuilding logic
@@ -284,7 +285,10 @@ async function evaluateAndImprove(
   let currentCode = code;
 
   for (let i = 0; i < 2; i++) {
-    const score = await evaluateAgentBuildCode(mistral, currentCode, buildDescription);
+    const score = await withRetry(
+      () => evaluateAgentBuildCode(mistral, currentCode, buildDescription),
+      "eval-build",
+    );
     console.log(`[agentBuild] Eval iteration ${i + 1}: score ${score}/10`);
 
     if (score >= 6.0) {

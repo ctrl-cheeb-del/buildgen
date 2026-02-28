@@ -10,6 +10,26 @@ function getMistral(): Mistral {
   return _mistral;
 }
 
+async function withRetry<T>(fn: () => Promise<T>, label: string, maxRetries = 3): Promise<T> {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      const isRateLimit =
+        err instanceof Error &&
+        (err.message.includes("429") ||
+          err.message.includes("rate_limit") ||
+          err.message.includes("Rate limit") ||
+          err.message.includes("Too many requests"));
+      if (!isRateLimit || attempt === maxRetries) throw err;
+      const delayMs = 2000 * Math.pow(2, attempt);
+      console.warn(`[retry] ${label} rate-limited (attempt ${attempt + 1}/${maxRetries}), retrying in ${delayMs}ms...`);
+      await new Promise((r) => setTimeout(r, delayMs));
+    }
+  }
+  throw new Error(`[retry] ${label} exhausted all retries`);
+}
+
 export async function POST(req: NextRequest) {
   try {
     const { messages, currentMode } = await req.json();
@@ -42,12 +62,15 @@ export async function POST(req: NextRequest) {
       JSON.stringify(messages[messages.length - 1]).slice(0, 200)
     );
 
-    const response = await mistral.chat.complete({
-      model: "mistral-small-latest",
-      messages: fullMessages,
-      tools: toolDefinitions,
-      toolChoice: "auto",
-    });
+    const response = await withRetry(
+      () => mistral.chat.complete({
+        model: "mistral-small-latest",
+        messages: fullMessages,
+        tools: toolDefinitions,
+        toolChoice: "auto",
+      }),
+      "chat",
+    );
 
     const choice = response?.choices?.[0];
 
