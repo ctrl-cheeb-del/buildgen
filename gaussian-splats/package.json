@@ -3,7 +3,13 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
-    "dev": "echo 'gaussian-splats dev not configured yet'",
-    "build": "echo 'gaussian-splats build not configured yet'"
+    "dev": "bun run src/index.ts",
+    "build": "bun build src/index.ts --outdir dist --target bun"
+  },
+  "dependencies": {
+    "hono": "^4.7.0"
+  },
+  "devDependencies": {
+    "bun-types": "^1.2.0"
   }
 }
