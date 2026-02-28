@@ -149,15 +149,10 @@ export default function ChatInput({ onSend, isLoading }: ChatInputProps) {
           </svg>
           {/* Tab content */}
           <div className="absolute inset-0 flex items-center justify-center px-5">
-            {statusMessages.map((msg) => (
-              <div
-                key={msg.id}
-                className="flex items-center gap-2 text-xs text-white/80"
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse flex-shrink-0" />
-                <span className="truncate">{msg.content}</span>
-              </div>
-            ))}
+            <div className="flex items-center gap-2 text-xs text-white/80">
+              <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse flex-shrink-0" />
+              <span>Generating</span>
+            </div>
           </div>
         </div>
 

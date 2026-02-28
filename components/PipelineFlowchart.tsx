@@ -34,7 +34,14 @@ const ICONS: Record<PipelineNodeId, string> = {
 };
 
 /* ------------------------------------------------------------------ */
-/*  Status dot color                                                    */
+/*  Shared glass pill class (no heavy shadow)                           */
+/* ------------------------------------------------------------------ */
+
+const GLASS_PILL =
+  "bg-white/15 backdrop-blur-2xl border border-white/25 shadow-[0_2px_8px_rgba(0,0,0,0.15)]";
+
+/* ------------------------------------------------------------------ */
+/*  Status helpers                                                      */
 /* ------------------------------------------------------------------ */
 
 function dotColor(status: NodeStatus): string {
@@ -51,24 +58,19 @@ function dotColor(status: NodeStatus): string {
 }
 
 function pillGlow(status: NodeStatus): string {
-  switch (status) {
-    case "active":
-      return "animate-glow";
-    default:
-      return "";
-  }
+  return status === "active" ? "animate-glow" : "";
 }
 
-function connectorColor(status: NodeStatus): string {
+function connectorGlassColor(status: NodeStatus): string {
   switch (status) {
     case "done":
-      return "bg-green-400/50";
+      return "bg-green-400/40 shadow-[0_0_6px_rgba(74,222,128,0.3)]";
     case "active":
-      return "bg-blue-400/50";
+      return "bg-blue-400/40 shadow-[0_0_6px_rgba(96,165,250,0.3)]";
     case "error":
-      return "bg-red-400/50";
+      return "bg-red-400/40 shadow-[0_0_6px_rgba(248,113,113,0.3)]";
     default:
-      return "bg-white/15";
+      return "bg-white/20";
   }
 }
 
@@ -107,39 +109,58 @@ function NodeIcon({ nodeId }: { nodeId: PipelineNodeId }) {
 }
 
 /* ------------------------------------------------------------------ */
-/*  VerticalConnector                                                   */
+/*  GlassConnector — liquid glass vertical line                         */
 /* ------------------------------------------------------------------ */
 
-function VerticalConnector({ status }: { status: NodeStatus }) {
+function GlassConnector({ status }: { status: NodeStatus }) {
   return (
-    <div className="flex items-center pl-[18px]">
-      <div className={`w-[2px] h-3 rounded-full ${connectorColor(status)}`} />
+    <div className="flex items-center pl-[18px] py-[3px]">
+      <div
+        className={`w-[3px] h-3.5 rounded-full ${connectorGlassColor(status)}`}
+      />
     </div>
   );
 }
 
 /* ------------------------------------------------------------------ */
-/*  NodeDetailPanel — glass popover to the right of clicked pill        */
+/*  NodeDetailPanel                                                     */
 /* ------------------------------------------------------------------ */
 
 interface DetailPanelProps {
   nodeId: PipelineNodeId;
   multiView: MultiViewImages | null;
   iterations: IterationResult[];
-  selectedBuilding: { proceduralCode: string; prompt: string; plotIndex: number } | null;
+  selectedBuilding: {
+    proceduralCode: string;
+    prompt: string;
+    plotIndex: number;
+  } | null;
 }
 
-function NodeDetailPanel({ nodeId, multiView, iterations, selectedBuilding }: DetailPanelProps) {
-  const latest = iterations.length > 0 ? iterations[iterations.length - 1] : null;
+function NodeDetailPanel({
+  nodeId,
+  multiView,
+  iterations,
+  selectedBuilding,
+}: DetailPanelProps) {
+  const latest =
+    iterations.length > 0 ? iterations[iterations.length - 1] : null;
 
   return (
-    <div className="absolute left-full ml-2 top-0 w-56 bg-white/15 backdrop-blur-2xl rounded-2xl border border-white/25 shadow-[0_8px_32px_rgba(0,0,0,0.3)] p-3 z-50 animate-fade-in">
+    <div
+      className={`absolute left-full ml-2 top-0 w-56 rounded-2xl ${GLASS_PILL} p-3 z-50 animate-fade-in`}
+    >
       {nodeId === "generate-views" && multiView && (
         <div>
-          <div className="text-[10px] text-white/50 mb-1.5">Blueprint Views</div>
+          <div className="text-[10px] text-white/50 mb-1.5">
+            Blueprint Views
+          </div>
           <div className="grid grid-cols-2 gap-1">
             {(["front", "right", "back", "left"] as const).map((angle) => (
-              <div key={angle} className="relative aspect-square rounded-lg overflow-hidden bg-black/30">
+              <div
+                key={angle}
+                className="relative aspect-square rounded-lg overflow-hidden bg-black/30"
+              >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={multiView[angle]}
@@ -159,7 +180,10 @@ function NodeDetailPanel({ nodeId, multiView, iterations, selectedBuilding }: De
         <div>
           <div className="text-[10px] text-white/50 mb-1.5">Code Preview</div>
           <pre className="text-[9px] text-white/70 font-mono bg-black/20 rounded-lg p-2 overflow-hidden max-h-40 leading-relaxed">
-            {selectedBuilding.proceduralCode.split("\n").slice(0, 12).join("\n")}
+            {selectedBuilding.proceduralCode
+              .split("\n")
+              .slice(0, 12)
+              .join("\n")}
             {selectedBuilding.proceduralCode.split("\n").length > 12 && "\n..."}
           </pre>
         </div>
@@ -168,17 +192,26 @@ function NodeDetailPanel({ nodeId, multiView, iterations, selectedBuilding }: De
       {nodeId === "place-on-map" && selectedBuilding && (
         <div>
           <div className="text-[10px] text-white/50 mb-1.5">Plot Info</div>
-          <div className="text-xs text-white/80">Plot #{selectedBuilding.plotIndex}</div>
-          <div className="text-[11px] text-white/60 mt-0.5">{selectedBuilding.prompt}</div>
+          <div className="text-xs text-white/80">
+            Plot #{selectedBuilding.plotIndex}
+          </div>
+          <div className="text-[11px] text-white/60 mt-0.5">
+            {selectedBuilding.prompt}
+          </div>
         </div>
       )}
 
       {nodeId === "capture" && latest?.screenshots && (
         <div>
-          <div className="text-[10px] text-white/50 mb-1.5">Render Screenshots</div>
+          <div className="text-[10px] text-white/50 mb-1.5">
+            Render Screenshots
+          </div>
           <div className="grid grid-cols-2 gap-1">
             {(["front", "right", "back", "left"] as const).map((angle) => (
-              <div key={angle} className="relative aspect-square rounded-lg overflow-hidden bg-black/30">
+              <div
+                key={angle}
+                className="relative aspect-square rounded-lg overflow-hidden bg-black/30"
+              >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={latest.screenshots[angle]}
@@ -196,7 +229,9 @@ function NodeDetailPanel({ nodeId, multiView, iterations, selectedBuilding }: De
 
       {nodeId === "score" && latest && (
         <div>
-          <div className="text-[10px] text-white/50 mb-1.5">Score Breakdown</div>
+          <div className="text-[10px] text-white/50 mb-1.5">
+            Score Breakdown
+          </div>
           <ScoreCard score={latest.score} />
           {latest.feedback && (
             <div className="mt-2 text-[9px] text-white/50 leading-relaxed line-clamp-4">
@@ -209,11 +244,11 @@ function NodeDetailPanel({ nodeId, multiView, iterations, selectedBuilding }: De
       {nodeId === "improve" && latest && (
         <div>
           <div className="text-[10px] text-white/50 mb-1.5">Improvement</div>
-          <div className="flex items-center gap-1.5">
-            <span className={`text-xs font-medium ${latest.improved ? "text-green-300" : "text-red-300"}`}>
-              {latest.improved ? "Improved" : "No improvement"}
-            </span>
-          </div>
+          <span
+            className={`text-xs font-medium ${latest.improved ? "text-green-300" : "text-red-300"}`}
+          >
+            {latest.improved ? "Improved" : "No improvement"}
+          </span>
           {latest.feedback && (
             <div className="mt-1.5 text-[9px] text-white/50 leading-relaxed line-clamp-3">
               {latest.feedback}
@@ -228,7 +263,8 @@ function NodeDetailPanel({ nodeId, multiView, iterations, selectedBuilding }: De
           <div className="text-xs text-white/80">Saved to map</div>
           {iterations.length > 0 && (
             <div className="text-[10px] text-white/50 mt-0.5">
-              {iterations.length} iteration{iterations.length !== 1 ? "s" : ""} complete
+              {iterations.length} iteration
+              {iterations.length !== 1 ? "s" : ""} complete
             </div>
           )}
         </div>
@@ -258,7 +294,7 @@ function NodeDetailPanel({ nodeId, multiView, iterations, selectedBuilding }: De
 }
 
 /* ------------------------------------------------------------------ */
-/*  ScoreCard — compact score display for detail panel                  */
+/*  ScoreCard                                                           */
 /* ------------------------------------------------------------------ */
 
 function ScoreCard({ score }: { score: ScoreBreakdown }) {
@@ -281,7 +317,9 @@ function ScoreCard({ score }: { score: ScoreBreakdown }) {
                 style={{ width: `${(d.val / 10) * 100}%` }}
               />
             </div>
-            <span className={`text-[9px] font-semibold w-4 ${scoreTextColor(d.val)}`}>
+            <span
+              className={`text-[9px] font-semibold w-4 ${scoreTextColor(d.val)}`}
+            >
               {d.val.toFixed(1)}
             </span>
           </div>
@@ -289,7 +327,9 @@ function ScoreCard({ score }: { score: ScoreBreakdown }) {
       </div>
       <div className="flex items-center justify-between mt-1.5 pt-1.5 border-t border-white/10">
         <span className="text-[9px] text-white/50">Total</span>
-        <span className={`text-xs font-bold ${scoreTextColor(score.totalScore)}`}>
+        <span
+          className={`text-xs font-bold ${scoreTextColor(score.totalScore)}`}
+        >
           {score.totalScore.toFixed(1)}/10
         </span>
       </div>
@@ -298,7 +338,7 @@ function ScoreCard({ score }: { score: ScoreBreakdown }) {
 }
 
 /* ------------------------------------------------------------------ */
-/*  NodePill — individual glass pill for each pipeline step             */
+/*  NodePill                                                            */
 /* ------------------------------------------------------------------ */
 
 function NodePill({
@@ -307,55 +347,62 @@ function NodePill({
   onToggle,
   detailProps,
 }: {
-  node: { id: PipelineNodeId; label: string; status: NodeStatus; detail?: string };
+  node: {
+    id: PipelineNodeId;
+    label: string;
+    status: NodeStatus;
+    detail?: string;
+  };
   isExpanded: boolean;
   onToggle: () => void;
   detailProps: DetailPanelProps;
 }) {
   return (
-    <div className="relative">
+    <div className="relative w-fit">
       <button
         onClick={onToggle}
-        className={`flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/15 backdrop-blur-2xl border border-white/25 shadow-[0_8px_32px_rgba(0,0,0,0.3)] cursor-pointer hover:bg-white/20 transition-all duration-200 ${pillGlow(node.status)}`}
+        className={`flex items-center gap-2 px-3 py-1.5 rounded-full ${GLASS_PILL} cursor-pointer hover:bg-white/20 transition-all duration-200 ${pillGlow(node.status)}`}
       >
-        {/* Status dot */}
-        <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${dotColor(node.status)}`} />
-        {/* Icon */}
+        <div
+          className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${dotColor(node.status)}`}
+        />
         <span className="text-white/70">
           <NodeIcon nodeId={node.id} />
         </span>
-        {/* Label */}
         <span className="text-[11px] font-medium text-white/90 whitespace-nowrap">
           {node.label}
         </span>
       </button>
-
-      {/* Detail panel */}
       {isExpanded && <NodeDetailPanel {...detailProps} nodeId={node.id} />}
     </div>
   );
 }
 
 /* ------------------------------------------------------------------ */
-/*  LoopBackLine — SVG curve on the right side (Capture -> Update)      */
+/*  LoopBackLine — SVG on the right side (Capture -> Update)            */
 /* ------------------------------------------------------------------ */
 
-function LoopBackLine({ nodeCount, isActive }: { nodeCount: number; isActive: boolean }) {
-  // Height per node row: pill (~36px) + connector (~12px) = ~48px
-  // 4 iteration nodes: Capture, Score, Improve, Update
-  const rowH = 48;
-  const totalH = nodeCount * rowH;
-  const pad = 18; // center of pill vertically
-  const x = 8;
-  const r = 8; // corner radius
+function LoopBackLine({
+  nodeCount,
+  isActive,
+}: {
+  nodeCount: number;
+  isActive: boolean;
+}) {
+  // Each node row = pill(~32px) + connector(~20px) = ~52px, minus last connector
+  const rowH = 52;
+  const totalH = nodeCount * rowH - 20;
+  const pad = 16;
+  const x = 10;
+  const r = 8;
 
   const top = pad;
   const bottom = totalH - pad;
 
   return (
     <svg
-      className="absolute -right-5 top-0 pointer-events-none"
-      width="20"
+      className="absolute -right-6 top-0 pointer-events-none"
+      width="22"
       height={totalH}
       fill="none"
     >
@@ -368,7 +415,6 @@ function LoopBackLine({ nodeCount, isActive }: { nodeCount: number; isActive: bo
         className={isActive ? "animate-dash" : ""}
         fill="none"
       />
-      {/* Arrow pointing left at top */}
       <path
         d={`M ${x - r + 4} ${top - 3} L ${x - r} ${top} L ${x - r + 4} ${top + 3}`}
         stroke="white"
@@ -396,7 +442,7 @@ function IterationCounterPill({
   const pct = max > 0 ? Math.min((current / max) * 100, 100) : 0;
 
   return (
-    <div className="px-3 py-1.5 rounded-full bg-white/15 backdrop-blur-2xl border border-white/25 shadow-[0_8px_32px_rgba(0,0,0,0.3)]">
+    <div className={`w-fit px-3 py-1.5 rounded-full ${GLASS_PILL}`}>
       <div className="flex items-center justify-between mb-1">
         <span className="text-[10px] text-white/60 font-medium">
           Iteration {current} / {max}
@@ -425,10 +471,12 @@ function ScorePill({ score }: { score: ScoreBreakdown }) {
   ];
 
   return (
-    <div className="px-3 py-2 rounded-2xl bg-white/15 backdrop-blur-2xl border border-white/25 shadow-[0_8px_32px_rgba(0,0,0,0.3)]">
+    <div className={`w-fit px-3 py-2 rounded-2xl ${GLASS_PILL}`}>
       <div className="flex items-center justify-between mb-1.5">
         <span className="text-[10px] text-white/50">Score</span>
-        <span className={`text-sm font-bold ${scoreTextColor(score.totalScore)}`}>
+        <span
+          className={`text-sm font-bold ml-3 ${scoreTextColor(score.totalScore)}`}
+        >
           {score.totalScore.toFixed(1)}/10
         </span>
       </div>
@@ -442,7 +490,9 @@ function ScorePill({ score }: { score: ScoreBreakdown }) {
                 style={{ width: `${(d.val / 10) * 100}%` }}
               />
             </div>
-            <span className={`text-[9px] font-semibold w-4 ${scoreTextColor(d.val)}`}>
+            <span
+              className={`text-[9px] font-semibold w-4 ${scoreTextColor(d.val)}`}
+            >
               {d.val.toFixed(1)}
             </span>
           </div>
@@ -453,7 +503,7 @@ function ScorePill({ score }: { score: ScoreBreakdown }) {
 }
 
 /* ------------------------------------------------------------------ */
-/*  ControlsPill — pause/stop/minimize (only when active)               */
+/*  ControlsPill                                                        */
 /* ------------------------------------------------------------------ */
 
 function ControlsPill({
@@ -468,18 +518,28 @@ function ControlsPill({
   onMinimize: () => void;
 }) {
   return (
-    <div className="flex items-center gap-0.5 px-2 py-1 rounded-full bg-white/15 backdrop-blur-2xl border border-white/25 shadow-[0_8px_32px_rgba(0,0,0,0.3)]">
+    <div
+      className={`w-fit flex items-center gap-0.5 px-2 py-1 rounded-full ${GLASS_PILL}`}
+    >
       <button
         onClick={onTogglePause}
         className="p-1 rounded-full hover:bg-white/10 transition-colors"
         title={isPaused ? "Resume" : "Pause"}
       >
         {isPaused ? (
-          <svg className="w-3.5 h-3.5 text-green-300" fill="currentColor" viewBox="0 0 24 24">
+          <svg
+            className="w-3.5 h-3.5 text-green-300"
+            fill="currentColor"
+            viewBox="0 0 24 24"
+          >
             <path d="M8 5v14l11-7z" />
           </svg>
         ) : (
-          <svg className="w-3.5 h-3.5 text-yellow-300" fill="currentColor" viewBox="0 0 24 24">
+          <svg
+            className="w-3.5 h-3.5 text-yellow-300"
+            fill="currentColor"
+            viewBox="0 0 24 24"
+          >
             <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
           </svg>
         )}
@@ -489,7 +549,11 @@ function ControlsPill({
         className="p-1 rounded-full hover:bg-white/10 transition-colors"
         title="Stop"
       >
-        <svg className="w-3.5 h-3.5 text-red-300" fill="currentColor" viewBox="0 0 24 24">
+        <svg
+          className="w-3.5 h-3.5 text-red-300"
+          fill="currentColor"
+          viewBox="0 0 24 24"
+        >
           <path d="M6 6h12v12H6z" />
         </svg>
       </button>
@@ -498,8 +562,18 @@ function ControlsPill({
         className="p-1 rounded-full hover:bg-white/10 transition-colors"
         title="Minimize"
       >
-        <svg className="w-3.5 h-3.5 text-white/50" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 12h-15" />
+        <svg
+          className="w-3.5 h-3.5 text-white/50"
+          fill="none"
+          viewBox="0 0 24 24"
+          strokeWidth={2}
+          stroke="currentColor"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M19.5 12h-15"
+          />
         </svg>
       </button>
     </div>
@@ -510,14 +584,18 @@ function ControlsPill({
 /*  Summary pill (minimized state)                                      */
 /* ------------------------------------------------------------------ */
 
-export function PipelineSummaryPill({ onExpand }: { onExpand: () => void }) {
+export function PipelineSummaryPill({
+  onExpand,
+}: {
+  onExpand: () => void;
+}) {
   const latestScore = usePipelineStore((s) => s.latestScore);
   const iterationCount = usePipelineStore((s) => s.iterationCount);
   const isActive = usePipelineStore((s) => s.isActive);
 
   return (
     <div
-      className="flex items-center gap-2 px-3 py-1.5 bg-white/15 backdrop-blur-2xl rounded-full border border-white/25 shadow-[0_8px_32px_rgba(0,0,0,0.3)] cursor-pointer hover:bg-white/20 transition-colors"
+      className={`flex items-center gap-2 px-3 py-1.5 rounded-full ${GLASS_PILL} cursor-pointer hover:bg-white/20 transition-colors`}
       onClick={onExpand}
     >
       <div
@@ -527,22 +605,34 @@ export function PipelineSummaryPill({ onExpand }: { onExpand: () => void }) {
       />
       <span className="text-[11px] text-white/80 font-medium">Pipeline</span>
       {latestScore && (
-        <span className={`text-[11px] font-bold ${scoreTextColor(latestScore.totalScore)}`}>
+        <span
+          className={`text-[11px] font-bold ${scoreTextColor(latestScore.totalScore)}`}
+        >
           {latestScore.totalScore.toFixed(1)}
         </span>
       )}
       {iterationCount > 0 && (
         <span className="text-[10px] text-white/40">#{iterationCount}</span>
       )}
-      <svg className="w-3 h-3 text-white/50" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+      <svg
+        className="w-3 h-3 text-white/50"
+        fill="none"
+        viewBox="0 0 24 24"
+        strokeWidth={2}
+        stroke="currentColor"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="M8.25 4.5l7.5 7.5-7.5 7.5"
+        />
       </svg>
     </div>
   );
 }
 
 /* ------------------------------------------------------------------ */
-/*  Main flowchart — individual glass pills with loop-back              */
+/*  Main flowchart                                                      */
 /* ------------------------------------------------------------------ */
 
 export interface PipelineFlowchartProps {
@@ -580,7 +670,6 @@ export default function PipelineFlowchart({
     setExpandedNode((prev) => (prev === id ? null : id));
   };
 
-  // Split into generation nodes (first 3) and iteration nodes (last 4)
   const genNodes = nodes.slice(0, 3);
   const iterNodes = nodes.slice(3);
 
@@ -593,83 +682,118 @@ export default function PipelineFlowchart({
   const hasIterations = iterationCount > 0;
   const iterationIsActive = iterNodes.some((n) => n.status === "active");
 
+  // Build a flat list: pill, connector, pill, connector, ... for generation
+  // Then a connector, then iteration section with loop-back
   return (
-    <div className="flex flex-col gap-2 animate-slide-in-left">
+    <div className="flex flex-col items-start animate-slide-in-left">
       {/* Controls pill — only when active */}
       {isActive && (
-        <ControlsPill
-          isPaused={isPaused}
-          onTogglePause={onTogglePause}
-          onStop={onStop}
-          onMinimize={onMinimize}
-        />
+        <>
+          <ControlsPill
+            isPaused={isPaused}
+            onTogglePause={onTogglePause}
+            onStop={onStop}
+            onMinimize={onMinimize}
+          />
+          <GlassConnector status={genNodes[0].status} />
+        </>
       )}
 
-      {/* Minimize button when not active (no controls pill) */}
+      {/* Minimize button when not active */}
       {!isActive && (
-        <div className="flex">
+        <>
           <button
             onClick={onMinimize}
-            className="p-1.5 rounded-full bg-white/15 backdrop-blur-2xl border border-white/25 shadow-[0_8px_32px_rgba(0,0,0,0.3)] hover:bg-white/20 transition-colors"
+            className={`p-1.5 rounded-full ${GLASS_PILL} hover:bg-white/20 transition-colors`}
             title="Minimize"
           >
-            <svg className="w-3.5 h-3.5 text-white/50" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 12h-15" />
+            <svg
+              className="w-3.5 h-3.5 text-white/50"
+              fill="none"
+              viewBox="0 0 24 24"
+              strokeWidth={2}
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M19.5 12h-15"
+              />
             </svg>
           </button>
-        </div>
+          <GlassConnector status={genNodes[0].status} />
+        </>
       )}
 
-      {/* Generation nodes */}
+      {/* Generation nodes — flat: pill, connector, pill, connector, pill */}
       {genNodes.map((node, i) => (
-        <div key={node.id}>
-          {i > 0 && <VerticalConnector status={node.status} />}
+        <div key={node.id} className="flex flex-col items-start">
           <NodePill
             node={node}
             isExpanded={expandedNode === node.id}
             onToggle={() => toggleNode(node.id)}
             detailProps={{ ...detailProps, nodeId: node.id }}
           />
+          {/* Connector after every gen node (bridges to next or to iter section) */}
+          <GlassConnector
+            status={
+              i < genNodes.length - 1
+                ? genNodes[i + 1].status
+                : iterNodes[0].status
+            }
+          />
         </div>
       ))}
 
-      {/* Connector from generation to iteration */}
-      <VerticalConnector status={iterNodes[0].status} />
-
       {/* Iteration nodes with loop-back line */}
-      <div className="relative">
-        {/* Loop-back line on the right side */}
+      <div className="relative flex flex-col items-start">
         {hasIterations && (
           <LoopBackLine nodeCount={4} isActive={iterationIsActive} />
         )}
 
-        {/* Iteration node pills */}
         {iterNodes.map((node, i) => (
-          <div key={node.id}>
-            {i > 0 && <VerticalConnector status={node.status} />}
+          <div key={node.id} className="flex flex-col items-start">
             <NodePill
               node={node}
               isExpanded={expandedNode === node.id}
               onToggle={() => toggleNode(node.id)}
               detailProps={{ ...detailProps, nodeId: node.id }}
             />
+            {i < iterNodes.length - 1 && (
+              <GlassConnector status={iterNodes[i + 1].status} />
+            )}
           </div>
         ))}
       </div>
 
       {/* Iteration counter pill */}
       {hasIterations && (
-        <IterationCounterPill current={iterationCount} max={maxIterations} />
+        <>
+          <GlassConnector status="done" />
+          <IterationCounterPill current={iterationCount} max={maxIterations} />
+        </>
       )}
 
       {/* Score pill */}
-      {latestScore && <ScorePill score={latestScore} />}
+      {latestScore && (
+        <>
+          <GlassConnector status="done" />
+          <ScorePill score={latestScore} />
+        </>
+      )}
 
       {/* Error */}
       {error && (
-        <div className="px-3 py-1.5 rounded-full bg-red-400/15 backdrop-blur-2xl border border-red-400/25 shadow-[0_8px_32px_rgba(0,0,0,0.3)]">
-          <div className="text-[10px] text-red-300/80 truncate">{error}</div>
-        </div>
+        <>
+          <GlassConnector status="error" />
+          <div
+            className={`w-fit px-3 py-1.5 rounded-full bg-red-400/15 backdrop-blur-2xl border border-red-400/25 shadow-[0_2px_8px_rgba(0,0,0,0.15)]`}
+          >
+            <div className="text-[10px] text-red-300/80 truncate max-w-[180px]">
+              {error}
+            </div>
+          </div>
+        </>
       )}
     </div>
   );
