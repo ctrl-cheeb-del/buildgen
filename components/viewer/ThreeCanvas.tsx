@@ -16,6 +16,7 @@ import {
   createViewerLights,
 } from "@/lib/viewer/scene-helpers";
 import { createEnvironmentMap } from "@/lib/viewer/environment";
+import { createCloudDome, type CloudDome } from "@/lib/viewer/clouds";
 import { initTextureQuality } from "@/lib/viewer/texture-loader";
 import {
   computeGeometryStats,
@@ -40,6 +41,8 @@ const ThreeCanvas = forwardRef<ThreeCanvasHandle, ThreeCanvasProps>(
     const controlsRef = useRef<OrbitControls | null>(null);
     const buildingRef = useRef<THREE.Group | null>(null);
     const animIdRef = useRef<number>(0);
+    const cloudsRef = useRef<CloudDome | null>(null);
+    const clockRef = useRef<THREE.Clock | null>(null);
 
     // Initialize Three.js scene
     useEffect(() => {
@@ -47,8 +50,7 @@ const ThreeCanvas = forwardRef<ThreeCanvasHandle, ThreeCanvasProps>(
       if (!container) return;
 
       const scene = new THREE.Scene();
-      scene.background = new THREE.Color(0x1a1a2e);
-      scene.fog = new THREE.FogExp2(0x1a1a2e, 0.0015);
+      scene.fog = new THREE.FogExp2(0xddeeff, 0.0012);
       sceneRef.current = scene;
 
       const camera = new THREE.PerspectiveCamera(
@@ -77,8 +79,18 @@ const ThreeCanvas = forwardRef<ThreeCanvasHandle, ThreeCanvasProps>(
       // Enable max anisotropic filtering for sharp textures at angles
       initTextureQuality(renderer);
 
-      // PMREM environment map — gives all PBR materials subtle reflections
-      scene.environment = createEnvironmentMap(renderer);
+      // PMREM environment map — used for both reflections AND visible sky background
+      const envMap = createEnvironmentMap(renderer);
+      scene.environment = envMap;
+      scene.background = envMap;
+
+      // Animated cloud layer on top of the sky
+      const clouds = createCloudDome();
+      scene.add(clouds.mesh);
+      cloudsRef.current = clouds;
+
+      const clock = new THREE.Clock();
+      clockRef.current = clock;
 
       const controls = new OrbitControls(camera, renderer.domElement);
       controls.target.set(0, 40, 0);
@@ -97,6 +109,7 @@ const ThreeCanvas = forwardRef<ThreeCanvasHandle, ThreeCanvasProps>(
       function animate() {
         animIdRef.current = requestAnimationFrame(animate);
         controls.update();
+        clouds.update(clock.getElapsedTime(), camera);
         renderer.render(scene, camera);
       }
       animate();
@@ -114,6 +127,7 @@ const ThreeCanvas = forwardRef<ThreeCanvasHandle, ThreeCanvasProps>(
       return () => {
         window.removeEventListener("resize", onResize);
         cancelAnimationFrame(animIdRef.current);
+        clouds.dispose();
         controls.dispose();
         renderer.dispose();
         if (container.contains(renderer.domElement)) {

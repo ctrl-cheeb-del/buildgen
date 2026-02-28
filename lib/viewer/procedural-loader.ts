@@ -41,10 +41,49 @@ function normalizeToPlot(group: THREE.Group): void {
 }
 
 /**
+ * Quick syntax pre-check: catches truncated LLM output (unbalanced
+ * delimiters) without ever calling `new Function()`, which would throw
+ * a SyntaxError and trigger the Next.js dev error overlay.
+ */
+function hasBalancedDelimiters(code: string): boolean {
+  let braces = 0,
+    brackets = 0,
+    parens = 0;
+  let inString = false;
+  let stringChar = "";
+
+  for (let i = 0; i < code.length; i++) {
+    const ch = code[i];
+    if (inString) {
+      if (ch === stringChar && code[i - 1] !== "\\") inString = false;
+      continue;
+    }
+    if (ch === '"' || ch === "'" || ch === "`") {
+      inString = true;
+      stringChar = ch;
+      continue;
+    }
+    if (ch === "{") braces++;
+    else if (ch === "}") braces--;
+    else if (ch === "[") brackets++;
+    else if (ch === "]") brackets--;
+    else if (ch === "(") parens++;
+    else if (ch === ")") parens--;
+    if (braces < 0 || brackets < 0 || parens < 0) return false;
+  }
+  return braces === 0 && brackets === 0 && parens === 0;
+}
+
+/**
  * Evaluates a generated Three.js code string and returns a Group.
  * The code should be a function body that uses THREE and returns a THREE.Group.
  */
 export function loadProceduralGeometry(code: string): THREE.Group {
+  if (!code || typeof code !== "string" || code.trim().length === 0) {
+    console.warn("[ProceduralLoader] Empty or missing code, using fallback");
+    return createFallbackGroup();
+  }
+
   const forbidden = [
     "fetch(",
     "XMLHttpRequest",
@@ -74,6 +113,14 @@ export function loadProceduralGeometry(code: string): THREE.Group {
     );
     if (wrapperMatch) {
       cleanCode = wrapperMatch[1].trim();
+    }
+
+    // Catch truncated LLM output before calling new Function()
+    if (!hasBalancedDelimiters(cleanCode)) {
+      console.warn(
+        "[ProceduralLoader] Code has unbalanced delimiters (likely truncated), using fallback"
+      );
+      return createFallbackGroup();
     }
 
     const fn = new Function("THREE", `"use strict";\n${cleanCode}`);
@@ -121,7 +168,7 @@ export function loadProceduralGeometry(code: string): THREE.Group {
 
     return group;
   } catch (err) {
-    console.error("[ProceduralLoader] Failed to execute generated code:", err);
+    console.warn("[ProceduralLoader] Failed to execute generated code:", err);
     return createFallbackGroup();
   }
 }

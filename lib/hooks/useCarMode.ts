@@ -1,32 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useCallback } from "react";
-import mapboxgl from "mapbox-gl";
+import * as THREE from "three";
 import { useCarStore } from "../stores/car-store";
 import { useCarKeys } from "./useCarKeys";
 import { loadCarModel } from "../car/car-loader";
 import { updateCar, findNearestRoadPosition } from "../car/car-physics";
 import { createDriftEffects, type DriftEffects } from "../car/drift-effects";
-import {
-  CITY_ORIGIN_LNG,
-  CITY_ORIGIN_LAT,
-} from "../grid/grid-constants";
-import type { ThreeJSMapboxLayer } from "../viewer/mapbox-layer";
-
-function metersToLngLat(dx: number, dz: number): [number, number] {
-  const originMerc = mapboxgl.MercatorCoordinate.fromLngLat(
-    [CITY_ORIGIN_LNG, CITY_ORIGIN_LAT],
-    0
-  );
-  const scale = originMerc.meterInMercatorCoordinateUnits();
-  const merc = new mapboxgl.MercatorCoordinate(
-    originMerc.x + dx * scale,
-    originMerc.y + dz * scale,
-    0
-  );
-  const lngLat = merc.toLngLat();
-  return [lngLat.lng, lngLat.lat];
-}
+import type { SceneLayer } from "../viewer/scene-layer";
 
 function wrapAngle(a: number): number {
   a = a % (2 * Math.PI);
@@ -35,9 +16,31 @@ function wrapAngle(a: number): number {
   return a;
 }
 
+// ── GTA V-style chase camera state ──────────────────────────────
+// All angles in radians. yawOffset = 0 means directly behind the car.
+const cam = {
+  yawOffset: 0,       // mouse orbit offset from car heading
+  pitch: 0.35,        // vertical angle (0 = level, PI/2 = top-down)
+  distance: 40,       // follow distance (zoom)
+  dragging: false,
+  lastPointerX: 0,
+  lastPointerY: 0,
+};
+
+const CAM_PITCH_MIN = 0.05;
+const CAM_PITCH_MAX = Math.PI / 2 - 0.05;
+const CAM_DIST_MIN = 12;
+const CAM_DIST_MAX = 120;
+const CAM_SENSITIVITY = 0.004;
+const CAM_RETURN_SPEED = 2.0;  // how fast yaw drifts back behind car (rad/s)
+const CAM_HEIGHT_OFFSET = 3;   // look-at target height above ground
+
+// Pre-allocated vectors
+const _cameraTarget = new THREE.Vector3();
+const _cameraPos = new THREE.Vector3();
+
 export function useCarMode(
-  mapRef: React.RefObject<mapboxgl.Map | null>,
-  layer: ThreeJSMapboxLayer | null,
+  layer: SceneLayer | null,
   onSyncPosition?: (x: number, z: number, heading: number) => void,
   onExitCar?: () => void
 ) {
@@ -48,27 +51,73 @@ export function useCarMode(
   const prevCarMode = useRef(false);
   const driftEffectsRef = useRef<DriftEffects | null>(null);
   const savedCamera = useRef<{
-    center: [number, number];
-    zoom: number;
-    pitch: number;
-    bearing: number;
+    position: THREE.Vector3;
+    target: THREE.Vector3;
   } | null>(null);
 
   // Store latest callback refs to avoid stale closures in animation loop
   const layerRef = useRef(layer);
   layerRef.current = layer;
-  const mapRefRef = useRef(mapRef);
-  mapRefRef.current = mapRef;
   const onSyncRef = useRef(onSyncPosition);
   onSyncRef.current = onSyncPosition;
   const onExitRef = useRef(onExitCar);
   onExitRef.current = onExitCar;
 
+  // ── Mouse/touch event handlers for camera orbit + zoom ────────
+  const onPointerDown = useCallback((e: PointerEvent) => {
+    // Right-click or middle-click to orbit (left-click reserved for UI)
+    if (e.button === 2 || e.button === 1) {
+      cam.dragging = true;
+      cam.lastPointerX = e.clientX;
+      cam.lastPointerY = e.clientY;
+      e.preventDefault();
+    }
+  }, []);
+
+  const onPointerMove = useCallback((e: PointerEvent) => {
+    if (!cam.dragging) return;
+    const dx = e.clientX - cam.lastPointerX;
+    const dy = e.clientY - cam.lastPointerY;
+    cam.lastPointerX = e.clientX;
+    cam.lastPointerY = e.clientY;
+
+    cam.yawOffset -= dx * CAM_SENSITIVITY;
+    cam.pitch = THREE.MathUtils.clamp(
+      cam.pitch + dy * CAM_SENSITIVITY,
+      CAM_PITCH_MIN,
+      CAM_PITCH_MAX
+    );
+  }, []);
+
+  const onPointerUp = useCallback((e: PointerEvent) => {
+    if (e.button === 2 || e.button === 1) {
+      cam.dragging = false;
+    }
+  }, []);
+
+  const onWheel = useCallback((e: WheelEvent) => {
+    // Only intercept wheel when in car mode
+    if (!useCarStore.getState().carMode) return;
+    e.preventDefault();
+    cam.distance = THREE.MathUtils.clamp(
+      cam.distance + e.deltaY * 0.05,
+      CAM_DIST_MIN,
+      CAM_DIST_MAX
+    );
+  }, []);
+
+  const onContextMenu = useCallback((e: MouseEvent) => {
+    // Prevent context menu while in car mode (right-click = orbit)
+    if (useCarStore.getState().carMode) {
+      e.preventDefault();
+    }
+  }, []);
+
   const tick = useCallback((now: number) => {
     const carStore = useCarStore.getState();
     if (!carStore.carMode) return;
 
-    const dt = (now - lastTimeRef.current) / 1000;
+    const dt = Math.min((now - lastTimeRef.current) / 1000, 0.1); // clamp dt
     lastTimeRef.current = now;
     const nowSec = now / 1000;
 
@@ -102,18 +151,45 @@ export function useCarMode(
       nowSec
     );
 
-    layerRef.current?.repaint();
+    // ── GTA V chase camera ──────────────────────────────────────
+    const currentLayer = layerRef.current;
+    if (currentLayer) {
+      const camera = currentLayer.getCamera() as THREE.PerspectiveCamera;
 
-    // Camera follow via Mapbox — allow user's current zoom (scroll zoom enabled)
-    const map = mapRefRef.current.current;
-    if (map) {
-      const [lng, lat] = metersToLngLat(newState.x, newState.z);
-      const bearingDeg = newState.heading * (180 / Math.PI);
-      map.jumpTo({
-        center: [lng, lat],
-        bearing: bearingDeg,
-        pitch: 60,
-      });
+      // When not dragging, drift yaw back to 0 (behind car)
+      if (!cam.dragging && Math.abs(cam.yawOffset) > 0.001) {
+        const returnStep = CAM_RETURN_SPEED * dt;
+        if (Math.abs(cam.yawOffset) < returnStep) {
+          cam.yawOffset = 0;
+        } else {
+          cam.yawOffset -= Math.sign(cam.yawOffset) * returnStep;
+        }
+      }
+
+      // Camera orbit angle = car heading + user yaw offset
+      const orbitAngle = newState.heading + cam.yawOffset;
+
+      // Spherical coordinates: camera position relative to car
+      const cosP = Math.cos(cam.pitch);
+      const sinP = Math.sin(cam.pitch);
+      _cameraPos.set(
+        newState.x - Math.sin(orbitAngle) * cam.distance * cosP,
+        cam.distance * sinP,
+        newState.z + Math.cos(orbitAngle) * cam.distance * cosP
+      );
+
+      // Smooth follow — tighter at speed, looser when slow/orbiting
+      const speed = Math.abs(newState.speed);
+      const followLerp = cam.dragging
+        ? 0.15  // responsive when user is orbiting
+        : THREE.MathUtils.clamp(0.04 + speed * 0.003, 0.04, 0.12);
+      camera.position.lerp(_cameraPos, followLerp);
+
+      // Look at the car (slightly above ground)
+      _cameraTarget.set(newState.x, CAM_HEIGHT_OFFSET, newState.z);
+      camera.lookAt(_cameraTarget);
+
+      currentLayer.repaint();
     }
 
     // Debounced multiplayer sync (every 200ms)
@@ -127,23 +203,33 @@ export function useCarMode(
 
   const enterCarMode = useCallback(async () => {
     const currentLayer = layerRef.current;
-    const map = mapRefRef.current.current;
-    if (!currentLayer || !map) return;
+    if (!currentLayer) return;
 
-    // Save current camera
-    const c = map.getCenter();
+    const camera = currentLayer.getCamera() as THREE.PerspectiveCamera;
+
+    // Save current camera state
     savedCamera.current = {
-      center: [c.lng, c.lat],
-      zoom: map.getZoom(),
-      pitch: map.getPitch(),
-      bearing: map.getBearing(),
+      position: camera.position.clone(),
+      target: new THREE.Vector3(0, 0, 0),
     };
 
-    // Disable map interaction except scroll zoom (for drone-style zoom in/out)
-    map.dragPan.disable();
-    map.dragRotate.disable();
-    map.doubleClickZoom.disable();
-    map.touchZoomRotate.disable();
+    // Disable OrbitControls — car camera takes over
+    currentLayer.setControlsEnabled(false);
+
+    // Reset camera state
+    cam.yawOffset = 0;
+    cam.pitch = 0.35;
+    cam.distance = 40;
+    cam.dragging = false;
+
+    // Add mouse/touch listeners for orbit + zoom
+    const canvas = currentLayer.getCanvas();
+    canvas.addEventListener("pointerdown", onPointerDown);
+    canvas.addEventListener("pointermove", onPointerMove);
+    canvas.addEventListener("pointerup", onPointerUp);
+    canvas.addEventListener("pointerleave", onPointerUp);
+    canvas.addEventListener("wheel", onWheel, { passive: false });
+    canvas.addEventListener("contextmenu", onContextMenu);
 
     // Load car model
     const carGroup = await loadCarModel();
@@ -156,21 +242,8 @@ export function useCarMode(
     driftEffectsRef.current = effects;
     currentLayer.addGroup(effects.group);
 
-    // Place car on nearest road from current view center
-    const viewCenter = map.getCenter();
-    const originMerc = mapboxgl.MercatorCoordinate.fromLngLat(
-      [CITY_ORIGIN_LNG, CITY_ORIGIN_LAT],
-      0
-    );
-    const viewMerc = mapboxgl.MercatorCoordinate.fromLngLat(
-      [viewCenter.lng, viewCenter.lat],
-      0
-    );
-    const meterScale = currentLayer.getMeterScale();
-    const meterX = (viewMerc.x - originMerc.x) / meterScale;
-    const meterZ = (viewMerc.y - originMerc.y) / meterScale;
-
-    const roadPos = findNearestRoadPosition(meterX, meterZ);
+    // Place car on nearest road from camera target (roughly center of view)
+    const roadPos = findNearestRoadPosition(0, 0);
     useCarStore.getState().updatePosition({
       x: roadPos.x,
       z: roadPos.z,
@@ -185,13 +258,10 @@ export function useCarMode(
     carGroup.rotation.set(0, Math.PI, 0);
     currentLayer.repaint();
 
-    // Zoom in close to the car
-    map.jumpTo({ zoom: 19.5, pitch: 60 });
-
     // Start animation loop
     lastTimeRef.current = performance.now();
     animFrameRef.current = requestAnimationFrame(tick);
-  }, [tick]);
+  }, [tick, onPointerDown, onPointerMove, onPointerUp, onWheel, onContextMenu]);
 
   const exitCarMode = useCallback(() => {
     if (animFrameRef.current) {
@@ -212,29 +282,35 @@ export function useCarMode(
       driftEffectsRef.current = null;
     }
 
+    // Remove mouse/touch listeners
+    if (currentLayer) {
+      const canvas = currentLayer.getCanvas();
+      canvas.removeEventListener("pointerdown", onPointerDown);
+      canvas.removeEventListener("pointermove", onPointerMove);
+      canvas.removeEventListener("pointerup", onPointerUp);
+      canvas.removeEventListener("pointerleave", onPointerUp);
+      canvas.removeEventListener("wheel", onWheel);
+      canvas.removeEventListener("contextmenu", onContextMenu);
+    }
+
     useCarStore.getState().setCarGroup(null);
-    useCarStore.getState().updatePosition({ x: 0, z: 0, heading: 0, speed: 0, velAngle: 0, drifting: false });
+    useCarStore.getState().updatePosition({
+      x: 0, z: 0, heading: 0, speed: 0, velAngle: 0, drifting: false,
+    });
 
-    // Restore map controls
-    const map = mapRefRef.current.current;
-    if (map) {
-      map.dragPan.enable();
-      map.dragRotate.enable();
-      map.doubleClickZoom.enable();
-      map.touchZoomRotate.enable();
-
+    // Restore camera position & re-enable OrbitControls
+    if (currentLayer) {
+      currentLayer.setControlsEnabled(true);
       if (savedCamera.current) {
-        map.jumpTo({
-          center: savedCamera.current.center,
-          zoom: savedCamera.current.zoom,
-          pitch: savedCamera.current.pitch,
-          bearing: savedCamera.current.bearing,
-        });
+        const camera = currentLayer.getCamera() as THREE.PerspectiveCamera;
+        camera.position.copy(savedCamera.current.position);
+        camera.lookAt(0, 0, 0);
+        currentLayer.repaint();
       }
     }
 
     onExitRef.current?.();
-  }, []);
+  }, [onPointerDown, onPointerMove, onPointerUp, onWheel, onContextMenu]);
 
   // React to carMode changes
   useEffect(() => {

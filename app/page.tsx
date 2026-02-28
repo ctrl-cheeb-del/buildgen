@@ -3,15 +3,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { useUser } from "@clerk/nextjs";
-import type mapboxgl from "mapbox-gl";
 import type { MultiViewImages } from "@/lib/types";
 import { api } from "../convex/_generated/api";
-import MapCanvas from "@/components/MapCanvas";
+import ThreeMapCanvas from "@/components/ThreeMapCanvas";
 import AuthButton from "@/components/AuthButton";
 import FirstPersonOverlay from "@/components/fp/FirstPersonOverlay";
 import SettingsPanel from "@/components/SettingsPanel";
 import ChatInput from "@/components/chat/ChatInput";
 import ChatMessages from "@/components/chat/ChatMessages";
+import PlotPopups from "@/components/PlotPopups";
 import { useFPStore } from "@/lib/stores/fp-store";
 import { useCarStore } from "@/lib/stores/car-store";
 import { usePipeline } from "@/lib/hooks/usePipeline";
@@ -23,23 +23,22 @@ import { useChat } from "@/lib/hooks/useChat";
 import { useChatStore } from "@/lib/stores/chat-store";
 import { useWorldStore } from "@/lib/stores/world-store";
 import { GRID_COLS, GRID_ROWS } from "@/lib/grid/grid-constants";
-import { gridIndexToColRow, getPlotCenter } from "@/lib/grid/grid-geometry";
+import { gridIndexToColRow, plotCenterMeters } from "@/lib/grid/grid-geometry";
 import type { Id } from "../convex/_generated/dataModel";
 
 const TOTAL_PLOTS = GRID_COLS * GRID_ROWS;
 
 export default function Home() {
-  const mapRef = useRef<mapboxgl.Map | null>(null);
   const { isRunning, multiView, steps, runPipeline } = usePipeline();
   const { isSignedIn, user } = useUser();
-  const { plotStates, gridGeoJSON, buildings, localPendingUpdates } =
+  const { plotStates, buildings, localPendingUpdates } =
     useGridSync();
 
   const myPlot = useQuery(api.plots.getMyPlot);
   const claimPlot = useMutation(api.plots.claimPlot);
   const convexUpdateTransform = useMutation(api.buildings.updateTransform);
-  const deleteBuilding = useMutation(api.buildings.deleteBuilding);
   const releasePlot = useMutation(api.plots.releasePlot);
+  const deleteBuilding = useMutation(api.buildings.deleteBuilding);
 
   const selectedId = useWorldStore((s) => s.selectedId);
   const selectBuilding = useWorldStore((s) => s.selectBuilding);
@@ -69,10 +68,6 @@ export default function Home() {
     views: MultiViewImages;
     buildingName: string;
   } | null>(null);
-
-  const handleMapReady = useCallback((map: mapboxgl.Map) => {
-    mapRef.current = map;
-  }, []);
 
   const handleGenerate = useCallback(
     (buildingName: string) => {
@@ -154,16 +149,16 @@ export default function Home() {
     if (buildings) {
       for (const b of buildings) {
         const { col, row } = gridIndexToColRow(b.plotIndex);
-        const [lng, lat] = getPlotCenter(col, row);
-        centers.set(b._id as string, [lng, lat]);
+        const [mx, mz] = plotCenterMeters(col, row);
+        centers.set(b._id as string, [mx, mz]);
       }
     }
     return centers;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [buildingKeys]);
 
-  // Wire up building drag system
-  useBuildingDrag(mapRef, layer, ownedBuildingIds, plotCenters);
+  // Wire up building drag system (pure Three.js raycasting)
+  useBuildingDrag(layer, ownedBuildingIds, plotCenters);
 
   // Car mode
   const updateCarPosition = useMutation(api.cars.updateCarPosition);
@@ -194,7 +189,7 @@ export default function Home() {
     removeCarPosition({ userId: carUserId });
   }, [carUserId, removeCarPosition]);
 
-  useCarMode(mapRef, layer, handleCarSync, handleCarExit);
+  useCarMode(layer, handleCarSync, handleCarExit);
   useRemoteCars(carUserId);
 
   // First-person walk mode
@@ -263,9 +258,12 @@ export default function Home() {
 
   return (
     <div className="relative w-screen h-screen overflow-hidden">
-      <MapCanvas
-        gridGeoJSON={gridGeoJSON}
-        onMapReady={handleMapReady}
+      <ThreeMapCanvas />
+
+      {/* Plot click/hover popups */}
+      <PlotPopups
+        layer={layer}
+        plotStates={plotStates}
         onPlotClick={handlePlotClick}
       />
 

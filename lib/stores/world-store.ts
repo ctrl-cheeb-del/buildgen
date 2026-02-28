@@ -1,9 +1,7 @@
 import { create } from "zustand";
 import * as THREE from "three";
-import mapboxgl from "mapbox-gl";
 import type { WorldBuilding } from "../types";
-import type { ThreeJSMapboxLayer } from "../viewer/mapbox-layer";
-import { CITY_ORIGIN_LNG, CITY_ORIGIN_LAT } from "../grid/grid-constants";
+import type { SceneLayer } from "../viewer/scene-layer";
 
 type ConvexUpdateFn = (
   buildingId: string,
@@ -16,13 +14,12 @@ interface WorldState {
   buildings: Map<string, WorldBuilding>;
   containers: Map<string, THREE.Group>;
   selectedId: string | null;
-  layer: ThreeJSMapboxLayer | null;
-  origin: [number, number];
+  layer: SceneLayer | null;
   convexUpdateTransform: ConvexUpdateFn | null;
   ownedBuildingIds: Set<string>;
   isDragging: boolean;
 
-  setLayer: (layer: ThreeJSMapboxLayer) => void;
+  setLayer: (layer: SceneLayer) => void;
   setConvexUpdateTransform: (fn: ConvexUpdateFn) => void;
   setOwnedBuildingIds: (ids: Set<string>) => void;
   setIsDragging: (dragging: boolean) => void;
@@ -38,29 +35,18 @@ interface WorldState {
   clear: () => void;
 }
 
-function applyTransforms(
-  building: WorldBuilding,
-  container: THREE.Group,
-  layer: ThreeJSMapboxLayer | null,
-  origin: [number, number]
-) {
-  if (!layer) return;
-
-  const meterScale = layer.getMeterScale();
-  const originMerc = mapboxgl.MercatorCoordinate.fromLngLat(origin, 0);
-  const buildingMerc = mapboxgl.MercatorCoordinate.fromLngLat(
-    [building.lng, building.lat],
-    0
+/**
+ * Position a building container in meter-space.
+ * building.x/z = plot center in meters from origin.
+ * building.offset = user drag offset within the plot.
+ */
+function applyTransforms(building: WorldBuilding, container: THREE.Group) {
+  container.position.set(
+    building.x + building.offset[0],
+    building.offset[1],
+    building.z + building.offset[2]
   );
-
-  const sceneX =
-    (buildingMerc.x - originMerc.x) / meterScale + building.offset[0];
-  const sceneY = building.offset[1];
-  const sceneZ =
-    (buildingMerc.y - originMerc.y) / meterScale + building.offset[2];
-
-  container.position.set(sceneX, sceneY, sceneZ);
-  container.scale.set(building.scale, building.scale, building.scale);
+  container.scale.setScalar(building.scale);
   container.rotation.set(
     (building.rotation[0] * Math.PI) / 180,
     (building.rotation[1] * Math.PI) / 180,
@@ -76,13 +62,12 @@ export const useWorldStore = create<WorldState>((set, get) => ({
   containers: new Map(),
   selectedId: null,
   layer: null,
-  origin: [CITY_ORIGIN_LNG, CITY_ORIGIN_LAT] as [number, number],
   convexUpdateTransform: null,
   ownedBuildingIds: new Set(),
   isDragging: false,
 
   setLayer: (layer) => {
-    set({ layer, origin: layer.getOrigin() });
+    set({ layer });
   },
 
   setConvexUpdateTransform: (fn) => {
@@ -106,7 +91,7 @@ export const useWorldStore = create<WorldState>((set, get) => ({
     container.name = `building-${building.id}`;
     container.add(modelGroup);
 
-    applyTransforms(building, container, state.layer, state.origin);
+    applyTransforms(building, container);
     container.visible = building.visible;
 
     const newBuildings = new Map(state.buildings);
@@ -165,18 +150,16 @@ export const useWorldStore = create<WorldState>((set, get) => ({
     const container = state.containers.get(id);
     if (!building || !container) return;
 
-    const updated = { ...building };
-    if (updates.scale !== undefined) updated.scale = updates.scale;
-    if (updates.offset !== undefined) updated.offset = [...updates.offset];
+    // Mutate building record in-place to avoid Map recreation.
+    // During drag this is called every mousemove — recreating the Map
+    // would trigger React re-render storms.
+    if (updates.scale !== undefined) building.scale = updates.scale;
+    if (updates.offset !== undefined) building.offset = [...updates.offset];
     if (updates.rotation !== undefined)
-      updated.rotation = [...updates.rotation];
+      building.rotation = [...updates.rotation];
 
-    applyTransforms(updated, container, state.layer, state.origin);
+    applyTransforms(building, container);
     state.layer?.repaint();
-
-    const newBuildings = new Map(state.buildings);
-    newBuildings.set(id, updated);
-    set({ buildings: newBuildings });
 
     // Debounced Convex sync
     const syncFn = state.convexUpdateTransform;
@@ -189,9 +172,9 @@ export const useWorldStore = create<WorldState>((set, get) => ({
           debounceTimers.delete(id);
           syncFn(
             id,
-            { x: updated.offset[0], y: updated.offset[1], z: updated.offset[2] },
-            { x: updated.rotation[0], y: updated.rotation[1], z: updated.rotation[2] },
-            updated.scale
+            { x: building.offset[0], y: building.offset[1], z: building.offset[2] },
+            { x: building.rotation[0], y: building.rotation[1], z: building.rotation[2] },
+            building.scale
           );
         }, 200)
       );

@@ -17,8 +17,10 @@ export type ActivePath = "A" | "B";
 export interface WorldBuilding {
   id: string;
   name: string;
-  lng: number;
-  lat: number;
+  /** X position in meter-space (from city origin) */
+  x: number;
+  /** Z position in meter-space (from city origin) */
+  z: number;
   path: ActivePath;
   scale: number;
   offset: [number, number, number];

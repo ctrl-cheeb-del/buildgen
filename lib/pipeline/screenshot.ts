@@ -1,10 +1,6 @@
-import type mapboxgl from "mapbox-gl";
-
 /**
- * Capture the current Mapbox canvas as a PNG data URL.
- * Requires `preserveDrawingBuffer: true` on the Map constructor.
+ * Capture the current map canvas as a PNG data URL.
  */
-export function captureScreenshot(map: mapboxgl.Map): string {
-  const canvas = map.getCanvas();
+export function captureScreenshot(canvas: HTMLCanvasElement): string {
   return canvas.toDataURL("image/png");
 }
