@@ -47,7 +47,7 @@ export default function PromptBar({
               : "Describe any building... e.g. a beaver-shaped skyscraper"
           }
           disabled={allFull}
-          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:border-blue-500 transition-colors disabled:bg-gray-100 disabled:text-gray-400"
+          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 placeholder-gray-500 outline-none focus:border-blue-500 transition-colors disabled:bg-gray-100 disabled:text-gray-400"
         />
         <button
           onClick={handleGenerate}
