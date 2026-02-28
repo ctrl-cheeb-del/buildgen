@@ -48,6 +48,7 @@ function makeFlatPlaneGeo(
 /**
  * Create a raised box geometry with baked position.
  * Returns geometry ready for merging (transforms applied to vertices).
+ * Bottom face is stripped to avoid z-fighting with the surface below.
  */
 function makeRaisedBoxGeo(
   x: number,
@@ -59,6 +60,20 @@ function makeRaisedBoxGeo(
   baseRepeat: number
 ): THREE.BufferGeometry {
   const geo = new THREE.BoxGeometry(w, thickness, h);
+
+  // Strip the bottom face (group index 3 in BoxGeometry: +X, -X, +Y, -Y, +Z, -Z)
+  // by removing the triangles whose normals point downward.
+  const normal = geo.getAttribute("normal");
+  const index = geo.getIndex()!;
+  const newIndices: number[] = [];
+  for (let i = 0; i < index.count; i += 3) {
+    const a = index.getX(i);
+    // Check if this triangle's normal points downward (bottom face)
+    if (normal.getY(a) < -0.9) continue;
+    newIndices.push(index.getX(i), index.getX(i + 1), index.getX(i + 2));
+  }
+  geo.setIndex(newIndices);
+
   _mat4.identity();
   _mat4.setPosition(x + w / 2, yBase + thickness / 2, z + h / 2);
   geo.applyMatrix4(_mat4);
@@ -130,16 +145,31 @@ export function buildGroundPlanes(): THREE.Group {
   const pavementGeos: THREE.BufferGeometry[] = [];
   const grassGeos: THREE.BufferGeometry[] = [];
 
-  // Horizontal roads (GRID_ROWS + 1 strips)
+  // Road intersections (squares where h/v roads cross)
   for (let r = 0; r <= GRID_ROWS; r++) {
-    const z = startZ + r * GRID_STEP_M;
-    roadGeos.push(makeFlatPlaneGeo(startX, z, totalW, ROAD_WIDTH_M, -0.05, 6));
+    for (let c = 0; c <= GRID_COLS; c++) {
+      const x = startX + c * GRID_STEP_M;
+      const z = startZ + r * GRID_STEP_M;
+      roadGeos.push(makeFlatPlaneGeo(x, z, ROAD_WIDTH_M, ROAD_WIDTH_M, -0.05, 6));
+    }
   }
 
-  // Vertical roads (GRID_COLS + 1 strips)
+  // Horizontal road segments (between intersections only, no overlap)
+  for (let r = 0; r <= GRID_ROWS; r++) {
+    const z = startZ + r * GRID_STEP_M;
+    for (let c = 0; c < GRID_COLS; c++) {
+      const x = startX + c * GRID_STEP_M + ROAD_WIDTH_M;
+      roadGeos.push(makeFlatPlaneGeo(x, z, PLOT_SIZE_M, ROAD_WIDTH_M, -0.05, 6));
+    }
+  }
+
+  // Vertical road segments (between intersections only, no overlap)
   for (let c = 0; c <= GRID_COLS; c++) {
     const x = startX + c * GRID_STEP_M;
-    roadGeos.push(makeFlatPlaneGeo(x, startZ, ROAD_WIDTH_M, totalH, -0.05, 6));
+    for (let r = 0; r < GRID_ROWS; r++) {
+      const z = startZ + r * GRID_STEP_M + ROAD_WIDTH_M;
+      roadGeos.push(makeFlatPlaneGeo(x, z, ROAD_WIDTH_M, PLOT_SIZE_M, -0.05, 6));
+    }
   }
 
   // Per-plot: raised pavements + plot ground

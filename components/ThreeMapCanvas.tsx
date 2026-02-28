@@ -71,7 +71,7 @@ export default function ThreeMapCanvas() {
     // preserveDrawingBuffer: false (default) — enables GPU double-buffering
     // which is significantly faster than true. Screenshots use a separate
     // canvas if needed.
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    const renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true });
     renderer.setSize(container.clientWidth, container.clientHeight);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -84,7 +84,7 @@ export default function ThreeMapCanvas() {
 
     // ── Scene ─────────────────────────────────────────────────
     const scene = new THREE.Scene();
-    scene.fog = new THREE.FogExp2(0xddeeff, 0.00025);
+    scene.fog = new THREE.FogExp2(0x6ba3d6, 0.00018);
 
     const envMap = createEnvironmentMap(renderer);
     scene.environment = envMap;
@@ -138,7 +138,7 @@ export default function ThreeMapCanvas() {
     const camera = new THREE.PerspectiveCamera(
       50,
       container.clientWidth / container.clientHeight,
-      1,
+      2,
       5000
     );
     camera.position.set(-200, 650, 700);
@@ -201,11 +201,11 @@ export default function ThreeMapCanvas() {
       // Skip when disabled (car mode owns the camera)
       const controlsUpdated = controls.enabled ? controls.update() : false;
 
-      // Cloud drift + ocean waves: update every 2s (cheap tick, triggers repaint)
-      if (elapsed - lastCloudTick > 2) {
+      // Ocean + cloud animation: throttle to ~30fps to preserve on-demand rendering
+      if (elapsed - lastCloudTick > 1 / 30) {
         lastCloudTick = elapsed;
-        clouds.update(elapsed, camera);
         ocean.update(elapsed);
+        clouds.update(elapsed, camera);
         dirty = true;
       }
 

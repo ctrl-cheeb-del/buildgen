@@ -94,14 +94,14 @@ export async function applyBuildingTextures(
     const baseTex = loadTileableTexture(meta.file, 1);
     const meshTexture = cloneWithRepeat(baseTex, uRepeat, vRepeat);
 
-    // Preserve original color as tint
+    // Preserve original color + transparency as tint
     const oldMats = Array.isArray(child.material)
       ? child.material
       : [child.material];
-    const tintColor =
-      oldMats[0] instanceof THREE.MeshStandardMaterial
-        ? oldMats[0].color.clone()
-        : new THREE.Color(0xffffff);
+    const oldStd = oldMats[0] instanceof THREE.MeshStandardMaterial
+      ? oldMats[0]
+      : null;
+    const tintColor = oldStd ? oldStd.color.clone() : new THREE.Color(0xffffff);
 
     // Create new material with texture
     const newMat = new THREE.MeshStandardMaterial({
@@ -109,7 +109,9 @@ export async function applyBuildingTextures(
       color: tintColor,
       roughness: meta.roughness,
       metalness: meta.metalness,
-      side: THREE.DoubleSide,
+      side: THREE.FrontSide,
+      transparent: oldStd?.transparent ?? false,
+      opacity: oldStd?.opacity ?? 1,
     });
 
     // Apply normal map if available

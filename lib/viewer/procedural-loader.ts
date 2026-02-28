@@ -151,10 +151,10 @@ export function loadProceduralGeometry(code: string): THREE.Group {
         for (const mat of mats) {
           mat.side = THREE.FrontSide;
           if (mat.transparent) {
-            mat.depthWrite = false;
-            mat.polygonOffset = true;
-            mat.polygonOffsetFactor = -1;
-            mat.polygonOffsetUnits = -1;
+            // Write depth so the front glass face occludes internal
+            // geometry (floors, back walls, etc.) behind it — prevents
+            // all the layers blending into a messy see-through look.
+            mat.depthWrite = true;
           }
         }
       }

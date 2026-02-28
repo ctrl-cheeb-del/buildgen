@@ -10,7 +10,7 @@ import * as THREE from "three";
  */
 
 const OCEAN_SIZE = 8000; // 8km across — well beyond camera max distance
-const OCEAN_SEGMENTS = 128; // enough for smooth visible waves
+const OCEAN_SEGMENTS = 64; // enough for smooth visible waves
 
 const vertexShader = /* glsl */ `
   uniform float uTime;
@@ -24,6 +24,10 @@ const vertexShader = /* glsl */ `
     // Normalised distance from center (0 at origin, 1 at edge)
     vDistFromCenter = length(pos.xz) / ${(OCEAN_SIZE / 2).toFixed(1)};
 
+    // Suppress waves near city center so they don't clip through buildings
+    float cityRadius = 120.0;
+    float waveDamping = smoothstep(cityRadius, cityRadius + 80.0, length(pos.xz));
+
     // Layered sine waves — different frequencies + speeds for natural motion
     float w1 = sin(pos.x * 0.02  + uTime * 0.8) *
                cos(pos.z * 0.015 + uTime * 0.6) * 1.5;
@@ -31,7 +35,7 @@ const vertexShader = /* glsl */ `
     float w3 = cos(pos.x * 0.008 - uTime * 0.35) *
                sin(pos.z * 0.012 + uTime * 0.45) * 2.5;
 
-    float displacement = w1 + w2 + w3;
+    float displacement = (w1 + w2 + w3) * waveDamping;
     pos.y += displacement;
 
     // Normalised wave height for fragment colour (-1..1 → 0..1)
@@ -54,8 +58,10 @@ const fragmentShader = /* glsl */ `
     vec3 color = mix(deep, surface, vWaveHeight);
     color = mix(color, crest, smoothstep(0.65, 0.95, vWaveHeight));
 
-    // Fade to transparent at edges → blends into sky
-    float fade = 1.0 - smoothstep(0.4, 0.95, vDistFromCenter);
+    // Fade to transparent near city center and at far edges
+    float edgeFade = 1.0 - smoothstep(0.4, 0.95, vDistFromCenter);
+    float centerFade = smoothstep(0.01, 0.04, vDistFromCenter);
+    float fade = edgeFade * centerFade;
 
     gl_FragColor = vec4(color, fade * 0.92);
   }
@@ -75,9 +81,9 @@ export function createOcean(): Ocean {
     OCEAN_SEGMENTS
   );
 
-  // Rotate flat on XZ and drop slightly below road level (roads sit at y=-0.05)
+  // Rotate flat on XZ and drop well below ground so wave crests don't clip through
   const mat4 = new THREE.Matrix4().makeRotationX(-Math.PI / 2);
-  mat4.setPosition(0, -0.5, 0);
+  mat4.setPosition(0, -6, 0);
   geo.applyMatrix4(mat4);
 
   const uniforms = { uTime: { value: 0 } };

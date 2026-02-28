@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { buildGroundPlanes } from "../viewer/ground-planes";
 import { createOcean } from "../viewer/ocean";
+import { createCloudDome } from "../viewer/clouds";
 import { createEnvironmentMap } from "../viewer/environment";
 import { loadProceduralGeometry } from "../viewer/procedural-loader";
 import { applyBuildingTextures } from "../viewer/building-textures";
@@ -28,6 +29,7 @@ export interface FPSceneResult {
   colliders: THREE.Box3[];
   bounds: THREE.Box3;
   dispose: () => void;
+  update: (elapsed: number, camera?: THREE.Camera) => void;
 }
 
 export function buildFPScene(
@@ -38,12 +40,16 @@ export function buildFPScene(
   const colliders: THREE.Box3[] = [];
 
   // Sky + fog
-  scene.background = new THREE.Color(0x87ceeb);
-  scene.fog = new THREE.FogExp2(0xc8ddf0, 0.0006);
+  scene.fog = new THREE.FogExp2(0x6ba3d6, 0.0004);
 
-  // Environment map for PBR
+  // Environment map for PBR + sky background
   const envMap = createEnvironmentMap(renderer);
   scene.environment = envMap;
+  scene.background = envMap;
+
+  // Clouds
+  const clouds = createCloudDome();
+  scene.add(clouds.mesh);
 
   // Lighting — same as mapbox-layer.ts
   const hemi = new THREE.HemisphereLight(0x87ceeb, 0x556b2f, 0.6);
@@ -149,6 +155,7 @@ export function buildFPScene(
   const dispose = () => {
     envMap.dispose();
     ocean.dispose();
+    clouds.dispose();
     scene.traverse((child) => {
       if (child instanceof THREE.Mesh) {
         child.geometry.dispose();
@@ -165,7 +172,16 @@ export function buildFPScene(
     });
   };
 
-  return { scene, colliders, bounds, dispose };
+  let lastCloudTick = 0;
+  const update = (elapsed: number, camera?: THREE.Camera) => {
+    ocean.update(elapsed);
+    if (elapsed - lastCloudTick > 2) {
+      lastCloudTick = elapsed;
+      clouds.update(elapsed, camera);
+    }
+  };
+
+  return { scene, colliders, bounds, dispose, update };
 }
 
 /** Spawn at grid center on a road intersection */

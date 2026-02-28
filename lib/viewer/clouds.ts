@@ -22,7 +22,7 @@ function generateCloudCanvas(): HTMLCanvasElement {
   // Seed some random blobs
   const blobs: { x: number; y: number; r: number; strength: number }[] = [];
   const rng = mulberry32(42); // deterministic seed
-  for (let i = 0; i < 60; i++) {
+  for (let i = 0; i < 35; i++) {
     blobs.push({
       x: rng() * CLOUD_SIZE,
       y: rng() * CLOUD_SIZE,
@@ -53,7 +53,7 @@ function generateCloudCanvas(): HTMLCanvasElement {
       data[idx] = 255;     // R
       data[idx + 1] = 255; // G
       data[idx + 2] = 255; // B
-      data[idx + 3] = Math.floor(val * 180); // A — semi-transparent
+      data[idx + 3] = Math.floor(val * 150); // A — semi-transparent
     }
   }
 
@@ -92,11 +92,11 @@ export function createCloudDome(): CloudDome {
   texture.wrapT = THREE.RepeatWrapping;
   texture.repeat.set(3, 3);
 
-  const geo = new THREE.SphereGeometry(800, 32, 16, 0, Math.PI * 2, 0, Math.PI * 0.45);
+  const geo = new THREE.SphereGeometry(800, 32, 16, 0, Math.PI * 2, 0, Math.PI * 0.55);
   const mat = new THREE.MeshBasicMaterial({
     map: texture,
     transparent: true,
-    opacity: 0.6,
+    opacity: 0.5,
     side: THREE.BackSide,
     depthWrite: false,
     fog: false,
