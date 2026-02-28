@@ -9,6 +9,7 @@ import {
   BedrockRuntimeClient,
   InvokeModelCommand,
 } from "@aws-sdk/client-bedrock-runtime";
+import { Mistral } from "@mistralai/mistralai";
 
 /**
  * Agent building action: reuses the existing pipeline.generateBuilding logic
@@ -27,6 +28,40 @@ export const run = internalAction({
     try {
       // 1. Mark plot as generating (shows loading cube)
       await ctx.runMutation(internal.plots.markGeneratingInternal, { plotIndex });
+
+      // 1.5. Check for similar existing buildings to reuse
+      const similar = await ctx.runQuery(internal.buildings.searchSimilarBuildings, {
+        searchTerm: buildDescription,
+        category,
+      });
+
+      if (similar) {
+        console.log(`[agentBuild] Found similar building "${similar.prompt}", adapting...`);
+        const adaptedCode = await adaptExistingCode(
+          similar.proceduralCode,
+          similar.prompt,
+          buildDescription,
+        );
+
+        // Skip directly to building creation — no image gen needed
+        await ctx.runMutation(internal.buildings.createBuildingInternal, {
+          plotIndex,
+          ownerId: `agent:${agentName}`,
+          prompt: buildDescription,
+          proceduralCode: adaptedCode,
+          multiViewGrid: undefined,
+        });
+
+        await ctx.runMutation(internal.plots.resetPlotInternal, { plotIndex });
+        await ctx.runMutation(internal.simulation._simBuildHelpers.onBuildComplete, {
+          plotIndex,
+          category,
+          agentName,
+        });
+
+        console.log(`[agentBuild] "${buildDescription}" (adapted) complete on plot #${plotIndex}!`);
+        return;
+      }
 
       // 2. Generate multi-view image via Replicate
       const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN });
@@ -228,3 +263,48 @@ Generate the code now for "${buildDescription}".`;
     }
   },
 });
+
+/**
+ * Takes existing procedural geometry code and adapts it for a new building description
+ * using a lightweight LLM call (Sonnet instead of Opus).
+ */
+async function adaptExistingCode(
+  proceduralCode: string,
+  originalPrompt: string,
+  newDescription: string,
+): Promise<string> {
+  const adaptPrompt = `You have existing Three.js geometry code for a "${originalPrompt}".
+Adapt it to create a "${newDescription}" instead.
+
+Make meaningful but contained modifications:
+- Adjust proportions (height, width, depth)
+- Change material colors/textures where appropriate
+- Add or remove small architectural details
+- Keep the same general structure as foundation
+
+Return ONLY the modified JavaScript function body (no markdown fences, no explanation).
+The code must create a THREE.Group and return it.
+
+Existing code:
+\`\`\`javascript
+${proceduralCode}
+\`\`\``;
+
+  const mistral = new Mistral({ apiKey: process.env.MISTRAL_API_KEY });
+  const response = await mistral.chat.complete({
+    model: "mistral-large-latest",
+    messages: [{ role: "user", content: adaptPrompt }],
+  });
+
+  const text = response?.choices?.[0]?.message?.content;
+  if (!text || typeof text !== "string")
+    throw new Error("Mistral returned no content for code adaptation");
+
+  // Extract code — handle both fenced and raw responses
+  const codeMatch = text.match(/```(?:javascript|js)?\s*\n([\s\S]*?)```/);
+  const code = codeMatch ? codeMatch[1].trim() : text.trim();
+  if (!code) throw new Error("Adaptation returned no usable geometry code");
+
+  console.log(`[agentBuild] Adapted code (${code.length} chars)`);
+  return code;
+}

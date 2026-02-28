@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { query, mutation, internalMutation } from "./_generated/server";
+import { query, mutation, internalMutation, internalQuery } from "./_generated/server";
 
 export const createBuilding = mutation({
   args: {
@@ -109,6 +109,33 @@ export const createBuildingInternal = internalMutation({
       position: { x: freeX, y: 0, z: freeZ },
       createdAt: Date.now(),
     });
+  },
+});
+
+export const searchSimilarBuildings = internalQuery({
+  args: {
+    searchTerm: v.string(),
+    category: v.optional(v.string()),
+  },
+  handler: async (ctx, { searchTerm, category }) => {
+    let q = ctx.db
+      .query("buildings")
+      .withSearchIndex("search_prompt", (search) => {
+        const s = search.search("prompt", searchTerm);
+        if (category) {
+          return s.eq("category", category as any);
+        }
+        return s;
+      });
+
+    const results = await q.take(1);
+    if (results.length === 0) return null;
+
+    const match = results[0];
+    return {
+      prompt: match.prompt,
+      proceduralCode: match.proceduralCode,
+    };
   },
 });
 

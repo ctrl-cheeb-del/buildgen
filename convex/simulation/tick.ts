@@ -310,7 +310,8 @@ export const run = internalAction({
     const tickNumber = city.totalTicks + 1;
     const mistral = getMistral();
 
-    console.log(`[tick ${tickNumber}] Starting...`);
+    console.log(`[tick ${tickNumber}] Starting... MISTRAL_API_KEY present: ${!!process.env.MISTRAL_API_KEY}, length: ${process.env.MISTRAL_API_KEY?.length}`);
+
 
     // Step 2: Compute metrics (pure math — rebalanced economics)
     const allBuildings: Array<{ _id: string; plotIndex: number; category?: string; ownerId: string }> = await ctx.runQuery(internal.simulation._buildingHelpers.getAllWithCategory as any);

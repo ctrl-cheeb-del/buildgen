@@ -16,8 +16,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Building Generator",
-  description: "AI-powered 3D building generation on Mapbox",
+  title: "Ministral",
+  description: "The first agentic city builder",
 };
 
 export default function RootLayout({
