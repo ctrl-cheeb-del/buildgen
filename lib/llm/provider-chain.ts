@@ -158,14 +158,9 @@ export async function callOpenRouter(
 
 export const providers: Provider[] = [
   {
-    name: "Bedrock (GPT-OSS-120B)",
-    call: (prompt, imageUrls) =>
-      callBedrockConverse("openai.gpt-oss-120b-1:0", prompt, imageUrls),
-  },
-  {
     name: "Bedrock (Claude Opus 4.6)",
     call: (prompt, imageUrls) =>
-      callBedrock("us.anthropic.claude-opus-4-6-v1", prompt, imageUrls),
+      callBedrockConverse("us.anthropic.claude-opus-4-6-v1", prompt, imageUrls),
   },
   {
     name: "Bedrock (Claude Sonnet 4.5)",

@@ -11,8 +11,8 @@ import type { ScoreBreakdown } from "@/lib/types";
 /*  Config                                                              */
 /* ------------------------------------------------------------------ */
 
-const MODEL_ID = "openai.gpt-oss-120b-1:0";
-const ITERATION_MODEL_ID = "openai.gpt-oss-120b-1:0";
+const MODEL_ID = "us.anthropic.claude-opus-4-6-v1";
+const ITERATION_MODEL_ID = "us.anthropic.claude-opus-4-6-v1";
 const SESSION_TTL_MS = 30 * 60 * 1000; // 30 minutes
 const MAX_SESSIONS = 50;
 const SCORE_THRESHOLD = 8.0;

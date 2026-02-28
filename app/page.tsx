@@ -13,7 +13,7 @@ import ChatInput from "@/components/chat/ChatInput";
 import ChatMessages from "@/components/chat/ChatMessages";
 import PlotPopups from "@/components/PlotPopups";
 import PipelineFlowchart, {
-  PipelineSummaryBar,
+  PipelineSummaryPill,
 } from "@/components/PipelineFlowchart";
 import IsolatedViewer, {
   type IsolatedViewerHandle,
@@ -38,7 +38,7 @@ const TOTAL_PLOTS = GRID_COLS * GRID_ROWS;
 
 export default function Home() {
   const iterationViewerRef = useRef<IsolatedViewerHandle>(null);
-  const { isRunning, multiView, sessionId, steps, runPipeline } = usePipeline();
+  const { isRunning, multiView, sessionId, steps, runPipeline, iterationConfig } = usePipeline();
   const iteration = useIteration();
   const pipelineIsActive = usePipelineStore((s) => s.isActive);
   const pipelineIterationCount = usePipelineStore((s) => s.iterationCount);
@@ -299,6 +299,8 @@ export default function Home() {
         buildingId: selectedBuilding._id as string,
         initialCode: selectedBuilding.proceduralCode,
         captureScreenshots: captureScreenshotsForCode,
+        maxIterations: iterationConfig?.maxIterations,
+        qualityTarget: iterationConfig?.qualityTarget,
       });
     }
     if (isRunning) {
@@ -311,6 +313,7 @@ export default function Home() {
     iteration,
     captureScreenshotsForCode,
     isRunning,
+    iterationConfig,
   ]);
 
   // --- Bottom pipeline panel state ---
@@ -392,11 +395,11 @@ export default function Home() {
       <ChatMessages />
       <ChatInput onSend={sendMessage} isLoading={chatIsLoading} />
 
-      {/* Bottom pipeline panel */}
+      {/* Pipeline panel — top-right vertical glass */}
       {pipelineHasRun && !fpMode && (
-        <div className="absolute bottom-0 left-0 right-0 z-10">
+        <div className="absolute top-16 right-4 z-10 max-h-[calc(100vh-5rem)] overflow-y-auto scrollbar-hide">
           {isMinimized ? (
-            <PipelineSummaryBar onExpand={() => setMinimized(false)} />
+            <PipelineSummaryPill onExpand={() => setMinimized(false)} />
           ) : (
             <PipelineFlowchart
               onMinimize={() => setMinimized(true)}

@@ -4,6 +4,7 @@ import { useState, useCallback } from "react";
 import { useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import type { MultiViewImages, PipelineStatus } from "../types";
+import type { IterationConfig } from "../chat/tool-executor";
 import { usePipelineStore } from "../stores/pipeline-store";
 
 interface PipelineState {
@@ -11,6 +12,7 @@ interface PipelineState {
   multiView: MultiViewImages | null;
   sessionId: string | null;
   steps: Record<string, PipelineStatus>;
+  iterationConfig: IterationConfig | null;
 }
 
 async function base64ToBlob(dataUrl: string): Promise<Blob> {
@@ -43,6 +45,7 @@ export function usePipeline() {
       generate: { step: "generate", state: "idle" },
       render: { step: "render", state: "idle" },
     },
+    iterationConfig: null,
   });
 
   const createBuilding = useMutation(api.buildings.createBuilding);
@@ -76,7 +79,7 @@ export function usePipeline() {
   }, []);
 
   const runPipeline = useCallback(
-    async (buildingName: string, plotIndex: number, cachedViews?: MultiViewImages) => {
+    async (buildingName: string, plotIndex: number, cachedViews?: MultiViewImages, iterationConfig?: IterationConfig) => {
       if (!buildingName.trim()) return;
 
       setState((prev) => ({
@@ -84,6 +87,7 @@ export function usePipeline() {
         isRunning: true,
         multiView: null,
         sessionId: null,
+        iterationConfig: iterationConfig ?? null,
       }));
       resetSteps();
 
@@ -91,6 +95,9 @@ export function usePipeline() {
       const store = usePipelineStore.getState();
       store.reset();
       store.setActive(true);
+      if (iterationConfig?.maxIterations != null) {
+        store.setMaxIterations(iterationConfig.maxIterations);
+      }
 
       try {
         // Mark the user's plot as generating

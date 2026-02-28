@@ -38,6 +38,8 @@ interface StartSessionOpts {
   buildingId: string;
   initialCode: string;
   captureScreenshots: (code: string) => WorkbenchScreenshots;
+  maxIterations?: number;
+  qualityTarget?: number;
 }
 
 /* ------------------------------------------------------------------ */
@@ -77,6 +79,15 @@ export function useIteration() {
 
       const store = usePipelineStore.getState();
       store.setActive(true);
+
+      // Override max iterations if provided by orchestrator
+      if (opts.maxIterations != null) {
+        maxIterRef.current = opts.maxIterations;
+        setState((prev) => ({ ...prev, maxIterations: opts.maxIterations! }));
+        store.setMaxIterations(opts.maxIterations);
+      }
+
+      const qualityTarget = opts.qualityTarget ?? 8.0;
 
       setState((prev) => ({
         ...prev,
@@ -201,8 +212,13 @@ export function useIteration() {
             store.setIterationData(iterations.length, latestScore, iterations);
 
             // Stop conditions
-            if (data.converged) {
-              console.log("[Iteration] Converged — stopping");
+            if (data.converged || data.score.totalScore >= qualityTarget) {
+              console.log(`[Iteration] Converged (score ${data.score.totalScore} >= target ${qualityTarget}) — stopping`);
+              break;
+            }
+
+            if (!data.improvedCode) {
+              console.log("[Iteration] No improved code returned — stopping");
               break;
             }
 

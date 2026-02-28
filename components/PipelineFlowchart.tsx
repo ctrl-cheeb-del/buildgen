@@ -34,7 +34,7 @@ const ICONS: Record<PipelineNodeId, string> = {
 function NodeIcon({ nodeId }: { nodeId: PipelineNodeId }) {
   return (
     <svg
-      className="w-5 h-5"
+      className="w-4 h-4"
       fill="none"
       viewBox="0 0 24 24"
       strokeWidth={1.5}
@@ -46,49 +46,49 @@ function NodeIcon({ nodeId }: { nodeId: PipelineNodeId }) {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Node status styling                                                */
+/*  Pod status styling (glass-adapted)                                 */
 /* ------------------------------------------------------------------ */
 
-function nodeStyle(status: NodeStatus) {
+function podStyle(status: NodeStatus) {
   switch (status) {
     case "pending":
-      return "bg-white border-gray-200 text-gray-400";
+      return "bg-white/10 border-white/20 text-white/40";
     case "active":
-      return "bg-blue-50 border-blue-400 text-blue-700 animate-glow";
+      return "bg-blue-400/25 border-blue-400/50 text-blue-200 animate-glow";
     case "done":
-      return "bg-green-50 border-green-400 text-green-700";
+      return "bg-green-400/25 border-green-400/50 text-green-200";
     case "error":
-      return "bg-red-50 border-red-400 text-red-700";
+      return "bg-red-400/25 border-red-400/50 text-red-200";
   }
 }
 
 function connectorColor(status: NodeStatus) {
   switch (status) {
     case "done":
-      return "stroke-green-400";
+      return "bg-green-400/50";
     case "active":
-      return "stroke-blue-400 animate-dash";
+      return "bg-blue-400/50";
     case "error":
-      return "stroke-red-400";
+      return "bg-red-400/50";
     default:
-      return "stroke-gray-200";
+      return "bg-white/15";
   }
 }
 
 /* ------------------------------------------------------------------ */
-/*  Score bar                                                          */
+/*  Score bar (glass-adapted)                                          */
 /* ------------------------------------------------------------------ */
 
 function scoreBarColor(score: number): string {
-  if (score >= 7) return "bg-green-500";
-  if (score >= 4) return "bg-yellow-500";
-  return "bg-red-500";
+  if (score >= 7) return "bg-green-400/70";
+  if (score >= 4) return "bg-yellow-400/70";
+  return "bg-red-400/70";
 }
 
 function scoreTextColor(score: number): string {
-  if (score >= 7) return "text-green-600";
-  if (score >= 4) return "text-yellow-600";
-  return "text-red-600";
+  if (score >= 7) return "text-green-300";
+  if (score >= 4) return "text-yellow-300";
+  return "text-red-300";
 }
 
 function ScoreBar() {
@@ -103,25 +103,27 @@ function ScoreBar() {
   ];
 
   return (
-    <div className="flex items-center gap-3">
-      {dims.map((d) => (
-        <div key={d.label} className="flex items-center gap-1.5">
-          <span className="text-[10px] text-gray-500 w-7">{d.label}</span>
-          <div className="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-            <div
-              className={`h-full rounded-full transition-all duration-500 ${scoreBarColor(d.val)}`}
-              style={{ width: `${(d.val / 10) * 100}%` }}
-            />
+    <div className="px-3 pb-3">
+      <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+        {dims.map((d) => (
+          <div key={d.label} className="flex items-center gap-1.5">
+            <span className="text-[10px] text-white/50 w-6">{d.label}</span>
+            <div className="flex-1 h-1.5 bg-white/10 rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all duration-500 ${scoreBarColor(d.val)}`}
+                style={{ width: `${(d.val / 10) * 100}%` }}
+              />
+            </div>
+            <span className={`text-[10px] font-semibold w-5 ${scoreTextColor(d.val)}`}>
+              {d.val.toFixed(1)}
+            </span>
           </div>
-          <span className={`text-[10px] font-semibold w-5 ${scoreTextColor(d.val)}`}>
-            {d.val.toFixed(1)}
-          </span>
-        </div>
-      ))}
-      <div className="ml-2 pl-2 border-l border-gray-200 flex items-center gap-1">
-        <span className="text-xs text-gray-500">Total</span>
+        ))}
+      </div>
+      <div className="flex items-center justify-between mt-2 pt-2 border-t border-white/10">
+        <span className="text-[10px] text-white/50">Total</span>
         <span className={`text-sm font-bold ${scoreTextColor(latestScore.totalScore)}`}>
-          {latestScore.totalScore.toFixed(1)}
+          {latestScore.totalScore.toFixed(1)}/10
         </span>
       </div>
     </div>
@@ -129,39 +131,92 @@ function ScoreBar() {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Summary bar (minimized state)                                      */
+/*  VerticalNode — 40px circle + icon + label row                      */
 /* ------------------------------------------------------------------ */
 
-export function PipelineSummaryBar({ onExpand }: { onExpand: () => void }) {
+function VerticalNode({
+  node,
+}: {
+  node: { id: PipelineNodeId; label: string; status: NodeStatus; detail?: string };
+}) {
+  return (
+    <div className="flex items-center gap-2.5 py-0.5">
+      <div
+        className={`w-8 h-8 rounded-full border flex-shrink-0 flex items-center justify-center transition-all duration-300 ${podStyle(node.status)}`}
+      >
+        {node.status === "done" ? (
+          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+          </svg>
+        ) : node.status === "error" ? (
+          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        ) : (
+          <NodeIcon nodeId={node.id} />
+        )}
+      </div>
+      <div className="min-w-0">
+        <div className="text-[11px] font-medium text-white/90 leading-tight">
+          {node.label}
+        </div>
+        {node.detail && node.status === "active" && (
+          <div className="text-[9px] text-white/40 truncate">{node.detail}</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  VerticalConnector — 2px × 16px vertical line                       */
+/* ------------------------------------------------------------------ */
+
+function VerticalConnector({ status }: { status: NodeStatus }) {
+  return (
+    <div className="flex items-center pl-[15px]">
+      <div className={`w-[2px] h-4 rounded-full ${connectorColor(status)}`} />
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Summary pill (minimized state)                                     */
+/* ------------------------------------------------------------------ */
+
+export function PipelineSummaryPill({ onExpand }: { onExpand: () => void }) {
   const latestScore = usePipelineStore((s) => s.latestScore);
   const iterationCount = usePipelineStore((s) => s.iterationCount);
   const isActive = usePipelineStore((s) => s.isActive);
 
   return (
     <div
-      className="flex items-center justify-between px-4 py-2 bg-white/95 backdrop-blur-sm border-t border-gray-200 cursor-pointer hover:bg-gray-50 transition-colors"
+      className="flex items-center gap-2 px-3 py-1.5 bg-white/15 backdrop-blur-2xl rounded-full border border-white/25 shadow-[0_8px_32px_rgba(0,0,0,0.3)] cursor-pointer hover:bg-white/20 transition-colors"
       onClick={onExpand}
     >
-      <div className="flex items-center gap-3">
-        <span className="text-xs text-gray-500">
-          {isActive ? "Pipeline running" : "Pipeline complete"} — Iteration{" "}
-          {iterationCount}
+      <div
+        className={`w-2 h-2 rounded-full ${
+          isActive ? "bg-blue-400 animate-pulse" : "bg-green-400"
+        }`}
+      />
+      <span className="text-[11px] text-white/80 font-medium">Pipeline</span>
+      {latestScore && (
+        <span className={`text-[11px] font-bold ${scoreTextColor(latestScore.totalScore)}`}>
+          {latestScore.totalScore.toFixed(1)}
         </span>
-        {latestScore && (
-          <span className={`text-xs font-bold ${scoreTextColor(latestScore.totalScore)}`}>
-            Score: {latestScore.totalScore.toFixed(1)}/10
-          </span>
-        )}
-      </div>
-      <button className="text-xs text-blue-600 hover:text-blue-800 font-medium">
-        Expand
-      </button>
+      )}
+      {iterationCount > 0 && (
+        <span className="text-[10px] text-white/40">#{iterationCount}</span>
+      )}
+      <svg className="w-3 h-3 text-white/50" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+      </svg>
     </div>
   );
 }
 
 /* ------------------------------------------------------------------ */
-/*  Main flowchart                                                     */
+/*  Main flowchart — vertical liquid glass panel                       */
 /* ------------------------------------------------------------------ */
 
 export default function PipelineFlowchart({
@@ -185,178 +240,123 @@ export default function PipelineFlowchart({
   const iterNodes = nodes.slice(3);
 
   return (
-    <div className="bg-white/95 backdrop-blur-sm border-t border-gray-200 animate-slide-up">
+    <div className="w-64 bg-white/15 backdrop-blur-2xl rounded-2xl border border-white/25 shadow-[0_8px_32px_rgba(0,0,0,0.3)] animate-slide-in-right overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-1.5 border-b border-gray-100">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
         <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold text-gray-700">Pipeline</span>
+          <span className="text-xs font-semibold text-white/90">Pipeline</span>
           {iterationCount > 0 && (
-            <span className="px-2 py-0.5 rounded-full bg-blue-100 text-[10px] font-medium text-blue-700">
-              Iteration {iterationCount} / {maxIterations}
-            </span>
-          )}
-          {error && (
-            <span className="px-2 py-0.5 rounded-full bg-red-100 text-[10px] font-medium text-red-700">
-              Error
+            <span className="text-[10px] text-white/50">
+              {iterationCount}/{maxIterations}
             </span>
           )}
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-0.5">
           {isActive && (
             <>
               <button
                 onClick={onTogglePause}
-                className={`px-2.5 py-1 text-[10px] font-medium rounded transition-colors ${
-                  isPaused
-                    ? "text-green-700 bg-green-100 hover:bg-green-200"
-                    : "text-yellow-700 bg-yellow-100 hover:bg-yellow-200"
-                }`}
+                className="p-1 rounded hover:bg-white/10 transition-colors"
+                title={isPaused ? "Resume" : "Pause"}
               >
-                {isPaused ? "Resume" : "Pause"}
+                {isPaused ? (
+                  <svg className="w-3.5 h-3.5 text-green-300" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M8 5v14l11-7z" />
+                  </svg>
+                ) : (
+                  <svg className="w-3.5 h-3.5 text-yellow-300" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
+                  </svg>
+                )}
               </button>
               <button
                 onClick={onStop}
-                className="px-2.5 py-1 text-[10px] font-medium text-red-700 bg-red-100 rounded hover:bg-red-200 transition-colors"
+                className="p-1 rounded hover:bg-white/10 transition-colors"
+                title="Stop"
               >
-                Stop
+                <svg className="w-3.5 h-3.5 text-red-300" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M6 6h12v12H6z" />
+                </svg>
               </button>
             </>
           )}
           <button
             onClick={onMinimize}
-            className="px-2.5 py-1 text-[10px] font-medium text-gray-500 hover:text-gray-700 transition-colors"
+            className="p-1 rounded hover:bg-white/10 transition-colors"
+            title="Minimize"
           >
-            Minimize
+            <svg className="w-3.5 h-3.5 text-white/50" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 12h-15" />
+            </svg>
           </button>
         </div>
       </div>
 
-      {/* Flowchart */}
-      <div className="px-4 py-3 overflow-x-auto">
-        <div className="flex items-center gap-0 min-w-max">
-          {/* Generation nodes */}
-          {genNodes.map((node, i) => (
-            <div key={node.id} className="flex items-center">
-              {i > 0 && <Connector status={node.status} />}
-              <FlowNode node={node} size="large" />
+      {/* Iteration subtitle */}
+      {iterationCount > 0 && (
+        <div className="px-3 pt-1.5">
+          <span className="text-[10px] text-white/40">
+            Iteration {iterationCount} of {maxIterations}
+          </span>
+        </div>
+      )}
+
+      {/* Generation nodes */}
+      <div className="px-3 pt-2">
+        {genNodes.map((node, i) => (
+          <div key={node.id}>
+            {i > 0 && <VerticalConnector status={node.status} />}
+            <VerticalNode node={node} />
+          </div>
+        ))}
+      </div>
+
+      {/* Connector to iteration loop */}
+      <div className="px-3">
+        <VerticalConnector status={iterNodes[0].status} />
+      </div>
+
+      {/* Iteration loop container */}
+      <div className="mx-3 mb-2 relative">
+        <div className="border border-white/10 rounded-lg pl-3 pr-2 py-1.5 bg-white/5">
+          {/* Loop label */}
+          <div className="flex items-center gap-1.5 mb-1">
+            <svg className="w-3 h-3 text-white/30" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182" />
+            </svg>
+            <span className="text-[9px] text-white/30 uppercase tracking-wider font-medium">
+              Iteration Loop
+            </span>
+          </div>
+
+          {iterNodes.map((node, i) => (
+            <div key={node.id}>
+              {i > 0 && <VerticalConnector status={node.status} />}
+              <VerticalNode node={node} />
             </div>
           ))}
 
-          {/* Separator arrow to iteration loop */}
-          <Connector status={iterNodes[0].status} />
-
-          {/* Iteration loop container */}
-          <div className="relative flex items-center">
-            {iterNodes.map((node, i) => (
-              <div key={node.id} className="flex items-center">
-                {i > 0 && <Connector status={node.status} />}
-                <FlowNode node={node} size="small" />
-              </div>
-            ))}
-
-            {/* Loop-back arrow */}
-            {iterationCount > 0 && (
-              <svg
-                className="absolute -bottom-5 left-0 right-0"
-                height="24"
-                viewBox="0 0 100 24"
-                preserveAspectRatio="none"
-                fill="none"
-              >
-                <path
-                  d="M95 2 C95 18, 50 22, 5 18 L5 14"
-                  stroke="#9CA3AF"
-                  strokeWidth="1.5"
-                  strokeDasharray="4 3"
-                  fill="none"
-                  markerEnd="url(#arrowhead)"
-                />
-                <defs>
-                  <marker id="arrowhead" markerWidth="6" markerHeight="4" refX="5" refY="2" orient="auto">
-                    <polygon points="0 0, 6 2, 0 4" fill="#9CA3AF" />
-                  </marker>
-                </defs>
+          {/* Loop-back indicator */}
+          {iterationCount > 0 && (
+            <div className="flex items-center gap-1 mt-1 pt-1 border-t border-white/10">
+              <svg className="w-3 h-3 text-white/25" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 15 3 9m0 0 6-6M3 9h12a6 6 0 0 1 0 12h-3" />
               </svg>
-            )}
-          </div>
+              <span className="text-[9px] text-white/25">repeat</span>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Score bar + error */}
-      <div className="px-4 pb-2.5 flex items-center justify-between gap-4">
-        <ScoreBar />
-        {error && (
-          <div className="text-[10px] text-red-600 truncate max-w-xs">
-            {error}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
+      {/* Score bar */}
+      <ScoreBar />
 
-/* ------------------------------------------------------------------ */
-/*  Sub-components                                                     */
-/* ------------------------------------------------------------------ */
-
-function FlowNode({
-  node,
-  size,
-}: {
-  node: { id: PipelineNodeId; label: string; status: NodeStatus; detail?: string };
-  size: "large" | "small";
-}) {
-  const w = size === "large" ? "w-[130px]" : "w-[110px]";
-  const h = size === "large" ? "h-[76px]" : "h-[68px]";
-
-  return (
-    <div
-      className={`${w} ${h} flex flex-col items-center justify-center gap-1 rounded-lg border-2 ${nodeStyle(node.status)} transition-all duration-300 relative`}
-    >
-      {/* Status badge */}
-      {node.status === "done" && (
-        <div className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-green-500 flex items-center justify-center">
-          <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-          </svg>
+      {/* Error */}
+      {error && (
+        <div className="px-3 pb-2">
+          <div className="text-[10px] text-red-300/80 truncate">{error}</div>
         </div>
       )}
-      {node.status === "error" && (
-        <div className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-red-500 flex items-center justify-center">
-          <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </div>
-      )}
-
-      <NodeIcon nodeId={node.id} />
-      <span className="text-[10px] font-medium leading-tight text-center px-1">
-        {node.label}
-      </span>
-      {node.detail && node.status === "active" && (
-        <span className="text-[8px] opacity-70 truncate max-w-full px-1">
-          {node.detail}
-        </span>
-      )}
     </div>
-  );
-}
-
-function Connector({ status }: { status: NodeStatus }) {
-  const color = connectorColor(status);
-  const isDash = status === "active";
-  return (
-    <svg width="32" height="12" viewBox="0 0 32 12" className="flex-shrink-0">
-      <line
-        x1="0"
-        y1="6"
-        x2="24"
-        y2="6"
-        className={color}
-        strokeWidth="2"
-        strokeDasharray={isDash ? "6 4" : "none"}
-      />
-      <polygon points="24,2 32,6 24,10" className={`fill-current ${color.replace("stroke-", "text-")}`} />
-    </svg>
   );
 }
