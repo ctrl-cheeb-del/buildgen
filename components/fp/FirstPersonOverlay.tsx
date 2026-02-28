@@ -97,6 +97,7 @@ export default function FirstPersonOverlay({
       controller.resolveCollisions(sceneResult.colliders);
       controller.clampToBounds(sceneResult.bounds);
 
+      sceneResult.update(clock.getElapsedTime(), camera);
       renderer.render(sceneResult.scene, camera);
     }
     animate();

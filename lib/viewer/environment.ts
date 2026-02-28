@@ -20,8 +20,8 @@ export function createEnvironmentMap(
   const count = posAttr.count;
   const colors = new Float32Array(count * 3);
 
-  const zenith = new THREE.Color(0x2266cc); // deep blue overhead (synced with sky dome)
-  const horizon = new THREE.Color(0xddeeff); // pale blue-white horizon
+  const zenith = new THREE.Color(0x1a5cb5); // deep blue overhead
+  const horizon = new THREE.Color(0x87ceeb); // sky blue at horizon
   const nadir = new THREE.Color(0x443322); // warm dark ground
 
   const tmp = new THREE.Color();
