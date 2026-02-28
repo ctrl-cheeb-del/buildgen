@@ -23,7 +23,7 @@ export default function SimControls({
           }`}
         />
         <span className="text-[10px] text-white/50 font-mono">
-          {city ? `T${city.totalTicks}` : "—"}
+          {city ? `Day ${Math.max(1, Math.ceil(city.totalTicks / 12))}` : "—"}
         </span>
       </div>
 

@@ -318,11 +318,13 @@ export const run = internalAction({
       return;
     }
 
-    const agents: AgentDoc[] = await ctx.runQuery(internal.simulation.agents.getAllInternal);
     const tickNumber = city.totalTicks + 1;
+
+    try {
+    const agents: AgentDoc[] = await ctx.runQuery(internal.simulation.agents.getAllInternal);
     const mistral = getMistral();
 
-    console.log(`[tick ${tickNumber}] Starting... MISTRAL_API_KEY present: ${!!process.env.MISTRAL_API_KEY}, length: ${process.env.MISTRAL_API_KEY?.length}`);
+    console.log(`[tick ${tickNumber}] Starting...`);
 
 
     // Step 2: Compute metrics (pure math — rebalanced economics)
@@ -869,7 +871,15 @@ export const run = internalAction({
       await ctx.runAction(internal.simulation.tick.runElection, { tickNumber });
     }
 
-    // Step 8: Schedule next tick (re-read simMode for freshest value)
+    } catch (err) {
+      console.error(`[tick ${tickNumber}] CRASHED:`, err);
+      // Update lastTickAt so ensureRunning doesn't double-recover
+      await ctx.runMutation(internal.simulation.cityState.update, {
+        patch: { lastTickAt: Date.now() },
+      });
+    }
+
+    // ALWAYS schedule next tick — even after a crash
     const freshCity = await ctx.runQuery(internal.simulation.cityState.getInternal);
     const currentMode = freshCity?.simMode ?? "overnight";
     const tickInterval = currentMode === "live" ? 45000 : 300000;

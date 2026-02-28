@@ -78,10 +78,10 @@ export default function MetricsBar() {
         {separator()}
         {badge("Pop", city.population)}
         {separator()}
-        {badge("Builds", `${city.activeBuildCount}/4`)}
+        {badge("Builds", `${city.activeBuildCount}/${city.simMode === "live" ? 12 : 4}`)}
         {separator()}
         <div className="text-[10px] text-white/40 font-mono px-2 py-0.5">
-          T{city.totalTicks}
+          Day {Math.max(1, Math.ceil(city.totalTicks / 12))}
         </div>
       </div>
     </div>

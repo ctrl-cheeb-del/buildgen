@@ -151,7 +151,7 @@ function FeedItem({
           {msg.senderName}
         </span>
         <span className="text-[9px] text-white/20 font-mono">
-          T{msg.tickNumber}
+          Day {Math.max(1, Math.ceil(msg.tickNumber / 12))}
         </span>
       </div>
 

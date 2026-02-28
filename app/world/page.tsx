@@ -439,20 +439,14 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isSignedIn]);
 
-  // Update lastSeenTick on page unload
+  // Persist lastSeenTick periodically while user is on page
+  const lastSavedTickRef = useRef(0);
   useEffect(() => {
-    const handleUnload = () => {
-      if (currentTick > 0) {
-        // Use sendBeacon for reliability on unload
-        navigator.sendBeacon?.(
-          "/api/update-last-seen",
-          JSON.stringify({ tick: currentTick })
-        );
-      }
-    };
-    window.addEventListener("beforeunload", handleUnload);
-    return () => window.removeEventListener("beforeunload", handleUnload);
-  }, [currentTick]);
+    if (currentTick > 0 && currentTick > lastSavedTickRef.current) {
+      lastSavedTickRef.current = currentTick;
+      updateLastSeenTick({ tick: currentTick }).catch(() => {});
+    }
+  }, [currentTick, updateLastSeenTick]);
 
   const handleReplayDismiss = useCallback(async () => {
     setReplayDismissed(true);
