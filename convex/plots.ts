@@ -192,6 +192,26 @@ export const resetPlot = mutation({
 
 // --- Internal mutations (callable from Convex actions, skip auth checks) ---
 
+export const setPipelineStepInternal = internalMutation({
+  args: {
+    plotIndex: v.number(),
+    step: v.optional(v.string()),
+    multiViewUrl: v.optional(v.string()),
+  },
+  handler: async (ctx, { plotIndex, step, multiViewUrl }) => {
+    const plots = await ctx.db
+      .query("plots")
+      .withIndex("by_index", (q) => q.eq("index", plotIndex))
+      .collect();
+    const plot = plots[0];
+    if (!plot) throw new Error(`Plot ${plotIndex} not found`);
+    const patch: Record<string, unknown> = {};
+    if (step !== undefined) patch.pipelineStep = step;
+    if (multiViewUrl !== undefined) patch.pipelineMultiViewUrl = multiViewUrl;
+    await ctx.db.patch(plot._id, patch);
+  },
+});
+
 export const markGeneratingInternal = internalMutation({
   args: { plotIndex: v.number() },
   handler: async (ctx, { plotIndex }) => {
@@ -214,7 +234,11 @@ export const markOccupiedInternal = internalMutation({
       .collect();
     const plot = plots[0];
     if (!plot) throw new Error(`Plot ${plotIndex} not found`);
-    await ctx.db.patch(plot._id, { status: "occupied" });
+    await ctx.db.patch(plot._id, {
+      status: "occupied",
+      pipelineStep: undefined,
+      // Keep pipelineMultiViewUrl — iteration loop needs it after generation
+    });
   },
 });
 
@@ -227,6 +251,10 @@ export const resetPlotInternal = internalMutation({
       .collect();
     const plot = plots[0];
     if (!plot) throw new Error(`Plot ${plotIndex} not found`);
-    await ctx.db.patch(plot._id, { status: "claimed" });
+    await ctx.db.patch(plot._id, {
+      status: "claimed",
+      pipelineStep: undefined,
+      pipelineMultiViewUrl: undefined,
+    });
   },
 });

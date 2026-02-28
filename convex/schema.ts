@@ -16,6 +16,8 @@ export default defineSchema({
     ownerName: v.optional(v.string()),
     ownerUsername: v.optional(v.string()),
     ownerAvatar: v.optional(v.string()),
+    pipelineStep: v.optional(v.string()),
+    pipelineMultiViewUrl: v.optional(v.string()),
   })
     .index("by_index", ["index"])
     .index("by_ownerId", ["ownerId"]),
