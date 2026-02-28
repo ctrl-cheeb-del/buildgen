@@ -30,8 +30,9 @@ export function useGridSync() {
   }, [plots, initializePlots]);
 
   // Sync buildings from Convex to Zustand/Three.js
-  const { addBuilding, removeBuilding, updateTransform, layer } = useWorldStore();
+  const { addBuilding, removeBuilding, replaceGeometry, updateTransform, layer } = useWorldStore();
   const syncedIds = useRef(new Set<string>());
+  const syncedCodes = useRef(new Map<string, string>());
   const localPendingUpdates = useRef(new Map<string, number>());
 
   useEffect(() => {
@@ -39,11 +40,25 @@ export function useGridSync() {
 
     const convexIds = new Set(buildings.map((b) => b._id as string));
 
-    // Add new buildings
+    // Add new buildings or update existing ones
     for (const b of buildings) {
       const id = b._id as string;
 
       if (syncedIds.current.has(id)) {
+        // Check if proceduralCode changed (iteration improvement)
+        const prevCode = syncedCodes.current.get(id);
+        if (prevCode !== undefined && prevCode !== b.proceduralCode) {
+          console.log(`[GridSync] Code changed for ${id}, reloading geometry`);
+          try {
+            const newGroup = loadProceduralGeometry(b.proceduralCode);
+            applyBuildingTextures(newGroup);
+            replaceGeometry(id, newGroup);
+            syncedCodes.current.set(id, b.proceduralCode);
+          } catch (err) {
+            console.error(`[GridSync] Failed to reload geometry for ${id}:`, err);
+          }
+        }
+
         // Check for transform updates from Convex (other users' changes)
         const pendingTs = localPendingUpdates.current.get(id);
         if (pendingTs && Date.now() - pendingTs < 500) {
@@ -95,6 +110,7 @@ export function useGridSync() {
           group
         );
         syncedIds.current.add(id);
+        syncedCodes.current.set(id, b.proceduralCode);
       } catch (err) {
         console.error(`[GridSync] Failed to load building ${id}:`, err);
       }
@@ -105,6 +121,7 @@ export function useGridSync() {
       if (!convexIds.has(id)) {
         removeBuilding(id);
         syncedIds.current.delete(id);
+        syncedCodes.current.delete(id);
       }
     }
   }, [buildings, layer, addBuilding, removeBuilding, updateTransform]);
