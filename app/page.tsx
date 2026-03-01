@@ -4,6 +4,7 @@ import { useUser } from "@clerk/nextjs";
 import Link from "next/link";
 import Image from "next/image";
 import dynamic from "next/dynamic";
+import StorySection from "@/components/landing/StorySection";
 
 const PixelBlast = dynamic(() => import("@/components/PixelBlast"), {
   ssr: false,
@@ -110,6 +111,9 @@ export default function LandingPage() {
           {isSignedIn ? "Enter the world" : "Get started"}&nbsp;&rsaquo;
         </Link>
       </section>
+
+      {/* ── Story ── */}
+      <StorySection />
 
       {/* ── Footer ── */}
       <footer className="px-[--gutter] py-6 flex items-center justify-between">
