@@ -5,9 +5,10 @@ import * as THREE from "three";
 import { useCarStore } from "../stores/car-store";
 import { useBoatStore } from "../stores/boat-store";
 import { usePlaneStore } from "../stores/plane-store";
+import { useWorldStore } from "../stores/world-store";
 import { useCarKeys } from "./useCarKeys";
 import { loadCarModel } from "../car/car-loader";
-import { updateCar, findNearestRoadPosition } from "../car/car-physics";
+import { updateCar, findNearestRoadPosition, type BuildingAABB } from "../car/car-physics";
 import { createDriftEffects, type DriftEffects } from "../car/drift-effects";
 import type { SceneLayer } from "../viewer/scene-layer";
 
@@ -40,6 +41,8 @@ const CAM_HEIGHT_OFFSET = 3;   // look-at target height above ground
 // Pre-allocated vectors
 const _cameraTarget = new THREE.Vector3();
 const _cameraPos = new THREE.Vector3();
+const _box3 = new THREE.Box3();
+const _size = new THREE.Vector3();
 
 export function useCarMode(
   layer: SceneLayer | null,
@@ -56,6 +59,8 @@ export function useCarMode(
     position: THREE.Vector3;
     target: THREE.Vector3;
   } | null>(null);
+  const buildingAABBsRef = useRef<BuildingAABB[]>([]);
+  const buildingCacheTimeRef = useRef<number>(0);
 
   // Store latest callback refs to avoid stale closures in animation loop
   const layerRef = useRef(layer);
@@ -129,8 +134,27 @@ export function useCarMode(
       ? Array.from(remoteMap.values(), (c) => ({ x: c.x, z: c.z }))
       : undefined;
 
+    // Recompute building AABBs every 500ms
+    if (now - buildingCacheTimeRef.current > 500) {
+      buildingCacheTimeRef.current = now;
+      const containers = useWorldStore.getState().containers;
+      const aabbs: BuildingAABB[] = [];
+      for (const container of containers.values()) {
+        if (!container.visible) continue;
+        _box3.setFromObject(container);
+        _size.copy(_box3.max).sub(_box3.min);
+        if (_size.x < 0.5 && _size.z < 0.5) continue;
+        aabbs.push({
+          minX: _box3.min.x, maxX: _box3.max.x,
+          minY: _box3.min.y, maxY: _box3.max.y,
+          minZ: _box3.min.z, maxZ: _box3.max.z,
+        });
+      }
+      buildingAABBsRef.current = aabbs;
+    }
+
     // Physics update
-    const newState = updateCar(carStore.carPosition, keys.current!, dt, remoteCars);
+    const newState = updateCar(carStore.carPosition, keys.current!, dt, remoteCars, buildingAABBsRef.current);
     carStore.updatePosition(newState);
 
     // Update Three.js car group

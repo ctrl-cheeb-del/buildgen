@@ -378,35 +378,15 @@ export default function PlotPopups({
         return;
       }
 
-      // Try building-level hover first
+      // Show pointer cursor on buildings (click to see name)
       const bHit = raycastBuilding(e.clientX, e.clientY);
       if (bHit) {
         canvas.style.cursor = "pointer";
-        const screen = worldToScreen(
-          new THREE.Vector3(bHit.worldPos.x, bHit.worldPos.y + 5, bHit.worldPos.z)
-        );
-        if (!screen) { removeHover(); return; }
-
-        if (!hoverRef.current) {
-          const hover = document.createElement("div");
-          hover.style.cssText = `
-            position: fixed; z-index: 49; pointer-events: none;
-            background: white; border-radius: 6px; padding: 4px 8px;
-            box-shadow: 0 1px 4px rgba(0,0,0,0.1);
-            font-family: system-ui; white-space: nowrap; max-width: 200px;
-          `;
-          document.body.appendChild(hover);
-          hoverRef.current = hover;
-        }
-        const hover = hoverRef.current;
-        hover.style.left = `${screen.x}px`;
-        hover.style.top = `${screen.y - 10}px`;
-        hover.style.transform = "translate(-50%, -100%)";
-        hover.innerHTML = `<div style="font-size:11px;text-align:center;font-weight:600;color:#374151">${esc(bHit.buildingName)}</div>`;
+        removeHover();
         return;
       }
 
-      // Fall back to plot-level hover
+      // Plot-level hover
       const result = raycastPlot(e.clientX, e.clientY);
       if (!result) {
         removeHover();

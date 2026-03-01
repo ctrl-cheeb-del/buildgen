@@ -12,6 +12,7 @@ import SettingsPanel from "@/components/SettingsPanel";
 import ChatInput from "@/components/chat/ChatInput";
 import ChatMessages from "@/components/chat/ChatMessages";
 import PlotPopups from "@/components/PlotPopups";
+import VehicleNameTags from "@/components/VehicleNameTags";
 import PipelineFlowchart from "@/components/PipelineFlowchart";
 import IsolatedViewer, {
   type IsolatedViewerHandle,
@@ -547,6 +548,9 @@ export default function Home() {
         plotStates={plotStates}
         onPlotClick={handlePlotClick}
       />
+
+      {/* Floating name tags above remote vehicles */}
+      <VehicleNameTags />
 
       {/* Hidden IsolatedViewer for iteration screenshot capture */}
       <div
