@@ -37,18 +37,28 @@ export const run = internalAction({
 
       if (similar) {
         console.log(`[agentBuild] Found similar building "${similar.prompt}", adapting...`);
-        const adaptedCode = await adaptExistingCode(
-          similar.proceduralCode,
-          similar.prompt,
-          buildDescription,
-        );
+
+        let finalCode: string;
+        try {
+          finalCode = await adaptExistingCode(
+            similar.proceduralCode,
+            similar.prompt,
+            buildDescription,
+          );
+        } catch (adaptErr) {
+          console.warn(
+            `[agentBuild] Adaptation failed, falling back to original building code:`,
+            adaptErr instanceof Error ? adaptErr.message : adaptErr,
+          );
+          finalCode = similar.proceduralCode;
+        }
 
         // Skip directly to building creation — no image gen needed
         await ctx.runMutation(internal.buildings.createBuildingInternal, {
           plotIndex,
           ownerId: `agent:${agentName}`,
           prompt: buildDescription,
-          proceduralCode: adaptedCode,
+          proceduralCode: finalCode,
           multiViewGrid: undefined,
         });
 
