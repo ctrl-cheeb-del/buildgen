@@ -631,6 +631,14 @@ export default function Home() {
     [layer]
   );
 
+  // Fly camera to the current user's plot
+  const handleFlyToMyPlot = useCallback(() => {
+    if (!layer || !myPlot) return;
+    const { col, row } = gridIndexToColRow(myPlot.index);
+    const [mx, mz] = plotCenterMeters(col, row);
+    layer.flyTo(mx, mz);
+  }, [layer, myPlot]);
+
   // Sim visibility toggle (sim always runs, just show/hide UI)
   const [simVisible, setSimVisible] = useState(true);
 
@@ -782,7 +790,7 @@ export default function Home() {
       {/* Top-right: Auth + Settings gear */}
       {!fpMode && (
         <div className="absolute top-4 right-4 z-40 flex items-center gap-2">
-          <AuthButton />
+          <AuthButton onFlyToPlot={handleFlyToMyPlot} />
           <SettingsPanel
             isRunning={isGenerating}
             myPlot={myPlot}

@@ -55,6 +55,11 @@ function computeBuildingStats(group: THREE.Group): {
  */
 export function createBuildingLOD(modelGroup: THREE.Group): THREE.LOD {
   const lod = new THREE.LOD();
+  // Disable Three.js frustum culling — bounding spheres on LOD level
+  // switches can be stale for procedural geometry, causing buildings to
+  // disappear at low camera angles. Custom visibility-culling.ts already
+  // handles distance-based hiding.
+  lod.frustumCulled = false;
 
   // Level 0: full detail
   lod.addLevel(modelGroup, 0);
