@@ -10,6 +10,7 @@ import type {
 } from "@/lib/types";
 import type { Id } from "../../convex/_generated/dataModel";
 import { usePipelineStore } from "../stores/pipeline-store";
+import { tryLoadProceduralGeometry } from "../viewer/procedural-loader";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                               */
@@ -31,6 +32,7 @@ interface IterationState {
   currentStep: IterationStep;
   maxIterations: number;
   error: string | null;
+  failedOnInitialCode: boolean;
 }
 
 interface StartSessionOpts {
@@ -56,6 +58,7 @@ export function useIteration() {
     currentStep: "idle",
     maxIterations: 2,
     error: null,
+    failedOnInitialCode: false,
   });
 
   const stopRef = useRef(false);
@@ -100,6 +103,7 @@ export function useIteration() {
         isPaused: false,
         currentStep: "idle",
         error: null,
+        failedOnInitialCode: false,
       }));
 
       try {
@@ -121,6 +125,30 @@ export function useIteration() {
           if (stopRef.current) break;
 
           try {
+            // Validate code before capturing screenshots
+            const validGroup = tryLoadProceduralGeometry(code);
+            if (!validGroup) {
+              if (i === 0) {
+                const msg = "Generated code is invalid";
+                setState((prev) => ({ ...prev, error: msg, failedOnInitialCode: true }));
+                store.setError(msg);
+              } else {
+                const msg = "Improved code is invalid — keeping previous version";
+                setState((prev) => ({ ...prev, error: msg }));
+                store.setError(msg);
+              }
+              break;
+            }
+            // Dispose the validation group — we only needed to check validity
+            validGroup.traverse((child) => {
+              const mesh = child as { geometry?: { dispose(): void }; material?: { dispose(): void } | { dispose(): void }[] };
+              mesh.geometry?.dispose();
+              if (mesh.material) {
+                const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+                for (const m of mats) m.dispose();
+              }
+            });
+
             // Step 1: Capture screenshots
             setState((prev) => ({ ...prev, currentStep: "capturing" }));
             store.setNodeStatus("capture", "active", `Iteration ${i + 1}`);

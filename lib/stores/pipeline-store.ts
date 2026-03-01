@@ -33,6 +33,8 @@ interface PipelineStore {
   isPaused: boolean;
   error: string | null;
   currentScreenshots: WorkbenchScreenshots | null;
+  retryCount: number;
+  maxRetries: number;
   // Actions
   setNodeStatus: (
     id: PipelineNodeId,
@@ -50,6 +52,7 @@ interface PipelineStore {
   setActive: (v: boolean) => void;
   setMaxIterations: (n: number) => void;
   setCurrentScreenshots: (s: WorkbenchScreenshots | null) => void;
+  setRetryCount: (n: number) => void;
 }
 
 /* ------------------------------------------------------------------ */
@@ -80,6 +83,8 @@ export const usePipelineStore = create<PipelineStore>((set) => ({
   isPaused: false,
   error: null,
   currentScreenshots: null,
+  retryCount: 0,
+  maxRetries: 3,
 
   setNodeStatus: (id, status, detail) =>
     set((state) => ({
@@ -101,6 +106,7 @@ export const usePipelineStore = create<PipelineStore>((set) => ({
       isPaused: false,
       error: null,
       currentScreenshots: null,
+      retryCount: 0,
     }),
 
   setPaused: (v) => set({ isPaused: v }),
@@ -108,4 +114,5 @@ export const usePipelineStore = create<PipelineStore>((set) => ({
   setActive: (v) => set({ isActive: v }),
   setMaxIterations: (n) => set({ maxIterations: n }),
   setCurrentScreenshots: (s) => set({ currentScreenshots: s }),
+  setRetryCount: (n) => set({ retryCount: n }),
 }));

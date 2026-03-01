@@ -563,6 +563,8 @@ export default function PipelineFlowchart({
   const maxIterations = usePipelineStore((s) => s.maxIterations);
   const latestScore = usePipelineStore((s) => s.latestScore);
   const error = usePipelineStore((s) => s.error);
+  const retryCount = usePipelineStore((s) => s.retryCount);
+  const maxRetries = usePipelineStore((s) => s.maxRetries);
 
   const [expandedNode, setExpandedNode] = useState<PipelineNodeId | null>(null);
 
@@ -742,13 +744,21 @@ export default function PipelineFlowchart({
             </>
           )}
 
-          {/* Error */}
-          {error && (
+          {/* Retry / Error */}
+          {retryCount > 0 && retryCount < maxRetries && (
+            <>
+              <GlassConnector status="active" />
+              <div className="w-fit px-3 py-1.5 rounded-full bg-amber-400/15 backdrop-blur-2xl border border-amber-400/25 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
+                <div className="text-[10px] text-amber-300/80 truncate max-w-[180px]">
+                  Build failed — Retrying ({retryCount}/{maxRetries})
+                </div>
+              </div>
+            </>
+          )}
+          {error && !(retryCount > 0 && retryCount < maxRetries) && (
             <>
               <GlassConnector status="error" />
-              <div
-                className={`w-fit px-3 py-1.5 rounded-full bg-red-400/15 backdrop-blur-2xl border border-red-400/25 shadow-[0_2px_8px_rgba(0,0,0,0.15)]`}
-              >
+              <div className="w-fit px-3 py-1.5 rounded-full bg-red-400/15 backdrop-blur-2xl border border-red-400/25 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
                 <div className="text-[10px] text-red-300/80 truncate max-w-[180px]">
                   {error}
                 </div>

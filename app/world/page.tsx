@@ -459,6 +459,18 @@ export default function Home() {
     []
   );
 
+  // --- Retry pipeline on initial code failure ---
+  const MAX_RETRIES = 3;
+  const retryCountRef = useRef(0);
+
+  // Reset retry counter when a new user-initiated pipeline starts
+  useEffect(() => {
+    if (isRunning) {
+      retryCountRef.current = 0;
+      usePipelineStore.getState().setRetryCount(0);
+    }
+  }, [isRunning]);
+
   // Auto-start iteration when generation completes (if a building exists)
   const autoStartedRef = useRef(false);
   useEffect(() => {
@@ -509,6 +521,48 @@ export default function Home() {
     isRunning,
     multiViewUrl,
   ]);
+
+  // Retry pipeline when iteration reports failedOnInitialCode
+  const retryPromptRef = useRef<string | null>(null);
+  const retryPlotRef = useRef<number | null>(null);
+
+  // Capture prompt/plot from the selected building for retry
+  useEffect(() => {
+    if (selectedBuilding) {
+      retryPromptRef.current = selectedBuilding.prompt;
+      retryPlotRef.current = selectedBuilding.plotIndex;
+    }
+  }, [selectedBuilding]);
+
+  useEffect(() => {
+    if (!iteration.failedOnInitialCode || !iteration.error) return;
+
+    const prompt = retryPromptRef.current;
+    const plotIndex = retryPlotRef.current;
+    const buildingId = iteration.buildingId;
+
+    if (!prompt || plotIndex == null || !buildingId) return;
+
+    if (retryCountRef.current < MAX_RETRIES) {
+      retryCountRef.current++;
+      usePipelineStore.getState().setRetryCount(retryCountRef.current);
+      console.log(`[Pipeline] Invalid code — retrying (${retryCountRef.current}/${MAX_RETRIES})`);
+
+      // Delete the broken building, reset auto-start flag, re-run pipeline
+      deleteBuilding({ buildingId: buildingId as Id<"buildings"> })
+        .then(() => {
+          autoStartedRef.current = false;
+          return runPipeline(prompt, plotIndex);
+        })
+        .catch((err) => {
+          console.error("[Pipeline] Retry failed:", err);
+          usePipelineStore.getState().setError("Retry failed: " + String(err));
+        });
+    } else {
+      usePipelineStore.getState().setError(`Build failed after ${MAX_RETRIES} retries`);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [iteration.failedOnInitialCode, iteration.error, iteration.buildingId]);
 
   // Cancel iteration if the building being iterated on is deleted
   useEffect(() => {
