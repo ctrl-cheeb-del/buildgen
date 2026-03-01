@@ -44,17 +44,21 @@ export default function ReplayTimeline({
   const sortedTicks = [...tickGroups.keys()].sort((a, b) => a - b);
 
   return (
-    <div className="fixed inset-x-0 top-16 z-40 flex justify-center pointer-events-none">
+    <div className="fixed inset-x-0 top-16 z-40 flex justify-center pointer-events-none animate-fade-in">
       <div
         className="w-96 rounded-2xl overflow-hidden pointer-events-auto backdrop-blur-2xl"
         style={{
-          background: "rgba(0, 0, 0, 0.65)",
-          border: "1px solid rgba(255, 255, 255, 0.2)",
-          boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
+          background: "rgba(255, 255, 255, 0.12)",
+          border: "1px solid rgba(255, 255, 255, 0.25)",
+          boxShadow:
+            "inset 0 1px 0 rgba(255,255,255,0.3), 0 8px 32px rgba(0,0,0,0.2)",
         }}
       >
+        {/* Inner gradient overlay */}
+        <div className="absolute inset-0 rounded-2xl bg-gradient-to-b from-white/[0.08] to-transparent pointer-events-none" />
+
         {/* Header */}
-        <div className="px-4 py-3 flex items-center justify-between border-b border-white/10">
+        <div className="relative px-4 py-3 flex items-center justify-between border-b border-white/15">
           <div>
             <h3 className="text-sm font-bold text-white">While you were away...</h3>
             <p className="text-[11px] text-white/40">
@@ -73,7 +77,7 @@ export default function ReplayTimeline({
         {/* Timeline content */}
         <div
           ref={scrollRef}
-          className="max-h-64 overflow-y-auto scrollbar-hide px-4 py-3"
+          className="relative max-h-64 overflow-y-auto scrollbar-hide px-4 py-3"
         >
           <div className="flex flex-col gap-3">
             {sortedTicks.slice(-20).map((tick) => (
@@ -113,16 +117,16 @@ export default function ReplayTimeline({
         </div>
 
         {/* Actions */}
-        <div className="px-4 py-3 border-t border-white/10 flex items-center gap-2">
+        <div className="relative px-4 py-3 border-t border-white/15 flex items-center gap-2">
           <button
             onClick={onWatchReplay}
-            className="flex-1 px-3 py-2 rounded-xl text-xs font-bold text-white bg-amber-500/30 hover:bg-amber-500/50 border border-amber-500/40 transition-colors"
+            className="flex-1 px-3 py-2 rounded-full text-xs font-bold text-white bg-amber-500/25 hover:bg-amber-500/40 border border-amber-400/30 transition-colors shadow-[inset_0_1px_0_rgba(255,255,255,0.2)]"
           >
             Watch it happen
           </button>
           <button
             onClick={onDismiss}
-            className="px-3 py-2 rounded-xl text-xs font-bold text-white/50 hover:text-white/80 bg-white/10 hover:bg-white/15 transition-colors"
+            className="px-3 py-2 rounded-full text-xs font-bold text-white/60 hover:text-white/90 bg-white/10 hover:bg-white/20 transition-colors"
           >
             Skip
           </button>

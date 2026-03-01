@@ -632,6 +632,31 @@ export default function Home() {
     }
   }, [currentTick, updateLastSeenTick, showReplay, replayDismissed]);
 
+  // Save lastSeenTick on page exit so replay only triggers after real absence.
+  const currentTickRef = useRef(currentTick);
+  currentTickRef.current = currentTick;
+  const replayPendingRef = useRef(false);
+  replayPendingRef.current = showReplay && !replayDismissed;
+  useEffect(() => {
+    const save = () => {
+      if (replayPendingRef.current) return;
+      const tick = currentTickRef.current;
+      if (tick > 0) {
+        updateLastSeenTick({ tick }).catch(() => {});
+      }
+    };
+    const onVisChange = () => {
+      if (document.visibilityState === "hidden") save();
+    };
+    window.addEventListener("beforeunload", save);
+    document.addEventListener("visibilitychange", onVisChange);
+    return () => {
+      window.removeEventListener("beforeunload", save);
+      document.removeEventListener("visibilitychange", onVisChange);
+      save();
+    };
+  }, [updateLastSeenTick]);
+
   const handleReplayDismiss = useCallback(async () => {
     setReplayDismissed(true);
     setWatchingReplay(false);

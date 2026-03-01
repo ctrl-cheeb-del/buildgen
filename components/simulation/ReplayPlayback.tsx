@@ -167,14 +167,14 @@ export default function ReplayPlayback({
       <div
         className="w-[480px] rounded-2xl overflow-hidden pointer-events-auto backdrop-blur-2xl"
         style={{
-          background: "rgba(0, 0, 0, 0.65)",
-          border: "1px solid rgba(255, 255, 255, 0.2)",
+          background: "rgba(255, 255, 255, 0.12)",
+          border: "1px solid rgba(255, 255, 255, 0.25)",
           boxShadow:
-            "inset 0 1px 0 rgba(255,255,255,0.12), inset 0 -1px 0 rgba(0,0,0,0.15), 0 8px 32px rgba(0,0,0,0.4)",
+            "inset 0 1px 0 rgba(255,255,255,0.3), 0 8px 32px rgba(0,0,0,0.2)",
         }}
       >
         {/* Inner gradient overlay */}
-        <div className="absolute inset-0 rounded-2xl bg-gradient-to-b from-white/[0.06] to-transparent pointer-events-none" />
+        <div className="absolute inset-0 rounded-2xl bg-gradient-to-b from-white/[0.08] to-transparent pointer-events-none" />
 
         {/* AI Timeline */}
         <div className="relative px-4 py-3 max-h-44 overflow-y-auto scrollbar-hide">
@@ -238,7 +238,7 @@ export default function ReplayPlayback({
         </div>
 
         {/* Controls */}
-        <div className="relative px-4 py-2.5 flex items-center justify-between border-t border-white/10">
+        <div className="relative px-4 py-2.5 flex items-center justify-between border-t border-white/15">
           <div className="flex items-center gap-2">
             <button
               onClick={() => setIsPlaying(!isPlaying)}
@@ -253,8 +253,8 @@ export default function ReplayPlayback({
                   onClick={() => setSpeed(s)}
                   className={`text-[10px] px-2 py-0.5 rounded-full font-mono transition-colors ${
                     speed === s
-                      ? "border border-amber-400/50 bg-amber-500/20 text-amber-300"
-                      : "text-white/40 hover:text-white/70"
+                      ? "border border-amber-400/30 bg-amber-500/25 text-amber-300 shadow-[inset_0_1px_0_rgba(255,255,255,0.15)]"
+                      : "text-white/50 hover:text-white/80 hover:bg-white/10"
                   }`}
                 >
                   {s}x
