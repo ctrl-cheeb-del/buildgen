@@ -566,16 +566,26 @@ export default function Home() {
   const snapshotLastSeenTick = initialLastSeenTickRef.current ?? 0;
   const showReplay = isSignedIn && snapshotLastSeenTick > 0 && currentTick > snapshotLastSeenTick + 2;
 
-  // Sim mode switching: live when authenticated user is on page
+  // Sim mode switching: live when authenticated user is on page.
+  // Uses setTimeout(0) in cleanup to guard against React strict-mode:
+  // strict mode synchronously unmounts+remounts, so the re-mount cancels
+  // the pending overnight switch, keeping the sim in "live" mode.
   const setSimMode = useMutation(api.simulation.control.setSimMode);
+  const simModeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
+    if (simModeTimeoutRef.current !== null) {
+      clearTimeout(simModeTimeoutRef.current);
+      simModeTimeoutRef.current = null;
+    }
     if (isSignedIn) {
       setSimMode({ mode: "live" }).catch(() => {});
     }
     return () => {
-      if (isSignedIn) {
-        setSimMode({ mode: "overnight" }).catch(() => {});
-      }
+      simModeTimeoutRef.current = setTimeout(() => {
+        if (isSignedIn) {
+          setSimMode({ mode: "overnight" }).catch(() => {});
+        }
+      }, 0);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isSignedIn]);
