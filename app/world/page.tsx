@@ -24,18 +24,87 @@ import ReplayTimeline from "@/components/simulation/ReplayTimeline";
 import ReplayPlayback from "@/components/simulation/ReplayPlayback";
 import { useFPStore } from "@/lib/stores/fp-store";
 import { useCarStore } from "@/lib/stores/car-store";
+import { useBoatStore } from "@/lib/stores/boat-store";
+import { usePlaneStore } from "@/lib/stores/plane-store";
 import { usePipeline } from "@/lib/hooks/usePipeline";
 import { useIteration } from "@/lib/hooks/useIteration";
 import { useGridSync } from "@/lib/hooks/useGridSync";
 import { useBuildingDrag } from "@/lib/hooks/useBuildingDrag";
 import { useCarMode } from "@/lib/hooks/useCarMode";
 import { useRemoteCars } from "@/lib/hooks/useRemoteCars";
+import { useBoatMode } from "@/lib/hooks/useBoatMode";
+import { useRemoteBoats } from "@/lib/hooks/useRemoteBoats";
+import { usePlaneMode } from "@/lib/hooks/usePlaneMode";
+import { useRemotePlanes } from "@/lib/hooks/useRemotePlanes";
 import { useChat } from "@/lib/hooks/useChat";
 import { useChatStore } from "@/lib/stores/chat-store";
 import { useWorldStore } from "@/lib/stores/world-store";
 import { usePipelineStore } from "@/lib/stores/pipeline-store";
 import { gridIndexToColRow, plotCenterMeters } from "@/lib/grid/grid-geometry";
 import type { Id } from "../../convex/_generated/dataModel";
+
+function VehicleControlsHUD({ carMode, boatMode, planeMode }: { carMode: boolean; boatMode: boolean; planeMode: boolean }) {
+  const active = carMode || boatMode || planeMode;
+  const [visible, setVisible] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout>>(null);
+
+  useEffect(() => {
+    if (active) {
+      setVisible(true);
+      if (timerRef.current) clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => setVisible(false), 3000);
+    } else {
+      setVisible(false);
+      if (timerRef.current) clearTimeout(timerRef.current);
+    }
+    return () => { if (timerRef.current) clearTimeout(timerRef.current); };
+  }, [active, carMode, boatMode, planeMode]);
+
+  if (!active) return null;
+
+  return (
+    <div
+      className="absolute inset-0 flex items-center justify-center z-30 pointer-events-none transition-opacity duration-700"
+      style={{ opacity: visible ? 1 : 0 }}
+    >
+      <div className="bg-black/60 backdrop-blur-md rounded-2xl px-8 py-5 text-white text-sm font-mono flex flex-col items-center gap-3">
+        <div className="text-white/50 text-xs uppercase tracking-widest mb-1">
+          {carMode ? "car" : boatMode ? "boat" : "plane"} controls
+        </div>
+        <div className="flex gap-5 items-center flex-wrap justify-center">
+          {carMode && (
+            <>
+              <span><kbd className="bg-white/20 px-2 py-1 rounded text-white">W</kbd> gas</span>
+              <span><kbd className="bg-white/20 px-2 py-1 rounded text-white">S</kbd> brake</span>
+              <span><kbd className="bg-white/20 px-2 py-1 rounded text-white">A/D</kbd> steer</span>
+              <span><kbd className="bg-white/20 px-2 py-1 rounded text-white">Space</kbd> drift</span>
+            </>
+          )}
+          {boatMode && (
+            <>
+              <span><kbd className="bg-white/20 px-2 py-1 rounded text-white">W</kbd> throttle</span>
+              <span><kbd className="bg-white/20 px-2 py-1 rounded text-white">S</kbd> brake</span>
+              <span><kbd className="bg-white/20 px-2 py-1 rounded text-white">A/D</kbd> steer</span>
+              <span><kbd className="bg-white/20 px-2 py-1 rounded text-white">Space</kbd> drift</span>
+            </>
+          )}
+          {planeMode && (
+            <>
+              <span><kbd className="bg-white/20 px-2 py-1 rounded text-white">W</kbd> throttle</span>
+              <span><kbd className="bg-white/20 px-2 py-1 rounded text-white">S</kbd> brake</span>
+              <span><kbd className="bg-white/20 px-2 py-1 rounded text-white">A/D</kbd> roll</span>
+              <span><kbd className="bg-white/20 px-2 py-1 rounded text-white">Space</kbd> up</span>
+              <span><kbd className="bg-white/20 px-2 py-1 rounded text-white">Shift</kbd> down</span>
+            </>
+          )}
+        </div>
+        <div className="text-white/30 text-xs mt-1">
+          <kbd className="bg-white/10 px-1.5 py-0.5 rounded">Esc</kbd> exit
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function Home() {
   const iterationViewerRef = useRef<IsolatedViewerHandle>(null);
@@ -222,6 +291,61 @@ export default function Home() {
   useCarMode(layer, handleCarSync, handleCarExit);
   useRemoteCars(carUserId);
 
+  // Boat mode
+  const updateBoatPosition = useMutation(api.boats.updateBoatPosition);
+  const removeBoatPosition = useMutation(api.boats.removeBoatPosition);
+  const setBoatMode = useBoatStore((s) => s.setBoatMode);
+
+  const handleBoatSync = useCallback(
+    (x: number, z: number, heading: number) => {
+      if (!carUserId) return;
+      updateBoatPosition({
+        userId: carUserId,
+        x,
+        z,
+        heading,
+        userName: carUserName,
+        userAvatar: carUserAvatar,
+      }).catch(() => {});
+    },
+    [carUserId, carUserName, carUserAvatar, updateBoatPosition]
+  );
+
+  const handleBoatExit = useCallback(() => {
+    if (!carUserId) return;
+    removeBoatPosition({ userId: carUserId });
+  }, [carUserId, removeBoatPosition]);
+
+  useBoatMode(layer, handleBoatSync, handleBoatExit);
+  useRemoteBoats(carUserId);
+
+  // Plane mode
+  const updatePlanePosition = useMutation(api.planes.updatePlanePosition);
+  const removePlanePosition = useMutation(api.planes.removePlanePosition);
+  const setPlaneMode = usePlaneStore((s) => s.setPlaneMode);
+
+  const handlePlaneSync = useCallback(
+    (x: number, y: number, z: number, heading: number, pitch: number, roll: number) => {
+      if (!carUserId) return;
+      updatePlanePosition({
+        userId: carUserId,
+        x, y, z,
+        heading, pitch, roll,
+        userName: carUserName,
+        userAvatar: carUserAvatar,
+      }).catch(() => {});
+    },
+    [carUserId, carUserName, carUserAvatar, updatePlanePosition]
+  );
+
+  const handlePlaneExit = useCallback(() => {
+    if (!carUserId) return;
+    removePlanePosition({ userId: carUserId });
+  }, [carUserId, removePlanePosition]);
+
+  usePlaneMode(layer, handlePlaneSync, handlePlaneExit);
+  useRemotePlanes(carUserId);
+
   // First-person walk mode
   const fpMode = useFPStore((s) => s.fpMode);
   const setFPMode = useFPStore((s) => s.setFPMode);
@@ -262,6 +386,8 @@ export default function Home() {
   const chatDeps = useMemo(
     () => ({
       setCarMode,
+      setBoatMode,
+      setPlaneMode,
       setFPMode,
       setCharacter: setFPCharacter,
       runPipeline,
@@ -274,6 +400,8 @@ export default function Home() {
     }),
     [
       setCarMode,
+      setBoatMode,
+      setPlaneMode,
       setFPMode,
       setFPCharacter,
       runPipeline,
@@ -398,6 +526,11 @@ export default function Home() {
       setMinimized(false);
     }
   }, [pipelineIsActive, isRunning]);
+
+  // Vehicle mode reads for HUD
+  const carMode = useCarStore((s) => s.carMode);
+  const boatMode = useBoatStore((s) => s.boatMode);
+  const planeMode = usePlaneStore((s) => s.planeMode);
 
   // Agent detail panel
   const [selectedAgentPlot, setSelectedAgentPlot] = useState<number | null>(null);
@@ -542,6 +675,9 @@ export default function Home() {
           />
         </div>
       )}
+
+      {/* Vehicle controls HUD — fades out after 3s */}
+      <VehicleControlsHUD carMode={carMode} boatMode={boatMode} planeMode={planeMode} />
 
       {/* First-person overlay */}
       {fpMode && <FirstPersonOverlay buildings={fpBuildings} />}

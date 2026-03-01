@@ -8,11 +8,13 @@
  * @module
  */
 
+import type * as boats from "../boats.js";
 import type * as buildings from "../buildings.js";
 import type * as cars from "../cars.js";
 import type * as crons from "../crons.js";
 import type * as multiViewPreviews from "../multiViewPreviews.js";
 import type * as pipeline from "../pipeline.js";
+import type * as planes from "../planes.js";
 import type * as plots from "../plots.js";
 import type * as simulation__buildingHelpers from "../simulation/_buildingHelpers.js";
 import type * as simulation__electionHelpers from "../simulation/_electionHelpers.js";
@@ -38,11 +40,13 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  boats: typeof boats;
   buildings: typeof buildings;
   cars: typeof cars;
   crons: typeof crons;
   multiViewPreviews: typeof multiViewPreviews;
   pipeline: typeof pipeline;
+  planes: typeof planes;
   plots: typeof plots;
   "simulation/_buildingHelpers": typeof simulation__buildingHelpers;
   "simulation/_electionHelpers": typeof simulation__electionHelpers;
