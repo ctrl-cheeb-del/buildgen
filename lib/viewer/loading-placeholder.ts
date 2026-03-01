@@ -167,12 +167,29 @@ export function createLoadingPlaceholder(): PlaceholderInstance {
   const glow = new THREE.Mesh(glowGeo, glowMat);
   group.add(glow);
 
+  // LOD: full detail nearby, simple glowing box at distance
+  const lod = new THREE.LOD();
+  lod.addLevel(group, 0);
+
+  // Level 1 (>600m): simple wireframe box — cheap stand-in
+  const simplGeo = new THREE.BoxGeometry(CUBE_SIZE, CUBE_SIZE, CUBE_SIZE);
+  const simplMat = new THREE.MeshBasicMaterial({
+    color: 0x44aaff,
+    wireframe: true,
+    transparent: true,
+    opacity: 0.5,
+  });
+  const simplBox = new THREE.Mesh(simplGeo, simplMat);
+  const level1 = new THREE.Group();
+  level1.add(simplBox);
+  lod.addLevel(level1, 600);
+
   // Tilt on diagonal axis (like a spinning die)
   const pivot = new THREE.Group();
   pivot.name = "loading-pivot";
   pivot.rotation.x = Math.PI / 6; // ~30° tilt
   pivot.rotation.z = Math.PI / 6;
-  pivot.add(group);
+  pivot.add(lod);
 
   // Float slightly above ground
   pivot.position.y = CUBE_SIZE;
@@ -181,17 +198,18 @@ export function createLoadingPlaceholder(): PlaceholderInstance {
   let lastRefresh = 0;
 
   const update = (elapsed: number) => {
-    // Spin around Y axis
+    // Spin around Y axis (LOD level 0 = full group, level 1 = simple box)
     group.rotation.y = elapsed * SPIN_SPEED;
+    level1.rotation.y = elapsed * SPIN_SPEED;
 
     // Gentle bob above ground
     pivot.position.y = CUBE_SIZE + Math.sin(elapsed * 1.2) * 2;
 
-    // Pulse glow
+    // Pulse glow — only when full-detail level is active
     glowMat.opacity = 0.1 + Math.sin(elapsed * 2.5) * 0.08;
     wireMat.opacity = 0.5 + Math.sin(elapsed * 3) * 0.3;
 
-    // Refresh ASCII characters every ~0.4s
+    // Refresh ASCII characters every ~0.4s (only matters at close range)
     if (elapsed - lastRefresh > 0.4) {
       lastRefresh = elapsed;
       refreshASCIITexture(texture);
@@ -205,6 +223,8 @@ export function createLoadingPlaceholder(): PlaceholderInstance {
     wireMat.dispose();
     glowGeo.dispose();
     glowMat.dispose();
+    simplGeo.dispose();
+    simplMat.dispose();
     texture.dispose();
   };
 

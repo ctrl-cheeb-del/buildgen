@@ -94,7 +94,9 @@ export function buildFPScene(
   const ocean = createOcean();
   scene.add(ocean.mesh);
 
-  // Buildings
+  // Buildings — use LOD + track containers for per-frame culling
+  const containers = new Map<string, THREE.Group>();
+
   for (const b of buildings) {
     try {
       const group = loadProceduralGeometry(b.proceduralCode);
@@ -115,12 +117,16 @@ export function buildFPScene(
       // Apply textures (async — pops in)
       applyBuildingTextures(group);
 
+      // Wrap in LOD: full detail nearby, simple box at distance
+      const lod = createBuildingLOD(group);
+
       // Position building at plot center
       const { col, row } = gridIndexToColRow(b.plotIndex);
       const [cx, cz] = plotCenterMeters(col, row);
 
       const wrapper = new THREE.Group();
-      wrapper.add(group);
+      wrapper.name = `building-${b._id}`;
+      wrapper.add(lod);
       wrapper.position.set(cx, 0, cz);
 
       // Apply persisted offset/rotation/scale
@@ -137,6 +143,7 @@ export function buildFPScene(
       }
 
       scene.add(wrapper);
+      containers.set(b._id, wrapper);
 
       // Compute AABB for collision
       const box = new THREE.Box3().setFromObject(wrapper);
@@ -177,15 +184,23 @@ export function buildFPScene(
   };
 
   let lastCloudTick = 0;
-  const update = (elapsed: number, camera?: THREE.Camera) => {
+  let cullFrame = 0;
+  const update = (elapsed: number, camera: THREE.Camera) => {
     ocean.update(elapsed);
     if (elapsed - lastCloudTick > 2) {
       lastCloudTick = elapsed;
       clouds.update(elapsed, camera);
     }
+
+    // Visibility + shadow culling every 2nd frame (cheap enough)
+    cullFrame++;
+    if (cullFrame % 2 === 0) {
+      updateVisibilityCulling(containers, camera);
+      updateShadowCulling(containers, camera);
+    }
   };
 
-  return { scene, colliders, bounds, dispose, update };
+  return { scene, colliders, bounds, containers, dispose, update };
 }
 
 /** Spawn at grid center on a road intersection */
