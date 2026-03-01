@@ -31,9 +31,14 @@ export async function POST(request: Request) {
     return NextResponse.json(result);
   } catch (err) {
     console.error("[API/iterate/step] Error:", err);
+    const msg = err instanceof Error ? err.message : "Internal error";
+    const isAuth =
+      msg.includes("session expired") ||
+      msg.includes("security token") ||
+      msg.includes("ExpiredTokenException");
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Internal error" },
-      { status: 500 }
+      { error: msg, isAuthError: isAuth },
+      { status: isAuth ? 401 : 500 }
     );
   }
 }

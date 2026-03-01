@@ -10,7 +10,7 @@ import type {
 } from "@/lib/types";
 import type { Id } from "../../convex/_generated/dataModel";
 import { usePipelineStore } from "../stores/pipeline-store";
-import { tryLoadProceduralGeometry } from "../viewer/procedural-loader";
+import { hasBalancedDelimiters } from "../viewer/procedural-loader";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                               */
@@ -125,9 +125,8 @@ export function useIteration() {
           if (stopRef.current) break;
 
           try {
-            // Validate code before capturing screenshots
-            const validGroup = tryLoadProceduralGeometry(code);
-            if (!validGroup) {
+            // Lightweight syntax check — no Three.js scene creation
+            if (!code || !hasBalancedDelimiters(code)) {
               if (i === 0) {
                 const msg = "Generated code is invalid";
                 setState((prev) => ({ ...prev, error: msg, failedOnInitialCode: true }));
@@ -139,15 +138,6 @@ export function useIteration() {
               }
               break;
             }
-            // Dispose the validation group — we only needed to check validity
-            validGroup.traverse((child) => {
-              const mesh = child as { geometry?: { dispose(): void }; material?: { dispose(): void } | { dispose(): void }[] };
-              mesh.geometry?.dispose();
-              if (mesh.material) {
-                const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-                for (const m of mats) m.dispose();
-              }
-            });
 
             // Step 1: Capture screenshots
             setState((prev) => ({ ...prev, currentStep: "capturing" }));
@@ -294,7 +284,14 @@ export function useIteration() {
             if (err instanceof DOMException && err.name === "AbortError") {
               break;
             }
-            const msg = err instanceof Error ? err.message : String(err);
+            const raw = err instanceof Error ? err.message : String(err);
+            const isAuthErr =
+              raw.includes("session expired") ||
+              raw.includes("security token") ||
+              raw.includes("ExpiredTokenException");
+            const msg = isAuthErr
+              ? "AWS session expired — retry to refresh"
+              : raw;
             setState((prev) => ({ ...prev, error: msg }));
             store.setError(msg);
             const activeNode = usePipelineStore.getState().nodes.find((n) => n.status === "active");

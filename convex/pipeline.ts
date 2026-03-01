@@ -389,17 +389,21 @@ export const generateBuilding = action({
       if (similar) {
         console.log(`[Pipeline] Found similar building "${similar.prompt}", adapting...`);
 
-        // Show cached blueprint views in the pipeline UI
+        // Show cached blueprint views in the pipeline UI.
+        // When multiViewGrid is undefined (agent-built or pre-fix buildings),
+        // pass "reused" sentinel so the UI shows a meaningful status instead of "Waiting".
+        const cachedViewUrl = similar.multiViewGrid ?? "reused";
+
         await ctx.runMutation(internal.plots.setPipelineStepInternal, {
           plotIndex,
           step: "generating-views",
-          multiViewUrl: similar.multiViewGrid,
+          multiViewUrl: cachedViewUrl,
         });
 
         await ctx.runMutation(internal.plots.setPipelineStepInternal, {
           plotIndex,
           step: "generating-code",
-          multiViewUrl: similar.multiViewGrid,
+          multiViewUrl: cachedViewUrl,
         });
 
         let finalCode: string;
@@ -420,7 +424,7 @@ export const generateBuilding = action({
         await ctx.runMutation(internal.plots.setPipelineStepInternal, {
           plotIndex,
           step: "placing",
-          multiViewUrl: similar.multiViewGrid,
+          multiViewUrl: cachedViewUrl,
         });
 
         await ctx.runMutation(internal.buildings.createBuildingInternal, {
