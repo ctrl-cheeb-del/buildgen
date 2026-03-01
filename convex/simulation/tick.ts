@@ -88,7 +88,7 @@ function buildCitizenPrompt(agent: AgentDoc, city: CityStateDoc, nearbyActions: 
     ? "empty land"
     : `${plotBuildingCount} building${plotBuildingCount > 1 ? "s" : ""} (${slotsLeft} slots free)`;
   const isLive = city.simMode === "live";
-  const buildCap = isLive ? 12 : 4;
+  const buildCap = isLive ? 12 : 2;
 
   return `You are ${agent.name}, a citizen of KingdomCity. You think for yourself.
 
@@ -179,7 +179,7 @@ function buildMayorPrompt(
   buildRequests: string
 ): string {
   const isLive = city.simMode === "live";
-  const buildCap = isLive ? 12 : 4;
+  const buildCap = isLive ? 12 : 2;
   const slotsAvailable = Math.max(0, buildCap - city.activeBuildCount);
   const treasuryWarning = city.treasury < 2000
     ? `\n⚠️ TREASURY CRITICAL: Only $${city.treasury} left! Treasury CANNOT go below 0. If expenses exceed income, emergency austerity kicks in. Consider raising taxes or cutting budget.`
@@ -465,10 +465,10 @@ export const run = internalAction({
     const citizens = agents.filter((a) => a.role === "citizen" && a.isActive);
     const isLive = city.simMode === "live";
     const liveBuildCap = 12;
-    // Live mode: ~75% of citizens (cap 20). Overnight: ~25% sample, cap 12.
+    // Live mode: ~75% of citizens (cap 20). Overnight: ~35% sample, cap 16.
     const activeThisTick = isLive
       ? citizens.filter(() => Math.random() < 0.75).slice(0, 20)
-      : citizens.filter(() => Math.random() < 0.25).slice(0, 12);
+      : citizens.filter(() => Math.random() < 0.35).slice(0, 16);
 
     const citizenResults: Array<{ agent: AgentDoc; action: CitizenAction }> = [];
     const buildRequests: Array<{ agent: AgentDoc; action: CitizenAction }> = [];
@@ -579,7 +579,7 @@ export const run = internalAction({
     // Step 5: Resolve
     // Apply build approvals — fire actual geometry pipeline
     let newBuildsApproved = 0;
-    const buildCap = isLive ? 12 : 4;
+    const buildCap = isLive ? 12 : 2;
 
     // Debug: log what the mayor returned vs what we have
     console.log(`[tick ${tickNumber}] Mayor approvals: ${JSON.stringify(mayorDecision.build_approvals)}`);
@@ -620,13 +620,15 @@ export const run = internalAction({
       }
     }
 
-    // Overnight mode: bypass mayor JSON for build approvals — random 70% approval
+    // Overnight mode: bypass mayor JSON for build approvals — random 50% approval
+    // Cap at 2 concurrent builds (full Bedrock pipeline is expensive)
     if (!isLive && buildRequests.length > 0) {
+      const overnightBuildCap = 2;
       for (const req of buildRequests) {
-        if (city.activeBuildCount + newBuildsApproved >= buildCap) break;
+        if (city.activeBuildCount + newBuildsApproved >= overnightBuildCap) break;
         if (!req.action.build_description) continue;
-        // ~70% approval chance per request
-        if (Math.random() > 0.7) {
+        // ~50% approval chance per request
+        if (Math.random() > 0.5) {
           console.log(`[tick ${tickNumber}] BUILD DENIED (overnight random): ${req.agent.name}`);
           continue;
         }
@@ -656,6 +658,7 @@ export const run = internalAction({
           buildDescription: req.action.build_description,
           category,
           tickNumber,
+          skipReuse: true,
         });
       }
     }
@@ -959,7 +962,7 @@ export const run = internalAction({
     // ALWAYS schedule next tick — even after a crash
     const freshCity = await ctx.runQuery(internal.simulation.cityState.getInternal);
     const currentMode = freshCity?.simMode ?? "overnight";
-    const tickInterval = currentMode === "live" ? 45000 : 300000;
+    const tickInterval = currentMode === "live" ? 45000 : 180000;
     const nextTickId = await ctx.scheduler.runAfter(tickInterval, internal.simulation.tick.run, {});
     // Store the scheduled ID so setSimMode can cancel + reschedule
     await ctx.runMutation(internal.simulation.cityState.update, {

@@ -60,47 +60,50 @@ export const run = internalAction({
     buildDescription: v.string(),
     category: v.string(),
     tickNumber: v.optional(v.number()),
+    skipReuse: v.optional(v.boolean()),
   },
-  handler: async (ctx, { plotIndex, agentName, buildDescription, category, tickNumber }) => {
+  handler: async (ctx, { plotIndex, agentName, buildDescription, category, tickNumber, skipReuse }) => {
     console.log(`[agentBuild] ${agentName} building "${buildDescription}" on plot #${plotIndex}`);
 
     try {
       // 1. Mark plot as generating (shows loading cube)
       await ctx.runMutation(internal.plots.markGeneratingInternal, { plotIndex });
 
-      // 1.5. Check for similar existing buildings to reuse
-      const similar = await ctx.runQuery(internal.buildings.searchSimilarBuildings, {
-        searchTerm: buildDescription,
-        category,
-      });
-
-      if (similar) {
-        console.log(`[agentBuild] Found similar building "${similar.prompt}", adapting...`);
-        const adaptedCode = await adaptExistingCode(
-          similar.proceduralCode,
-          similar.prompt,
-          buildDescription,
-        );
-
-        // Skip directly to building creation — no image gen needed
-        await ctx.runMutation(internal.buildings.createBuildingInternal, {
-          plotIndex,
-          ownerId: `agent:${agentName}`,
-          prompt: buildDescription,
-          proceduralCode: adaptedCode,
-          multiViewGrid: undefined,
-          createdAtTick: tickNumber,
-        });
-
-        await ctx.runMutation(internal.plots.resetPlotInternal, { plotIndex });
-        await ctx.runMutation(internal.simulation._simBuildHelpers.onBuildComplete, {
-          plotIndex,
+      // 1.5. Check for similar existing buildings to reuse (skip in overnight/robust mode)
+      if (!skipReuse) {
+        const similar = await ctx.runQuery(internal.buildings.searchSimilarBuildings, {
+          searchTerm: buildDescription,
           category,
-          agentName,
         });
 
-        console.log(`[agentBuild] "${buildDescription}" (adapted) complete on plot #${plotIndex}!`);
-        return;
+        if (similar) {
+          console.log(`[agentBuild] Found similar building "${similar.prompt}", adapting...`);
+          const adaptedCode = await adaptExistingCode(
+            similar.proceduralCode,
+            similar.prompt,
+            buildDescription,
+          );
+
+          // Skip directly to building creation — no image gen needed
+          await ctx.runMutation(internal.buildings.createBuildingInternal, {
+            plotIndex,
+            ownerId: `agent:${agentName}`,
+            prompt: buildDescription,
+            proceduralCode: adaptedCode,
+            multiViewGrid: undefined,
+            createdAtTick: tickNumber,
+          });
+
+          await ctx.runMutation(internal.plots.resetPlotInternal, { plotIndex });
+          await ctx.runMutation(internal.simulation._simBuildHelpers.onBuildComplete, {
+            plotIndex,
+            category,
+            agentName,
+          });
+
+          console.log(`[agentBuild] "${buildDescription}" (adapted) complete on plot #${plotIndex}!`);
+          return;
+        }
       }
 
       // 2. Generate multi-view image via Replicate
@@ -325,19 +328,19 @@ async function evaluateAndImprove(
   const mistral = new Mistral({ apiKey: process.env.MISTRAL_API_KEY });
   let currentCode = code;
 
-  for (let i = 0; i < 2; i++) {
+  for (let i = 0; i < 3; i++) {
     const score = await withRetry(
       () => evaluateAgentBuildCode(mistral, currentCode, buildDescription),
       "eval-build",
     );
     console.log(`[agentBuild] Eval iteration ${i + 1}: score ${score}/10`);
 
-    if (score >= 6.0) {
-      console.log(`[agentBuild] Code quality sufficient (${score} >= 6.0), done.`);
+    if (score >= 7.0) {
+      console.log(`[agentBuild] Code quality sufficient (${score} >= 7.0), done.`);
       return currentCode;
     }
 
-    console.log(`[agentBuild] Score ${score} < 6.0, improving via Bedrock Claude Opus 4.6...`);
+    console.log(`[agentBuild] Score ${score} < 7.0, improving via Bedrock Claude Opus 4.6...`);
     currentCode = await improveAgentBuildCode(currentCode, buildDescription, score);
   }
 
