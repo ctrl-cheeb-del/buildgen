@@ -54,14 +54,14 @@ export function useIteration() {
     isIterating: false,
     isPaused: false,
     currentStep: "idle",
-    maxIterations: 10,
+    maxIterations: 2,
     error: null,
   });
 
   const stopRef = useRef(false);
   const pauseRef = useRef(false);
   const isRunningRef = useRef(false);
-  const maxIterRef = useRef(10);
+  const maxIterRef = useRef(2);
   const abortRef = useRef<AbortController | null>(null);
   const updateBuildingCode = useMutation(api.buildings.updateProceduralCode);
 
@@ -110,7 +110,8 @@ export function useIteration() {
         let iterations: IterationResult[] = [];
         let consecutiveDrops = 0;
 
-        for (let i = 0; i < maxIterRef.current; i++) {
+        const effectiveMax = Math.min(maxIterRef.current, 3);
+        for (let i = 0; i < effectiveMax; i++) {
           if (stopRef.current) break;
 
           // Wait if paused

@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { query, mutation, internalMutation } from "./_generated/server";
+import { query, mutation, internalMutation, internalQuery } from "./_generated/server";
 
 const GRID_COLS = 8;
 const GRID_ROWS = 10;
@@ -194,6 +194,23 @@ export const resetPlot = mutation({
   },
 });
 
+export const updateLastSeenTick = mutation({
+  args: { tick: v.number() },
+  handler: async (ctx, { tick }) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return;
+
+    const plots = await ctx.db
+      .query("plots")
+      .withIndex("by_ownerId", (q) => q.eq("ownerId", identity.subject))
+      .collect();
+    const plot = plots[0];
+    if (!plot) return;
+
+    await ctx.db.patch(plot._id, { lastSeenTick: tick });
+  },
+});
+
 // --- Internal mutations (callable from Convex actions, skip auth checks) ---
 
 export const setPipelineStepInternal = internalMutation({
@@ -264,5 +281,14 @@ export const resetPlotInternal = internalMutation({
       pipelineStep: undefined,
       pipelineMultiViewUrl: undefined,
     });
+  },
+});
+
+/** Count plots currently in "generating" status (ground-truth active build count). */
+export const countGenerating = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const plots = await ctx.db.query("plots").collect();
+    return plots.filter((p) => p.status === "generating").length;
   },
 });

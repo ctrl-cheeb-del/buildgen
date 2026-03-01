@@ -14,4 +14,6 @@ export interface SceneLayer {
   getCanvas(): HTMLCanvasElement;
   /** Enable/disable OrbitControls (used by car mode) */
   setControlsEnabled(enabled: boolean): void;
+  /** Smooth camera fly to a world-space XZ position */
+  flyTo(x: number, z: number, duration?: number): void;
 }

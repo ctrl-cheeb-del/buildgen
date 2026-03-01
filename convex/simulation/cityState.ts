@@ -48,6 +48,7 @@ export const create = internalMutation({
       totalTicks: 0,
       lastTickAt: Date.now(),
       isRunning: false,
+      simMode: "overnight",
       activeBuildCount: 0,
     });
   },

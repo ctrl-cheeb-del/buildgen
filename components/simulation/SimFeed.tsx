@@ -67,7 +67,7 @@ function AgentTooltip({
         <div className="text-center">
           <div className="text-[9px] text-white/35">Wealth</div>
           <div className="text-[11px] font-bold text-amber-300">
-            {agent.wealth}g
+            ${agent.wealth}
           </div>
         </div>
         <div className="text-center">
@@ -151,7 +151,7 @@ function FeedItem({
           {msg.senderName}
         </span>
         <span className="text-[9px] text-white/20 font-mono">
-          T{msg.tickNumber}
+          Week {Math.max(1, Math.ceil(msg.tickNumber / 12))}
         </span>
       </div>
 
@@ -233,7 +233,7 @@ export default function SimFeed({
   const currentTick = city?.totalTicks ?? 0;
   const messages = useQuery(
     api.simulation.agentMessages.getRecent,
-    currentTick > 0 ? { afterTick: Math.max(0, currentTick - 20) } : "skip"
+    city ? { afterTick: Math.max(0, currentTick - 20) } : "skip"
   );
   const agents = useQuery(api.simulation.agents.getAll);
 

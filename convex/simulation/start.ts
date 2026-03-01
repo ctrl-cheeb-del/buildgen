@@ -18,9 +18,10 @@ export const run = internalAction({
       isRunning: true,
     });
 
-    // Schedule first tick
-    await ctx.scheduler.runAfter(1000, internal.simulation.tick.run, {});
-    console.log("[start] Simulation started, first tick in 1s");
+    // Schedule both tick chains
+    await ctx.scheduler.runAfter(1000, internal.simulation.tick.run, {});       // city tick
+    await ctx.scheduler.runAfter(2000, internal.simulation.agentTick.run, {});  // agent tick
+    console.log("[start] Simulation started, city tick in 1s, agent tick in 2s");
     return { status: "started" };
   },
 });

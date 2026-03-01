@@ -4,7 +4,6 @@ import { v } from "convex/values";
 import { action, internalAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import Replicate from "replicate";
-import { Mistral } from "@mistralai/mistralai";
 import {
   BedrockRuntimeClient,
   InvokeModelCommand,
@@ -222,33 +221,6 @@ async function callOpenRouter(
   return text;
 }
 
-async function callMistralDirect(
-  prompt: string,
-  imagesBase64: string[]
-): Promise<string> {
-  const mistral = new Mistral({ apiKey: process.env.MISTRAL_API_KEY });
-
-  const imageContent = imagesBase64.map((img) => ({
-    type: "image_url" as const,
-    imageUrl: `data:image/png;base64,${img}`,
-  }));
-
-  const response = await mistral.chat.complete({
-    model: "mistral-large-latest",
-    messages: [
-      {
-        role: "user",
-        content: [...imageContent, { type: "text" as const, text: prompt }],
-      },
-    ],
-  });
-
-  const text = response?.choices?.[0]?.message?.content;
-  if (!text || typeof text !== "string")
-    throw new Error("Mistral returned no content");
-  return text;
-}
-
 function getLLMProviders(): LLMProvider[] {
   return [
     {
@@ -257,18 +229,9 @@ function getLLMProviders(): LLMProvider[] {
         callBedrock("us.anthropic.claude-opus-4-6-v1", prompt, imgs),
     },
     {
-      name: "Bedrock (Claude Opus 4.6 InvokeModel)",
-      call: (prompt, imgs) =>
-        callBedrock("us.anthropic.claude-opus-4-6-v1", prompt, imgs),
-    },
-    {
       name: "OpenRouter (Claude Opus 4.6)",
       call: (prompt, imgs) =>
         callOpenRouter("anthropic/claude-opus-4-6", prompt, imgs),
-    },
-    {
-      name: "Mistral (direct)",
-      call: (prompt, imgs) => callMistralDirect(prompt, imgs),
     },
     {
       name: "OpenRouter (Mistral Large)",
@@ -539,7 +502,7 @@ export const generateBuilding = action({
 
 /**
  * Takes existing procedural geometry code and adapts it for a new building description
- * using a lightweight LLM call (Sonnet instead of Opus).
+ * using Bedrock Claude Opus 4.6 (text-only, no images needed).
  */
 async function adaptExistingCode(
   proceduralCode: string,
@@ -563,13 +526,13 @@ Existing code:
 ${proceduralCode}
 \`\`\``;
 
-  const text = await callMistralDirect(adaptPrompt, []);
+  const text = await callBedrock("us.anthropic.claude-opus-4-6-v1", adaptPrompt, []);
 
   // Extract code — handle both fenced and raw responses
   const codeMatch = text.match(/```(?:javascript|js)?\s*\n([\s\S]*?)```/);
   const code = codeMatch ? codeMatch[1].trim() : text.trim();
   if (!code) throw new Error("Adaptation returned no usable geometry code");
 
-  console.log(`[Pipeline] Adapted code (${code.length} chars)`);
+  console.log(`[Pipeline] Adapted code via Bedrock (${code.length} chars)`);
   return code;
 }

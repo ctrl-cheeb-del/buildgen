@@ -21,6 +21,8 @@ import MetricsBar from "@/components/simulation/MetricsBar";
 import SimFeed from "@/components/simulation/SimFeed";
 import AgentDetailPanel from "@/components/simulation/AgentDetailPanel";
 import SimControls from "@/components/simulation/SimControls";
+import ReplayTimeline from "@/components/simulation/ReplayTimeline";
+import ReplayPlayback from "@/components/simulation/ReplayPlayback";
 import { useFPStore } from "@/lib/stores/fp-store";
 import { useCarStore } from "@/lib/stores/car-store";
 import { useBoatStore } from "@/lib/stores/boat-store";
@@ -439,10 +441,6 @@ export default function Home() {
     ? myBuildings?.find((b) => (b._id as string) === selectedId)
     : null;
 
-  // Generation complete when plot transitions from generating to occupied
-  const generationComplete =
-    plotStatus === "occupied" && prevPlotStatus.current === "generating";
-
   const captureScreenshotsForCode = useCallback(
     (code: string): WorkbenchScreenshots => {
       const viewer = iterationViewerRef.current;
@@ -559,6 +557,82 @@ export default function Home() {
   // Agent detail panel
   const [selectedAgentPlot, setSelectedAgentPlot] = useState<number | null>(null);
 
+  // Fly camera to agent's plot when clicking in feed
+  const handleAgentClick = useCallback(
+    (plotIndex: number) => {
+      if (!layer) return;
+      const { col, row } = gridIndexToColRow(plotIndex);
+      const [mx, mz] = plotCenterMeters(col, row);
+      layer.flyTo(mx, mz);
+    },
+    [layer]
+  );
+
+  // Sim visibility toggle (sim always runs, just show/hide UI)
+  const [simVisible, setSimVisible] = useState(true);
+
+  // Replay state
+  const city = useQuery(api.simulation.cityState.get);
+  const liveLastSeenTick = myPlot?.lastSeenTick ?? 0;
+  const currentTick = city?.totalTicks ?? 0;
+  const [replayDismissed, setReplayDismissed] = useState(false);
+  const [watchingReplay, setWatchingReplay] = useState(false);
+  const updateLastSeenTick = useMutation(api.plots.updateLastSeenTick);
+
+  // Snapshot lastSeenTick on first load to prevent the updateLastSeenTick
+  // effect from overwriting it before the replay UI can render.
+  const initialLastSeenTickRef = useRef<number | null>(null);
+  if (initialLastSeenTickRef.current === null && liveLastSeenTick > 0) {
+    initialLastSeenTickRef.current = liveLastSeenTick;
+  }
+  const snapshotLastSeenTick = initialLastSeenTickRef.current ?? 0;
+  const showReplay = isSignedIn && snapshotLastSeenTick > 0 && currentTick > snapshotLastSeenTick + 2;
+
+  // Sim mode switching: live when authenticated user is on page.
+  // Uses setTimeout(0) in cleanup to guard against React strict-mode:
+  // strict mode synchronously unmounts+remounts, so the re-mount cancels
+  // the pending overnight switch, keeping the sim in "live" mode.
+  const setSimMode = useMutation(api.simulation.control.setSimMode);
+  const simModeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (simModeTimeoutRef.current !== null) {
+      clearTimeout(simModeTimeoutRef.current);
+      simModeTimeoutRef.current = null;
+    }
+    if (isSignedIn) {
+      setSimMode({ mode: "live" }).catch(() => {});
+    }
+    return () => {
+      simModeTimeoutRef.current = setTimeout(() => {
+        if (isSignedIn) {
+          setSimMode({ mode: "overnight" }).catch(() => {});
+        }
+      }, 0);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSignedIn]);
+
+  // Persist lastSeenTick periodically while user is on page.
+  // Skip while replay is pending so the snapshot isn't overwritten.
+  const lastSavedTickRef = useRef(0);
+  useEffect(() => {
+    if (showReplay && !replayDismissed) return;
+    if (currentTick > 0 && currentTick > lastSavedTickRef.current) {
+      lastSavedTickRef.current = currentTick;
+      updateLastSeenTick({ tick: currentTick }).catch(() => {});
+    }
+  }, [currentTick, updateLastSeenTick, showReplay, replayDismissed]);
+
+  const handleReplayDismiss = useCallback(async () => {
+    setReplayDismissed(true);
+    setWatchingReplay(false);
+    // Reset the snapshot so future page returns can detect new ticks
+    initialLastSeenTickRef.current = null;
+    if (currentTick > 0) {
+      await updateLastSeenTick({ tick: currentTick });
+    }
+  }, [currentTick, updateLastSeenTick]);
+
   return (
     <div className="relative w-screen h-screen overflow-hidden">
       <ThreeMapCanvas />
@@ -584,14 +658,38 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Simulation UI */}
-      {!fpMode && <MetricsBar />}
-      {!fpMode && <SimFeed onAgentClick={setSelectedAgentPlot} />}
-      {!fpMode && <SimControls />}
-      <AgentDetailPanel
-        plotIndex={selectedAgentPlot}
-        onClose={() => setSelectedAgentPlot(null)}
-      />
+      {/* Simulation UI — always-visible controls + togglable details */}
+      {!fpMode && (
+        <SimControls
+          simVisible={simVisible}
+          onToggleSimVisible={() => setSimVisible((v) => !v)}
+        />
+      )}
+      {!fpMode && simVisible && <MetricsBar />}
+      {!fpMode && simVisible && <SimFeed onAgentClick={handleAgentClick} />}
+      {simVisible && selectedAgentPlot !== null && (
+        <AgentDetailPanel
+          plotIndex={selectedAgentPlot}
+          onClose={() => setSelectedAgentPlot(null)}
+        />
+      )}
+
+      {/* Replay system */}
+      {showReplay && !replayDismissed && !watchingReplay && (
+        <ReplayTimeline
+          lastSeenTick={snapshotLastSeenTick}
+          currentTick={currentTick}
+          onWatchReplay={() => setWatchingReplay(true)}
+          onDismiss={handleReplayDismiss}
+        />
+      )}
+      {watchingReplay && (
+        <ReplayPlayback
+          lastSeenTick={snapshotLastSeenTick}
+          currentTick={currentTick}
+          onComplete={handleReplayDismiss}
+        />
+      )}
 
       {/* Top-right: Auth + Settings gear */}
       {!fpMode && (

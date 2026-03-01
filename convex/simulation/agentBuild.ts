@@ -10,6 +10,44 @@ import {
   InvokeModelCommand,
 } from "@aws-sdk/client-bedrock-runtime";
 import { Mistral } from "@mistralai/mistralai";
+import { withRetry } from "./mistral_retry";
+
+/**
+ * Call Bedrock Claude for text-only prompts (no images).
+ * Reuses the same BedrockRuntimeClient + InvokeModelCommand pattern as the
+ * image-based call at line ~203, but without image content blocks.
+ */
+async function callBedrockText(
+  prompt: string,
+  maxTokens = 8192,
+): Promise<string> {
+  const client = new BedrockRuntimeClient({
+    region: process.env.AWS_DEFAULT_REGION || "us-west-2",
+    credentials: {
+      accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
+      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+      sessionToken: process.env.AWS_SESSION_TOKEN,
+    },
+  });
+
+  const body = JSON.stringify({
+    anthropic_version: "bedrock-2023-05-31",
+    max_tokens: maxTokens,
+    messages: [{ role: "user", content: [{ type: "text", text: prompt }] }],
+  });
+
+  const command = new InvokeModelCommand({
+    modelId: "us.anthropic.claude-opus-4-6-v1",
+    contentType: "application/json",
+    body: new TextEncoder().encode(body),
+  });
+
+  const response = await client.send(command);
+  const result = JSON.parse(new TextDecoder().decode(response.body));
+  const text: string | undefined = result.content?.[0]?.text;
+  if (!text) throw new Error("Bedrock Claude Opus 4.6 returned no content");
+  return text;
+}
 
 /**
  * Agent building action: reuses the existing pipeline.generateBuilding logic
@@ -21,8 +59,10 @@ export const run = internalAction({
     agentName: v.string(),
     buildDescription: v.string(),
     category: v.string(),
+    tickNumber: v.optional(v.number()),
+    skipReuse: v.optional(v.boolean()),
   },
-  handler: async (ctx, { plotIndex, agentName, buildDescription, category }) => {
+  handler: async (ctx, { plotIndex, agentName, buildDescription, category, tickNumber, skipReuse }) => {
     console.log(`[agentBuild] ${agentName} building "${buildDescription}" on plot #${plotIndex}`);
 
     /** Check if simulation was stopped — abort early if so. */
@@ -66,6 +106,7 @@ export const run = internalAction({
           prompt: buildDescription,
           proceduralCode: finalCode,
           multiViewGrid: undefined,
+          createdAtTick: tickNumber,
         });
 
         await ctx.runMutation(internal.plots.resetPlotInternal, { plotIndex });
@@ -263,6 +304,14 @@ Generate the code now for "${buildDescription}".`;
       if (!code) throw new Error("LLM returned no usable geometry code");
       console.log(`[agentBuild] Got geometry code (${code.length} chars)`);
 
+      // 5.5. Evaluate + optionally improve (non-fatal — use raw code on failure)
+      let evaluatedCode = code;
+      try {
+        evaluatedCode = await evaluateAndImprove(code, buildDescription);
+      } catch (evalErr) {
+        console.warn(`[agentBuild] Eval/improve failed, using raw code:`, evalErr);
+      }
+
       // ── Checkpoint: abort before writing building to DB
       if (await shouldAbort()) {
         console.log(`[agentBuild] Sim stopped, aborting "${buildDescription}" before save`);
@@ -276,8 +325,9 @@ Generate the code now for "${buildDescription}".`;
         plotIndex,
         ownerId: `agent:${agentName}`,
         prompt: buildDescription,
-        proceduralCode: code,
+        proceduralCode: evaluatedCode,
         multiViewGrid: gridUrl ?? undefined,
+        createdAtTick: tickNumber,
       });
 
       // 7. Mark plot back to claimed (not occupied) so more buildings can be added
@@ -305,8 +355,126 @@ Generate the code now for "${buildDescription}".`;
 });
 
 /**
+ * Evaluate generated code quality with Mistral Small (cheap scoring),
+ * improve with Bedrock Claude Opus 4.6 if needed.
+ * Returns the best code after up to 2 improvement iterations.
+ */
+async function evaluateAndImprove(
+  code: string,
+  buildDescription: string,
+): Promise<string> {
+  const mistral = new Mistral({ apiKey: process.env.MISTRAL_API_KEY });
+  let currentCode = code;
+
+  for (let i = 0; i < 3; i++) {
+    // Delay between eval iterations to spread API calls
+    if (i > 0) {
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+    const score = await withRetry(
+      () => evaluateAgentBuildCode(mistral, currentCode, buildDescription),
+      "eval-build",
+    );
+    console.log(`[agentBuild] Eval iteration ${i + 1}: score ${score}/10`);
+
+    if (score >= 7.0) {
+      console.log(`[agentBuild] Code quality sufficient (${score} >= 7.0), done.`);
+      return currentCode;
+    }
+
+    console.log(`[agentBuild] Score ${score} < 7.0, improving via Bedrock Claude Opus 4.6...`);
+    currentCode = await improveAgentBuildCode(currentCode, buildDescription, score);
+  }
+
+  return currentCode;
+}
+
+async function evaluateAgentBuildCode(
+  mistral: Mistral,
+  code: string,
+  buildDescription: string,
+): Promise<number> {
+  const prompt = `Score this Three.js procedural building code on a scale of 0-10 for a "${buildDescription}".
+
+Criteria:
+- Architectural accuracy (does it look like the described building?)
+- Code correctness (valid Three.js, no errors)
+- Visual quality (detail level, proportions, materials)
+- Scale appropriateness (reasonable real-world dimensions)
+
+Code:
+\`\`\`javascript
+${code.slice(0, 3000)}
+\`\`\`
+
+Reply with ONLY a JSON object: {"score": N, "reason": "brief explanation"}`;
+
+  try {
+    const response = await mistral.chat.complete({
+      model: "mistral-small-latest",
+      messages: [{ role: "user", content: prompt }],
+      maxTokens: 100,
+      temperature: 0.3,
+    });
+
+    const text = response?.choices?.[0]?.message?.content;
+    if (!text || typeof text !== "string") return 5.0;
+
+    const match = text.match(/\{[\s\S]*\}/);
+    if (!match) return 5.0;
+
+    const parsed = JSON.parse(match[0]);
+    const score = Number(parsed.score);
+    return isNaN(score) ? 5.0 : Math.max(0, Math.min(10, score));
+  } catch {
+    return 5.0;
+  }
+}
+
+async function improveAgentBuildCode(
+  code: string,
+  buildDescription: string,
+  currentScore: number,
+): Promise<string> {
+  const prompt = `This Three.js building code for a "${buildDescription}" scored ${currentScore}/10.
+Improve it to score higher. Focus on:
+- Adding architectural details (windows, doors, roof features)
+- Fixing proportions and scale
+- Better material choices
+- More realistic geometry
+
+Current code:
+\`\`\`javascript
+${code}
+\`\`\`
+
+Return ONLY the improved JavaScript function body (no markdown fences, no explanation).
+The code must create a THREE.Group and return it.`;
+
+  try {
+    const text = await callBedrockText(prompt, 8192);
+
+    const codeMatch = text.match(/```(?:javascript|js)?\s*\n([\s\S]*?)```/);
+    const improved = codeMatch ? codeMatch[1].trim() : text.trim();
+    if (!improved || improved.length < 50) return code;
+
+    // Validate: must contain THREE.Group and return statement
+    if (!improved.includes("THREE.Group") || !improved.includes("return")) {
+      console.warn(`[agentBuild] Improved code missing THREE.Group or return, keeping original`);
+      return code;
+    }
+
+    console.log(`[agentBuild] Improved code via Bedrock (${improved.length} chars)`);
+    return improved;
+  } catch (err) {
+    console.warn(`[agentBuild] Bedrock improve failed, keeping original:`, err);
+    return code;
+  }
+}
+
+/**
  * Takes existing procedural geometry code and adapts it for a new building description
- * using a lightweight LLM call (Sonnet instead of Opus).
+ * using Bedrock Claude Opus 4.6 (text-only, no images needed).
  */
 async function adaptExistingCode(
   proceduralCode: string,
@@ -330,21 +498,19 @@ Existing code:
 ${proceduralCode}
 \`\`\``;
 
-  const mistral = new Mistral({ apiKey: process.env.MISTRAL_API_KEY });
-  const response = await mistral.chat.complete({
-    model: "mistral-large-latest",
-    messages: [{ role: "user", content: adaptPrompt }],
-  });
-
-  const text = response?.choices?.[0]?.message?.content;
-  if (!text || typeof text !== "string")
-    throw new Error("Mistral returned no content for code adaptation");
+  const text = await callBedrockText(adaptPrompt, 8192);
 
   // Extract code — handle both fenced and raw responses
   const codeMatch = text.match(/```(?:javascript|js)?\s*\n([\s\S]*?)```/);
   const code = codeMatch ? codeMatch[1].trim() : text.trim();
   if (!code) throw new Error("Adaptation returned no usable geometry code");
 
-  console.log(`[agentBuild] Adapted code (${code.length} chars)`);
+  // Validate: must contain THREE.Group and return statement
+  if (!code.includes("THREE.Group") || !code.includes("return")) {
+    console.warn(`[agentBuild] Adapted code missing THREE.Group or return, using original`);
+    return proceduralCode;
+  }
+
+  console.log(`[agentBuild] Adapted code via Bedrock (${code.length} chars)`);
   return code;
 }

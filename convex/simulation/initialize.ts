@@ -1,9 +1,9 @@
 "use node";
 
-import { v } from "convex/values";
 import { internalAction } from "../_generated/server";
 import { internal } from "../_generated/api";
 import { Mistral } from "@mistralai/mistralai";
+import { withRetry } from "./mistral_retry";
 
 const AGENT_NAMES: string[] = [
   "Ada Ironwright", "Barnaby Soot", "Cecilia Windmere", "Dmitri Brassov",
@@ -46,16 +46,19 @@ async function generateBackstory(
   traits: string[]
 ): Promise<string> {
   try {
-    const response = await mistral.chat.complete({
-      model: "mistral-small-latest",
-      messages: [
-        {
-          role: "user",
-          content: `Write exactly one sentence (max 30 words) as a backstory for a city simulation citizen named ${name} who is ${traits.join(", ")}. Be creative and specific. No quotes around it.`,
-        },
-      ],
-      maxTokens: 60,
-    });
+    const response = await withRetry(
+      () => mistral.chat.complete({
+        model: "mistral-small-latest",
+        messages: [
+          {
+            role: "user",
+            content: `Write exactly one sentence (max 30 words) as a backstory for a city simulation citizen named ${name} who is ${traits.join(", ")}. Be creative and specific. No quotes around it.`,
+          },
+        ],
+        maxTokens: 60,
+      }),
+      `backstory:${name}`,
+    );
     const text = response?.choices?.[0]?.message?.content;
     if (typeof text === "string" && text.trim().length > 0) return text.trim();
   } catch (e) {
@@ -84,14 +87,16 @@ export const run = internalAction({
     }
     const selectedPlots = shuffle(allPlots).slice(0, 40);
 
-    // Generate agents in batches of 8 to avoid rate limits
+    // Generate agents in batches of 4 to avoid rate limits
+    const BATCH_SIZE = 4;
     const agentIds: string[] = [];
     let mayorIdx = -1;
     let mayorId: string | null = null;
+    const initNow = Date.now();
 
-    for (let batch = 0; batch < 5; batch++) {
-      const batchStart = batch * 8;
-      const batchAgents = selectedPlots.slice(batchStart, batchStart + 8);
+    for (let batch = 0; batch < Math.ceil(40 / BATCH_SIZE); batch++) {
+      const batchStart = batch * BATCH_SIZE;
+      const batchAgents = selectedPlots.slice(batchStart, batchStart + BATCH_SIZE);
 
       const backstories = await Promise.all(
         batchAgents.map((plot, i) => {
@@ -122,6 +127,7 @@ export const run = internalAction({
           wealth: 500 + Math.floor(Math.random() * 500),
           satisfaction: 40 + Math.floor(Math.random() * 30),
           loyaltyToMayor: Math.floor(Math.random() * 40) - 10,
+          nextActionAt: initNow + Math.floor(Math.random() * 60000),
         });
         agentIds.push(id);
 
@@ -130,6 +136,11 @@ export const run = internalAction({
           plotIndex: plot.index,
           agentName: name,
         });
+      }
+
+      // Delay between batches to respect rate limits
+      if (batchStart + BATCH_SIZE < 40) {
+        await new Promise((r) => setTimeout(r, 2000));
       }
     }
 
@@ -158,7 +169,30 @@ export const run = internalAction({
       mayorTerm: 20,
     });
 
-    console.log(`[init] Created ${agentIds.length} agents, mayor: ${AGENT_NAMES[mayorIdx]}`);
-    return { status: "initialized", agents: agentIds.length, mayor: AGENT_NAMES[mayorIdx] };
+    // Welcome messages at tick 0 for the kingdom feed
+    const mayorName = AGENT_NAMES[mayorIdx];
+    await ctx.runMutation(internal.simulation.agentMessages.create, {
+      senderPlotIndex: selectedPlots[mayorIdx].index,
+      senderName: mayorName,
+      content: `I, ${mayorName}, hereby declare KingdomCity founded! Long may it prosper!`,
+      messageType: "announcement" as const,
+      tickNumber: 0,
+    });
+
+    // Welcome messages for a few citizens
+    const welcomeCount = Math.min(5, agentIds.length);
+    for (let i = 0; i < welcomeCount; i++) {
+      if (i === mayorIdx) continue;
+      await ctx.runMutation(internal.simulation.agentMessages.create, {
+        senderPlotIndex: selectedPlots[i].index,
+        senderName: AGENT_NAMES[i],
+        content: `I've arrived in KingdomCity! Ready to build on plot #${selectedPlots[i].index}.`,
+        messageType: "chat" as const,
+        tickNumber: 0,
+      });
+    }
+
+    console.log(`[init] Created ${agentIds.length} agents, mayor: ${mayorName}`);
+    return { status: "initialized", agents: agentIds.length, mayor: mayorName };
   },
 });

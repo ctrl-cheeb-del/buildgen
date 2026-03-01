@@ -70,6 +70,15 @@ export const liquidateBuilding = internalMutation({
       await ctx.db.delete(building._id);
     }
 
+    // Decrement active build count (matches onBuildComplete/onBuildFailed pattern)
+    const allCity = await ctx.db.query("cityState").collect();
+    const city = allCity[0];
+    if (city) {
+      await ctx.db.patch(city._id, {
+        activeBuildCount: Math.max(0, city.activeBuildCount - 1),
+      });
+    }
+
     // Reset plot to "claimed" (agent still owns the empty land)
     const plots = await ctx.db
       .query("plots")

@@ -27,6 +27,48 @@ interface MergeBucket {
 }
 
 /**
+ * Compute the intersection of attribute names across all geometries and
+ * strip any attributes that are not present in every geometry or have
+ * inconsistent `itemSize`.  This prevents `mergeGeometries()` from
+ * throwing on mismatched attribute sets (common with LLM-generated code
+ * where some meshes have `uv` and others don't).
+ */
+function normalizeAttributes(geometries: THREE.BufferGeometry[]): void {
+  if (geometries.length <= 1) return;
+
+  // Build a map: attrName → Set of itemSizes seen across all geometries
+  const attrSizes = new Map<string, Set<number>>();
+  const attrCounts = new Map<string, number>();
+
+  for (const geo of geometries) {
+    for (const name of Object.keys(geo.attributes)) {
+      const attr = geo.getAttribute(name);
+      if (!attr) continue;
+      if (!attrSizes.has(name)) attrSizes.set(name, new Set());
+      attrSizes.get(name)!.add(attr.itemSize);
+      attrCounts.set(name, (attrCounts.get(name) ?? 0) + 1);
+    }
+  }
+
+  // Keep only attributes present in ALL geometries with a single consistent itemSize
+  const validAttrs = new Set<string>();
+  for (const [name, sizes] of attrSizes) {
+    if (attrCounts.get(name) === geometries.length && sizes.size === 1) {
+      validAttrs.add(name);
+    }
+  }
+
+  // Strip non-universal attributes
+  for (const geo of geometries) {
+    for (const name of Object.keys(geo.attributes)) {
+      if (!validAttrs.has(name)) {
+        geo.deleteAttribute(name);
+      }
+    }
+  }
+}
+
+/**
  * Merge child meshes of a building group by material key.
  * Reduces draw calls from ~5-30 per building down to ~1-5.
  *
@@ -112,9 +154,19 @@ export function mergeBuildingGeometry(group: THREE.Group): void {
     if (bucket.geometries.length === 1) {
       mergedGeo = bucket.geometries[0];
     } else {
-      mergedGeo = mergeGeometries(bucket.geometries, false);
-      // Dispose cloned source geometries
-      for (const g of bucket.geometries) g.dispose();
+      // Normalize attributes so all geometries share the same set
+      normalizeAttributes(bucket.geometries);
+
+      try {
+        mergedGeo = mergeGeometries(bucket.geometries, false);
+      } catch (e) {
+        console.warn("[building-merge] mergeGeometries() failed, using first geometry as fallback:", e);
+        mergedGeo = bucket.geometries[0];
+      }
+      // Dispose cloned source geometries (skip [0] if it became our fallback)
+      for (let gi = mergedGeo === bucket.geometries[0] ? 1 : 0; gi < bucket.geometries.length; gi++) {
+        bucket.geometries[gi].dispose();
+      }
     }
 
     if (!mergedGeo) continue;

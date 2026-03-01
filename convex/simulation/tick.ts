@@ -4,54 +4,8 @@ import { v } from "convex/values";
 import { internalAction } from "../_generated/server";
 import { internal } from "../_generated/api";
 import { Mistral } from "@mistralai/mistralai";
-
-// ── Types ────────────────────────────────────────────────────────────
-
-interface AgentDoc {
-  _id: string;
-  plotIndex: number;
-  name: string;
-  role: "mayor" | "citizen";
-  personality: string;
-  traits: string[];
-  wealth: number;
-  satisfaction: number;
-  loyaltyToMayor: number;
-  buildingCategory?: string | null;
-  lastAction?: string | null;
-  lastActionTick?: number | null;
-  memoryBuffer: string[];
-  isActive: boolean;
-}
-
-interface CityStateDoc {
-  _id: string;
-  treasury: number;
-  happiness: number;
-  approvalRating: number;
-  population: number;
-  crimeRate: number;
-  pollutionLevel: number;
-  educationLevel: number;
-  healthLevel: number;
-  taxRates: { residential: number; commercial: number; industrial: number; luxury: number };
-  budgetAllocation: { education: number; healthcare: number; security: number; infrastructure: number };
-  currentMayorId?: string;
-  mayorTerm: number;
-  totalTicks: number;
-  lastTickAt: number;
-  isRunning: boolean;
-  activeBuildCount: number;
-  consecutiveBankruptTicks?: number;
-  activeDecree?: { title: string; description: string; effect: string; remainingTicks: number } | null;
-}
-
-interface CitizenAction {
-  action: "REQUEST_BUILD" | "PROTEST" | "PETITION" | "PRAISE" | "CHAT" | "IDLE";
-  message: string;
-  target: string;
-  build_description?: string;
-}
+import { withRetry, resetQuotaFlag } from "./mistral_retry";
+import { AgentDoc, CityStateDoc, detectBuildCategory } from "./_agentPrompts";
 
 interface MayorDecision {
   build_approvals: Array<{ agentPlot: number; approved: boolean; reason: string }>;
@@ -68,95 +22,6 @@ function getMistral(): Mistral {
   return new Mistral({ apiKey: process.env.MISTRAL_API_KEY });
 }
 
-function extractJSON(text: string): string {
-  // Try to find JSON in the response, handling markdown code blocks
-  const codeBlockMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (codeBlockMatch) return codeBlockMatch[1].trim();
-  const braceMatch = text.match(/\{[\s\S]*\}/);
-  if (braceMatch) return braceMatch[0];
-  return text;
-}
-
-// ── Citizen prompt ───────────────────────────────────────────────────
-
-function buildCitizenPrompt(agent: AgentDoc, city: CityStateDoc, nearbyActions: string, plotBuildingCount: number): string {
-  const MAX_BUILDINGS_PER_PLOT = 8;
-  const slotsLeft = MAX_BUILDINGS_PER_PLOT - plotBuildingCount;
-  const plotStatus = plotBuildingCount === 0
-    ? "empty land"
-    : `${plotBuildingCount} building${plotBuildingCount > 1 ? "s" : ""} (${slotsLeft} slots free)`;
-
-  return `You are ${agent.name}, a citizen of KingdomCity. You think for yourself.
-
-Your nature: ${agent.traits.join(", ")}.
-Your story: ${agent.personality}
-
-You own plot #${agent.plotIndex}. Your plot has: ${plotStatus}.${plotBuildingCount > 0 ? ` Types: ${agent.buildingCategory ?? "mixed"}.` : ""}
-Each plot can hold up to ${MAX_BUILDINGS_PER_PLOT} buildings arranged around the perimeter.
-Your wealth: ${agent.wealth} gold. Your satisfaction: ${agent.satisfaction}/100.
-
-What you remember:
-${agent.memoryBuffer.length > 0 ? agent.memoryBuffer.map((m) => `- ${m}`).join("\n") : "- Nothing notable yet."}
-
-The city today:
-- Treasury: ${city.treasury} gold, Happiness: ${city.happiness}, Crime: ${city.crimeRate}
-- Tax rates: residential ${Math.round(city.taxRates.residential * 100)}%, commercial ${Math.round(city.taxRates.commercial * 100)}%, industrial ${Math.round(city.taxRates.industrial * 100)}%
-- Mayor's latest decree: "${city.activeDecree?.title ?? "none"}"
-- Builds in progress: ${city.activeBuildCount}/4${city.activeBuildCount >= 4 ? " — FULL! No new builds can start until current ones finish. Building takes a LONG time." : ""}
-- Recent neighbor activity: "${nearbyActions}"
-
-Speak your mind. Be authentic. You can:
-- REQUEST_BUILD: ask the mayor to approve a building (describe what + why)${city.activeBuildCount >= 4 ? "\n  ⚠️ Building capacity is FULL (4/4). DO NOT request a build right now — it will be denied. Do something else instead." : slotsLeft <= 0 ? "\n  ⚠️ Your plot is FULL (8/8 buildings). You cannot build more." : `\n  You have ${slotsLeft} open slot${slotsLeft > 1 ? "s" : ""} on your plot. Think about what would complement your existing buildings!`}
-- PROTEST: publicly voice discontent (say why)
-- PETITION: formally ask the mayor to change something
-- PRAISE: commend something good
-- CHAT: say something to another citizen or the public
-- IDLE: do nothing this turn
-
-Reply ONLY as JSON:
-{
-  "action": "REQUEST_BUILD" | "PROTEST" | "PETITION" | "PRAISE" | "CHAT" | "IDLE",
-  "message": "..." (max 80 chars, this will float above your plot for everyone to see),
-  "target": "mayor" | "public" | "neighbor:{plotIndex}",
-  "build_description": "..." (only if REQUEST_BUILD, e.g. "artisan coffee shop")
-}`;
-}
-
-export async function callCitizenAgent(
-  mistral: Mistral,
-  agent: AgentDoc,
-  city: CityStateDoc,
-  nearbyActions: string,
-  plotBuildingCount: number = 0
-): Promise<CitizenAction> {
-  const prompt = buildCitizenPrompt(agent, city, nearbyActions, plotBuildingCount);
-
-  const response = await mistral.chat.complete({
-    model: "mistral-small-latest",
-    messages: [{ role: "user", content: prompt }],
-    maxTokens: 200,
-    temperature: 0.9,
-  });
-
-  const text = response?.choices?.[0]?.message?.content;
-  if (!text || typeof text !== "string") {
-    return { action: "IDLE", message: "", target: "public" };
-  }
-
-  try {
-    const parsed = JSON.parse(extractJSON(text)) as CitizenAction;
-    // Validate and clamp message
-    const validActions = ["REQUEST_BUILD", "PROTEST", "PETITION", "PRAISE", "CHAT", "IDLE"];
-    if (!validActions.includes(parsed.action)) parsed.action = "IDLE";
-    if (typeof parsed.message !== "string") parsed.message = "";
-    parsed.message = parsed.message.slice(0, 80);
-    if (typeof parsed.target !== "string") parsed.target = "public";
-    return parsed;
-  } catch {
-    return { action: "IDLE", message: "", target: "public" };
-  }
-}
-
 // ── Mayor prompt ─────────────────────────────────────────────────────
 
 function buildMayorPrompt(
@@ -166,22 +31,22 @@ function buildMayorPrompt(
   petitions: string,
   buildRequests: string
 ): string {
-  const slotsAvailable = Math.max(0, 4 - city.activeBuildCount);
+  const isLive = city.simMode === "live";
+  const buildCap = isLive ? 12 : 2;
+  const slotsAvailable = Math.max(0, buildCap - city.activeBuildCount);
   const treasuryWarning = city.treasury < 2000
-    ? `\n⚠️ TREASURY CRITICAL: Only ${city.treasury}g left! Treasury CANNOT go below 0. If expenses exceed income, emergency austerity kicks in. Consider raising taxes or cutting budget.`
+    ? `\n⚠️ TREASURY CRITICAL: Only $${city.treasury} left! Treasury CANNOT go below 0. If expenses exceed income, emergency austerity kicks in. Consider raising taxes or cutting budget.`
     : "";
 
   return `You are King Mistral, ruler of KingdomCity. You have 40 citizens on 40 plots.
 Each plot can hold up to 8 buildings arranged around the perimeter. Citizens can build multiple buildings to develop their plots.
 
 City state:
-- Treasury: ${city.treasury} gold (income: ${income}/tick, expenses: ${expenses}/tick, net: ${income - expenses}/tick)
+- Treasury: $${city.treasury} (income: $${income}/tick, expenses: $${expenses}/tick, net: $${income - expenses}/tick)
 - Happiness: ${city.happiness}/100, Crime: ${city.crimeRate}/100, Pollution: ${city.pollutionLevel}/100
 - Approval rating: ${city.approvalRating}/100
-- Builds in progress: ${city.activeBuildCount}/4 — ${slotsAvailable} slots available
-  IMPORTANT: Each build takes a LONG time (1-3 minutes). Build slots are precious.${city.activeBuildCount >= 4 ? "\n  🚫 ALL BUILD SLOTS FULL. You MUST deny all build requests this tick." : ""}
-  Think strategically: what does the city NEED most? Revenue buildings (commercial, industrial, luxury) or population/happiness (residential, civic, entertainment)?
-  ECONOMICS: Buildings generate base income automatically. Taxes add citizen revenue on top. But maintenance grows QUADRATICALLY — more buildings = exponentially higher costs. You MUST balance growth with fiscal discipline.
+- Builds in progress: ${city.activeBuildCount}/${buildCap} — ${slotsAvailable} slots available${city.activeBuildCount >= buildCap ? "\n  🚫 ALL BUILD SLOTS FULL. You MUST deny all build requests this tick." : isLive ? `\n  🏗️ GROWTH MODE is active! You should approve most build requests — the city thrives when citizens build. Only deny if clearly harmful.` : "\n  Each build takes 1-3 minutes. Build slots are precious. Be selective."}
+  ${isLive ? "Buildings generate income and make citizens happy. More buildings = a thriving city. Be generous with approvals!" : "Think strategically: what does the city NEED most? Revenue buildings (commercial, industrial, luxury) or population/happiness (residential, civic, entertainment)?\n  ECONOMICS: Buildings generate base income automatically. Taxes add citizen revenue on top. But maintenance grows QUADRATICALLY — more buildings = exponentially higher costs. You MUST balance growth with fiscal discipline."}
 - Current tax rates: res ${Math.round(city.taxRates.residential * 100)}%, com ${Math.round(city.taxRates.commercial * 100)}%, ind ${Math.round(city.taxRates.industrial * 100)}%, lux ${Math.round(city.taxRates.luxury * 100)}%
   WARNING: Taxes above 20% trigger tax fatigue (evasion). Above 30% citizens get unhappy. But too low = deficit!
 - Budget: edu ${Math.round(city.budgetAllocation.education * 100)}%, health ${Math.round(city.budgetAllocation.healthcare * 100)}%, security ${Math.round(city.budgetAllocation.security * 100)}%, infra ${Math.round(city.budgetAllocation.infrastructure * 100)}%
@@ -195,7 +60,7 @@ Pending build requests:
 ${buildRequests || "None."}
 
 You must decide:
-1. APPROVE or DENY each build request (you have ${slotsAvailable} slots available — be selective! Prioritize what the city needs most)
+1. APPROVE or DENY each build request (you have ${slotsAvailable} slots available${isLive ? " — approve generously! The city needs rapid growth!" : " — be selective! Prioritize what the city needs most"})
 2. Optionally adjust tax rates (small increments, ±0.02 max per tick) — you NEED revenue from buildings!
 3. Optionally adjust budget allocation
 4. Optionally issue a decree (temporary policy, 5-15 ticks)
@@ -225,8 +90,9 @@ export async function callMayor(
   const response = await mistral.chat.complete({
     model: "mistral-small-latest",
     messages: [{ role: "user", content: prompt }],
-    maxTokens: 400,
+    maxTokens: 800,
     temperature: 0.7,
+    responseFormat: { type: "json_object" },
   });
 
   const text = response?.choices?.[0]?.message?.content;
@@ -242,32 +108,49 @@ export async function callMayor(
   }
 
   try {
-    const parsed = JSON.parse(extractJSON(text)) as MayorDecision;
+    const raw = JSON.parse(text);
 
-    // HARD CAP: enforce 4-build limit in code
-    if (Array.isArray(parsed.build_approvals)) {
-      let remainingSlots = 4 - city.activeBuildCount;
-      for (const approval of parsed.build_approvals) {
-        if (remainingSlots <= 0) {
-          approval.approved = false;
-          approval.reason = "Build queue full (4/4)";
-        } else if (approval.approved) {
-          remainingSlots--;
-        }
-      }
-    } else {
-      parsed.build_approvals = [];
-    }
-
-    // Clamp tax changes to ±0.02
-    if (parsed.tax_changes && typeof parsed.tax_changes === "object") {
-      for (const [key, val] of Object.entries(parsed.tax_changes)) {
-        parsed.tax_changes[key] = Math.max(-0.02, Math.min(0.02, val));
+    // Normalize build_approvals: force correct types
+    const approvals: MayorDecision["build_approvals"] = [];
+    if (Array.isArray(raw.build_approvals)) {
+      for (const a of raw.build_approvals) {
+        approvals.push({
+          agentPlot: Number(a.agentPlot ?? a.agent_plot ?? a.plot ?? 0),
+          approved: a.approved === true || a.approved === "true",
+          reason: String(a.reason ?? ""),
+        });
       }
     }
 
-    if (typeof parsed.public_message !== "string") parsed.public_message = "";
-    parsed.public_message = parsed.public_message.slice(0, 80);
+    // Enforce build cap
+    const isLiveMode = city.simMode === "live";
+    const cap = isLiveMode ? 12 : 4;
+    let remainingSlots = cap - city.activeBuildCount;
+    for (const approval of approvals) {
+      if (remainingSlots <= 0) {
+        approval.approved = false;
+        approval.reason = `Build queue full (${cap}/${cap})`;
+      } else if (approval.approved) {
+        remainingSlots--;
+      }
+    }
+
+    // Normalize tax changes
+    const taxChanges: Record<string, number> | null =
+      raw.tax_changes && typeof raw.tax_changes === "object"
+        ? Object.fromEntries(
+            Object.entries(raw.tax_changes).map(([k, v]) => [k, Math.max(-0.02, Math.min(0.02, Number(v)))])
+          )
+        : null;
+
+    const parsed: MayorDecision = {
+      build_approvals: approvals,
+      tax_changes: taxChanges,
+      budget_changes: raw.budget_changes ?? null,
+      decree: raw.decree ?? null,
+      public_message: String(raw.public_message ?? "").slice(0, 80),
+      mood: String(raw.mood ?? "concerned"),
+    };
 
     return parsed;
   } catch {
@@ -282,19 +165,7 @@ export async function callMayor(
   }
 }
 
-// ── Action-to-message-type mapping ───────────────────────────────────
-
-function actionToMessageType(action: string): "chat" | "petition" | "protest" | "praise" | "announcement" | "build_request" {
-  switch (action) {
-    case "REQUEST_BUILD": return "build_request";
-    case "PROTEST": return "protest";
-    case "PETITION": return "petition";
-    case "PRAISE": return "praise";
-    default: return "chat";
-  }
-}
-
-// ── Main tick engine ─────────────────────────────────────────────────
+// ── Main city tick engine ────────────────────────────────────────────
 
 export const run = internalAction({
   args: {},
@@ -306,11 +177,34 @@ export const run = internalAction({
       return;
     }
 
-    const agents: AgentDoc[] = await ctx.runQuery(internal.simulation.agents.getAllInternal);
     const tickNumber = city.totalTicks + 1;
+
+    // Bootstrap agent tick chain if not running (self-healing after deploy)
+    if (!city.nextAgentTickId) {
+      console.log(`[tick ${tickNumber}] Agent tick chain not running, bootstrapping...`);
+      const agentTickId = await ctx.scheduler.runAfter(2000, internal.simulation.agentTick.run, {});
+      await ctx.runMutation(internal.simulation.cityState.update, {
+        patch: { nextAgentTickId: agentTickId },
+      });
+    }
+
+    try {
+    const agents: AgentDoc[] = await ctx.runQuery(internal.simulation.agents.getAllInternal);
     const mistral = getMistral();
 
-    console.log(`[tick ${tickNumber}] Starting... MISTRAL_API_KEY present: ${!!process.env.MISTRAL_API_KEY}, length: ${process.env.MISTRAL_API_KEY?.length}`);
+    // Reconcile activeBuildCount with ground truth (count "generating" plots).
+    // Prevents permanent drift from missed onBuildComplete/onBuildFailed calls.
+    const actualGenerating: number = await ctx.runQuery(internal.plots.countGenerating, {});
+    if (city.activeBuildCount !== actualGenerating) {
+      console.log(`[tick ${tickNumber}] Reconciling activeBuildCount: ${city.activeBuildCount} → ${actualGenerating}`);
+      await ctx.runMutation(internal.simulation.cityState.update, {
+        patch: { activeBuildCount: actualGenerating },
+      });
+      city.activeBuildCount = actualGenerating;
+    }
+
+    console.log(`[tick ${tickNumber}] Starting...`);
+    resetQuotaFlag(); // fresh chance each tick
 
 
     // Step 2: Compute metrics (pure math — rebalanced economics)
@@ -368,7 +262,7 @@ export const run = internalAction({
     const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
     // ── TREASURY STRESS: when money is low, can't fund services → crime rises ──
-    // Below 5000g treasury, crime starts creeping up. At 0g → +25 crime.
+    // Below $5000 treasury, crime starts creeping up. At $0 → +25 crime.
     const treasuryStress = Math.max(0, 1 - city.treasury / 5000) * 25;
     const crimeRate = clamp(30 + census.industrial * 8 - census.civic * 15 - budget.security * 40 + treasuryStress, 0, 100);
     const pollutionLevel = clamp(10 + census.industrial * 12 + census.commercial * 3 - budget.infrastructure * 20, 0, 100);
@@ -418,87 +312,61 @@ export const run = internalAction({
       0, 100
     );
 
-    // Step 3: Citizen actions (~10 per tick via activity roll)
+    // Step 3: Collect pending build requests from agent docs (set by agentTick)
     const citizens = agents.filter((a) => a.role === "citizen" && a.isActive);
-    const activeThisTick = citizens
-      .filter(() => Math.random() < 0.25) // ~25% chance → ~10 agents
-      .slice(0, 12); // hard cap at 12
+    const isLive = city.simMode === "live";
 
-    const citizenResults: Array<{ agent: AgentDoc; action: CitizenAction }> = [];
-    const buildRequests: Array<{ agent: AgentDoc; action: CitizenAction }> = [];
-    const petitionTexts: string[] = [];
-
-    // Build a map of building count per plot for citizen prompts
+    // Build a map of building count per plot
     const plotBuildingCounts: Record<number, number> = {};
     for (const b of allBuildings) {
       plotBuildingCounts[b.plotIndex] = (plotBuildingCounts[b.plotIndex] ?? 0) + 1;
     }
 
-    if (activeThisTick.length > 0) {
-      const results = await Promise.all(
-        activeThisTick.map(async (agent) => {
-          try {
-            const nearby = citizens
-              .filter((c) => Math.abs(c.plotIndex - agent.plotIndex) <= 8 && c._id !== agent._id)
-              .slice(0, 3)
-              .map((c) => c.lastAction ? `${c.name}: ${c.lastAction}` : `${c.name} is quiet`)
-              .join("; ");
-
-            const action = await callCitizenAgent(mistral, agent, city, nearby || "All quiet", plotBuildingCounts[agent.plotIndex] ?? 0);
-            return { agent, action };
-          } catch (e) {
-            console.error(`[tick ${tickNumber}] Agent ${agent.name} failed:`, e);
-            return { agent, action: { action: "IDLE" as const, message: "", target: "public" } };
-          }
-        })
-      );
-
-      for (const result of results) {
-        citizenResults.push(result);
-
-        if (result.action.action === "REQUEST_BUILD") {
-          const plotCount = plotBuildingCounts[result.agent.plotIndex] ?? 0;
-          if (plotCount >= 8) {
-            // Plot full — convert to chat
-            result.action.action = "CHAT";
-            result.action.message = result.action.message || "My plot is fully developed!";
-          } else if (city.activeBuildCount + buildRequests.length < 4) {
-            buildRequests.push(result);
-          } else {
-            // Capacity full — convert to a chat about waiting
-            result.action.action = "CHAT";
-            result.action.message = result.action.message || "Building capacity is full... we must wait.";
-          }
-        }
-        if (result.action.action === "PROTEST" || result.action.action === "PETITION") {
-          petitionTexts.push(`${result.agent.name} (plot #${result.agent.plotIndex}): ${result.action.message}`);
-        }
-
-        // Store message (skip IDLE with empty message)
-        if (result.action.action !== "IDLE" || result.action.message) {
-          await ctx.runMutation(internal.simulation.agentMessages.create, {
-            senderPlotIndex: result.agent.plotIndex,
-            senderName: result.agent.name,
-            content: result.action.message.slice(0, 80) || `[${result.action.action}]`,
-            messageType: actionToMessageType(result.action.action),
-            tickNumber,
-          });
-        }
+    // Collect pending build requests from agents
+    const buildRequests: Array<{ agent: AgentDoc; buildDescription: string }> = [];
+    for (const agent of citizens) {
+      if (agent.pendingBuildDescription) {
+        buildRequests.push({
+          agent,
+          buildDescription: agent.pendingBuildDescription,
+        });
       }
     }
 
+    // Collect petitions/protests from recent agent messages since last city tick
+    const recentMessages: Array<{
+      senderPlotIndex: number;
+      senderName: string;
+      content: string;
+      messageType: string;
+      tickNumber: number;
+    }> = await ctx.runQuery(internal.simulation.agentMessages.getRecentInternal, {
+      afterTick: Math.max(0, tickNumber - 1),
+    });
+    const petitionTexts: string[] = [];
+    for (const msg of recentMessages) {
+      if (msg.messageType === "petition" || msg.messageType === "protest") {
+        petitionTexts.push(`${msg.senderName} (plot #${msg.senderPlotIndex}): ${msg.content}`);
+      }
+    }
+
+    console.log(`[tick ${tickNumber}] ${buildRequests.length} pending builds, ${petitionTexts.length} petitions`);
+
     // Step 4: Mayor decision
     const buildRequestText = buildRequests
-      .map((r) => `${r.agent.name} (plot #${r.agent.plotIndex}): wants to build "${r.action.build_description}"`)
+      .map((r) => `${r.agent.name} (plot #${r.agent.plotIndex}): wants to build "${r.buildDescription}"`)
       .join("\n");
 
-    const mayorDecision = await callMayor(
-      mistral,
-      city,
-      taxRevenue,
-      totalExpenses,
-      petitionTexts.join("\n"),
-      buildRequestText
+    const mayorDecision = await withRetry(
+      () => callMayor(
+        mistral,
+        city,
+        taxRevenue,
+        totalExpenses,
+        petitionTexts.join("\n"),
+        buildRequestText,
+      ),
+      "mayor",
     );
 
     // Store mayor's public message
@@ -516,40 +384,60 @@ export const run = internalAction({
     // Step 5: Resolve
     // Apply build approvals — fire actual geometry pipeline
     let newBuildsApproved = 0;
-    for (const approval of mayorDecision.build_approvals) {
-      if (approval.approved && city.activeBuildCount + newBuildsApproved < 4) {
-        const req = buildRequests.find((r) => r.agent.plotIndex === approval.agentPlot);
-        if (req && req.action.build_description) {
-          console.log(`[tick ${tickNumber}] BUILD APPROVED: ${req.agent.name} → "${req.action.build_description}"`);
-          newBuildsApproved++;
+    const buildCap = isLive ? 12 : 2;
 
-          // Classify building category via keyword match
-          const desc = req.action.build_description.toLowerCase();
-          let category = "residential";
-          const catKeywords: Record<string, string[]> = {
-            commercial: ["shop", "market", "store", "cafe", "restaurant", "bar", "bakery", "boutique", "pub", "diner", "tavern", "mall"],
-            industrial: ["factory", "warehouse", "plant", "refinery", "forge", "foundry", "mill", "workshop", "smelter"],
-            office: ["office", "tower", "headquarters", "bank", "corporate", "firm"],
-            civic: ["school", "hospital", "police", "library", "fire station", "courthouse", "city hall", "clinic", "church", "temple", "government"],
-            entertainment: ["park", "stadium", "theater", "theatre", "museum", "gallery", "cinema", "arcade", "garden", "zoo", "arena"],
-            luxury: ["mansion", "penthouse", "resort", "spa", "palace", "casino", "yacht"],
-          };
-          for (const [cat, keywords] of Object.entries(catKeywords)) {
-            if (keywords.some((kw) => desc.includes(kw))) {
-              category = cat;
-              break;
-            }
-          }
+    // Debug: log what the mayor returned vs what we have
+    console.log(`[tick ${tickNumber}] Mayor approvals: ${JSON.stringify(mayorDecision.build_approvals)}`);
+    console.log(`[tick ${tickNumber}] Build request plots: [${buildRequests.map(r => r.agent.plotIndex).join(", ")}]`);
 
-          // Fire the build pipeline asynchronously (don't await — it runs in background)
-          ctx.scheduler.runAfter(0, internal.simulation.agentBuild.run, {
-            plotIndex: req.agent.plotIndex,
-            agentName: req.agent.name,
-            buildDescription: req.action.build_description,
-            category,
-          });
-        }
+    // Process build requests — stagger scheduling 3s apart
+    const approvedBuilds: Array<{ agent: AgentDoc; buildDescription: string }> = [];
+
+    if (isLive && buildRequests.length > 0) {
+      // Live mode: approve all build requests directly
+      for (const req of buildRequests) {
+        if (city.activeBuildCount + newBuildsApproved >= buildCap) break;
+        console.log(`[tick ${tickNumber}] BUILD APPROVED (live): ${req.agent.name} → "${req.buildDescription}"`);
+        newBuildsApproved++;
+        approvedBuilds.push(req);
       }
+    }
+
+    if (!isLive && buildRequests.length > 0) {
+      // Overnight mode: random 50% approval, cap at 2
+      const overnightBuildCap = 2;
+      for (const req of buildRequests) {
+        if (city.activeBuildCount + newBuildsApproved >= overnightBuildCap) break;
+        if (Math.random() > 0.5) {
+          console.log(`[tick ${tickNumber}] BUILD DENIED (overnight random): ${req.agent.name}`);
+          continue;
+        }
+        console.log(`[tick ${tickNumber}] BUILD APPROVED (overnight): ${req.agent.name} → "${req.buildDescription}"`);
+        newBuildsApproved++;
+        approvedBuilds.push(req);
+      }
+    }
+
+    // Schedule builds staggered 3s apart
+    for (let i = 0; i < approvedBuilds.length; i++) {
+      const req = approvedBuilds[i];
+      const category = detectBuildCategory(req.buildDescription);
+      ctx.scheduler.runAfter(i * 3000, internal.simulation.agentBuild.run, {
+        plotIndex: req.agent.plotIndex,
+        agentName: req.agent.name,
+        buildDescription: req.buildDescription,
+        category,
+        tickNumber,
+        skipReuse: !isLive ? true : undefined,
+      });
+    }
+
+    // Clear pendingBuildDescription on all agents that had one
+    for (const req of buildRequests) {
+      await ctx.runMutation(internal.simulation.agents.update, {
+        agentId: req.agent._id as any,
+        patch: { pendingBuildDescription: undefined },
+      });
     }
 
     // Apply tax changes
@@ -655,7 +543,7 @@ export const run = internalAction({
           const salePrice = buildingValues[victim.category ?? "residential"] ?? 800;
           newTreasury += salePrice;
 
-          console.log(`[tick ${tickNumber}] FORCED SALE: Building on plot #${victim.plotIndex} sold for ${salePrice}g`);
+          console.log(`[tick ${tickNumber}] FORCED SALE: Building on plot #${victim.plotIndex} sold for $${salePrice}`);
 
           // Delete the building + reset the plot
           await ctx.runMutation(internal.simulation._simBuildHelpers.liquidateBuilding, {
@@ -689,7 +577,7 @@ export const run = internalAction({
             await ctx.runMutation(internal.simulation.agentMessages.create, {
               senderPlotIndex: mayor.plotIndex,
               senderName: mayor.name,
-              content: `Emergency: Sold ${victimAgent?.name ?? "a citizen"}'s ${victim.category ?? "building"} for ${salePrice}g`,
+              content: `Emergency: Sold ${victimAgent?.name ?? "a citizen"}'s ${victim.category ?? "building"} for $${salePrice}`,
               messageType: "announcement" as const,
               tickNumber,
             });
@@ -733,34 +621,31 @@ export const run = internalAction({
       consecutiveBankrupt = 0;
     }
 
-    // Update agents: satisfaction, loyalty, memory
-    for (const result of citizenResults) {
-      const agent = result.agent;
+    // Update ALL active agents: satisfaction, loyalty, memory
+    // Track which agents had builds approved/denied this city tick
+    const approvedPlots = new Set(approvedBuilds.map((r) => r.agent.plotIndex));
+    const deniedPlots = new Set(
+      buildRequests
+        .filter((r) => !approvedBuilds.some((a) => a.agent._id === r.agent._id))
+        .map((r) => r.agent.plotIndex),
+    );
+
+    for (const agent of citizens) {
       const happinessDelta = happiness - city.happiness;
       const newSatisfaction = Math.max(0, Math.min(100,
         agent.satisfaction + happinessDelta * 0.5 + (Math.random() * 6 - 3) - bankruptcyPenalty
       ));
 
-      // Loyalty: petitions responded to → +loyalty, ignored → -loyalty
-      const wasApproved = mayorDecision.build_approvals.some(
-        (a) => a.agentPlot === agent.plotIndex && a.approved
-      );
-      const wasDenied = mayorDecision.build_approvals.some(
-        (a) => a.agentPlot === agent.plotIndex && !a.approved
-      );
       let loyaltyDelta = 0;
-      if (wasApproved) loyaltyDelta += 10;
-      if (wasDenied) loyaltyDelta -= 5;
+      if (approvedPlots.has(agent.plotIndex)) loyaltyDelta += 10;
+      if (deniedPlots.has(agent.plotIndex)) loyaltyDelta -= 5;
       loyaltyDelta += happinessDelta * 0.2;
-      if (consecutiveBankrupt > 0) loyaltyDelta -= consecutiveBankrupt * 3; // blame the mayor
+      if (consecutiveBankrupt > 0) loyaltyDelta -= consecutiveBankrupt * 3;
 
       const newLoyalty = Math.max(-100, Math.min(100, agent.loyaltyToMayor + loyaltyDelta));
 
-      // Memory: add latest observation, keep last 5
+      // Memory: add mayor announcement if any
       const newMemory = [...agent.memoryBuffer];
-      if (result.action.message) {
-        newMemory.push(`Tick ${tickNumber}: I said "${result.action.message}"`);
-      }
       if (mayorDecision.public_message) {
         newMemory.push(`Tick ${tickNumber}: Mayor announced "${mayorDecision.public_message}"`);
       }
@@ -774,8 +659,6 @@ export const run = internalAction({
         patch: {
           satisfaction: Math.round(newSatisfaction),
           loyaltyToMayor: Math.round(newLoyalty),
-          lastAction: result.action.message || result.action.action,
-          lastActionTick: tickNumber,
           memoryBuffer: newMemory,
         },
       });
@@ -811,7 +694,7 @@ export const run = internalAction({
     await ctx.runMutation(internal.simulation._tickLogHelpers.create, {
       tickNumber,
       mayorDecision: JSON.stringify(mayorDecision),
-      agentsActed: citizenResults.length,
+      agentsActed: citizens.length,
       metricsSnapshot: JSON.stringify({
         population, taxRevenue, expenses: totalExpenses, happiness, crimeRate, pollutionLevel,
         consecutiveBankrupt, treasuryDelta: taxRevenue - totalExpenses - crisisTreasuryHit,
@@ -819,15 +702,19 @@ export const run = internalAction({
       }),
     });
 
-    console.log(`[tick ${tickNumber}] Done. ${citizenResults.length} agents acted, ${newBuildsApproved} builds approved. Treasury: ${Math.round(newTreasury)} (income: ${taxRevenue}, expenses: ${totalExpenses}${crisisTreasuryHit ? `, crisis: -${crisisTreasuryHit}` : ""}, inflation: ${inflationMultiplier.toFixed(2)}x)`);
+    console.log(`[tick ${tickNumber}] Done. ${newBuildsApproved} builds approved. Treasury: ${Math.round(newTreasury)} (income: ${taxRevenue}, expenses: ${totalExpenses}${crisisTreasuryHit ? `, crisis: -${crisisTreasuryHit}` : ""}, inflation: ${inflationMultiplier.toFixed(2)}x)`);
 
-    // Step 6: City collapse check
+    // Step 6: City collapse → bailout (sim never stops)
     if (cityCollapsed) {
-      console.log(`[tick ${tickNumber}] SIMULATION ENDED — city collapsed.`);
+      console.log(`[tick ${tickNumber}] CITY BAILOUT — treasury reset to 5000, bankruptcy cleared, activeBuildCount reset, happiness degraded.`);
       await ctx.runMutation(internal.simulation.cityState.update, {
-        patch: { isRunning: false },
+        patch: {
+          treasury: 5000,
+          consecutiveBankruptTicks: 0,
+          activeBuildCount: 0,
+          happiness: Math.max(10, Math.round(happiness) - 20),
+        },
       });
-      return; // Don't schedule next tick
     }
 
     // Step 7: Election check (regular or forced by bankruptcy)
@@ -836,8 +723,23 @@ export const run = internalAction({
       await ctx.runAction(internal.simulation.tick.runElection, { tickNumber });
     }
 
-    // Step 8: Schedule next tick
-    await ctx.scheduler.runAfter(90000, internal.simulation.tick.run, {});
+    } catch (err) {
+      console.error(`[tick ${tickNumber}] CRASHED:`, err);
+      // Update lastTickAt so ensureRunning doesn't double-recover
+      await ctx.runMutation(internal.simulation.cityState.update, {
+        patch: { lastTickAt: Date.now() },
+      });
+    }
+
+    // ALWAYS schedule next city tick — even after a crash
+    const freshCity = await ctx.runQuery(internal.simulation.cityState.getInternal);
+    const currentMode = freshCity?.simMode ?? "overnight";
+    const cityTickInterval = currentMode === "live" ? 10000 : 300000;
+    const nextCityTickId = await ctx.scheduler.runAfter(cityTickInterval, internal.simulation.tick.run, {});
+    // Store the scheduled ID so setSimMode can cancel + reschedule
+    await ctx.runMutation(internal.simulation.cityState.update, {
+      patch: { nextCityTickId },
+    });
   },
 });
 
