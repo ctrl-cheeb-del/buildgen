@@ -7,6 +7,7 @@ export const getAllWithCategory = internalQuery({
     return buildings.map((b) => ({
       _id: b._id as string,
       plotIndex: b.plotIndex,
+      prompt: b.prompt,
       category: b.category,
       ownerId: b.ownerId,
     }));

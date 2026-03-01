@@ -71,19 +71,25 @@ export const run = internalAction({
     const mistral = getMistral();
     resetQuotaFlag();
 
-    // Build a map of building count per plot
+    // Build maps of building count and names per plot
     const allBuildings: Array<{
       _id: string;
       plotIndex: number;
+      prompt: string;
       category?: string;
       ownerId: string;
     }> = await ctx.runQuery(
       internal.simulation._buildingHelpers.getAllWithCategory as any,
     );
     const plotBuildingCounts: Record<number, number> = {};
+    const plotBuildingNames: Record<number, string[]> = {};
     for (const b of allBuildings) {
       plotBuildingCounts[b.plotIndex] =
         (plotBuildingCounts[b.plotIndex] ?? 0) + 1;
+      if (!plotBuildingNames[b.plotIndex]) {
+        plotBuildingNames[b.plotIndex] = [];
+      }
+      plotBuildingNames[b.plotIndex].push(b.prompt);
     }
 
     // Count pending + active builds to enforce queue cap of 12
@@ -120,7 +126,27 @@ export const run = internalAction({
           )
           .join("; ");
 
-        // d. Call Mistral
+        // d. Build nearby buildings map for this agent
+        const GRID_COLS = 8;
+        const agentRow = Math.floor(agent.plotIndex / GRID_COLS);
+        const agentCol = agent.plotIndex % GRID_COLS;
+        const nearbyBuildings: Record<number, string[]> = {};
+        for (let dr = -1; dr <= 1; dr++) {
+          for (let dc = -1; dc <= 1; dc++) {
+            if (dr === 0 && dc === 0) continue;
+            const nr = agentRow + dr;
+            const nc = agentCol + dc;
+            if (nr >= 0 && nr < 10 && nc >= 0 && nc < GRID_COLS) {
+              const neighborIdx = nc + nr * GRID_COLS;
+              const names = plotBuildingNames[neighborIdx];
+              if (names && names.length > 0) {
+                nearbyBuildings[neighborIdx] = names;
+              }
+            }
+          }
+        }
+
+        // e. Call Mistral
         const action = await withRetry(
           () =>
             callCitizenAgent(
@@ -129,6 +155,8 @@ export const run = internalAction({
               city,
               nearby || "All quiet",
               plotBuildingCounts[agent.plotIndex] ?? 0,
+              plotBuildingNames[agent.plotIndex] ?? [],
+              nearbyBuildings,
             ),
           `citizen:${agent.name}`,
         );

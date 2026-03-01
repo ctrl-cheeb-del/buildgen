@@ -86,7 +86,6 @@ export const run = internalAction({
       // 1.5. Check for similar existing buildings to reuse
       const similar = await ctx.runQuery(internal.buildings.searchSimilarBuildings, {
         searchTerm: buildDescription,
-        category,
       });
 
       if (similar) {

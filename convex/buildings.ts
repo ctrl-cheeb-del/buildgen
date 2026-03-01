@@ -111,20 +111,15 @@ export const countByPlot = internalQuery({
 export const searchSimilarBuildings = internalQuery({
   args: {
     searchTerm: v.string(),
-    category: v.optional(v.string()),
   },
-  handler: async (ctx, { searchTerm, category }) => {
-    const q = ctx.db
+  handler: async (ctx, { searchTerm }) => {
+    const results = await ctx.db
       .query("buildings")
-      .withSearchIndex("search_prompt", (search) => {
-        const s = search.search("prompt", searchTerm);
-        if (category) {
-          return s.eq("category", category as any);
-        }
-        return s;
-      });
+      .withSearchIndex("search_prompt", (search) =>
+        search.search("prompt", searchTerm)
+      )
+      .take(1);
 
-    const results = await q.take(1);
     if (results.length === 0) return null;
 
     const match = results[0];

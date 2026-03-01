@@ -85,23 +85,46 @@ export function actionToMessageType(action: string): "chat" | "petition" | "prot
 
 // ── Citizen prompt ───────────────────────────────────────────────────
 
-export function buildCitizenPrompt(agent: AgentDoc, city: CityStateDoc, nearbyActions: string, plotBuildingCount: number): string {
+export function buildCitizenPrompt(
+  agent: AgentDoc,
+  city: CityStateDoc,
+  nearbyActions: string,
+  plotBuildingCount: number,
+  plotBuildingNames: string[] = [],
+  nearbyBuildings: Record<number, string[]> = {},
+): string {
   const MAX_BUILDINGS_PER_PLOT = 8;
   const slotsLeft = MAX_BUILDINGS_PER_PLOT - plotBuildingCount;
-  const plotStatus = plotBuildingCount === 0
-    ? "empty land"
-    : `${plotBuildingCount} building${plotBuildingCount > 1 ? "s" : ""} (${slotsLeft} slots free)`;
   const isLive = city.simMode === "live";
   const buildCap = isLive ? 12 : 2;
+
+  // Build plot status with building names
+  let plotStatus: string;
+  if (plotBuildingNames.length === 0) {
+    plotStatus = "empty land — nothing built yet";
+  } else {
+    plotStatus = `${plotBuildingNames.length} building${plotBuildingNames.length > 1 ? "s" : ""} (${slotsLeft} slots free):\n${plotBuildingNames.map((n) => `    • ${n}`).join("\n")}`;
+  }
+
+  // Build nearby buildings section
+  let nearbyBuildingsSection = "";
+  const nearbyEntries = Object.entries(nearbyBuildings);
+  if (nearbyEntries.length > 0) {
+    const lines = nearbyEntries.map(([plotIdx, names]) =>
+      `  Plot #${plotIdx}: ${names.length > 0 ? names.join(", ") : "empty"}`
+    );
+    nearbyBuildingsSection = `\nNeighboring plots:\n${lines.join("\n")}`;
+  }
 
   return `You are ${agent.name}, a citizen of KingdomCity. You think for yourself.
 
 Your nature: ${agent.traits.join(", ")}.
 Your story: ${agent.personality}
 
-You own plot #${agent.plotIndex}. Your plot has: ${plotStatus}.${plotBuildingCount > 0 ? ` Types: ${agent.buildingCategory ?? "mixed"}.` : ""}
+You own plot #${agent.plotIndex}. Your plot has: ${plotStatus}
 Each plot can hold up to ${MAX_BUILDINGS_PER_PLOT} buildings arranged around the perimeter.
 Your wealth: ${agent.wealth}g (earning ${agent.income ?? 0}g/tick as ${agent.jobType ?? "resident"}). Your satisfaction: ${agent.satisfaction}/100.
+${nearbyBuildingsSection}
 
 What you remember:
 ${agent.memoryBuffer.length > 0 ? agent.memoryBuffer.map((m) => `- ${m}`).join("\n") : "- Nothing notable yet."}
@@ -113,11 +136,18 @@ The city today:
 - Builds in progress: ${city.activeBuildCount}/${buildCap}${city.activeBuildCount >= buildCap ? " — FULL! No new builds can start until current ones finish." : ""}
 - Recent neighbor activity: "${nearbyActions}"
 
-${isLive && slotsLeft > 0 && city.activeBuildCount < buildCap ? `You are EAGER to develop your plot. Your top priority is REQUEST_BUILD — you want to build something amazing!
-If you already have buildings, think about what would complement them. Be creative and specific.
+BUILDING GUIDELINES (if you choose REQUEST_BUILD):
+- DO NOT duplicate buildings already on your plot or nearby plots.
+- Reference real-world architecture: name specific buildings, regional styles, or historical periods.
+  Examples: "Art Deco cinema inspired by the Paramount Theatre", "Brutalist library like the Barbican", "Moroccan riad courtyard house", "Japanese machiya townhouse"
+- Build a distinctive neighborhood — think about what would complement or contrast with what's already there.
+- Be specific, not generic. Instead of "a shop", say "a Victorian-era apothecary with bay windows".
+
+${isLive && slotsLeft > 0 && city.activeBuildCount < buildCap ? `You are EAGER to develop your plot. Your top priority is REQUEST_BUILD — you want to build something amazing and unique!
+Look at what already exists on your plot and nearby — then build something DIFFERENT that creates a distinctive district.
 
 You can:
-- REQUEST_BUILD: ⭐ YOUR TOP PRIORITY — describe what you want to build and why (be creative!)
+- REQUEST_BUILD: ⭐ YOUR TOP PRIORITY — describe a specific, unique building (reference real architecture!)
   You have ${slotsLeft} open slot${slotsLeft > 1 ? "s" : ""} on your plot. BUILD SOMETHING!
 - CHAT: say something to another citizen (only if you truly have nothing to build)
 - PRAISE: commend something good (rare)` : `Speak your mind. Be authentic. You can:
@@ -133,7 +163,7 @@ Reply ONLY as JSON:
   "action": "REQUEST_BUILD" | "PROTEST" | "PETITION" | "PRAISE" | "CHAT" | "IDLE",
   "message": "..." (max 80 chars, this will float above your plot for everyone to see),
   "target": "mayor" | "public" | "neighbor:{plotIndex}",
-  "build_description": "..." (only if REQUEST_BUILD, e.g. "artisan coffee shop")
+  "build_description": "..." (only if REQUEST_BUILD, e.g. "Art Deco cinema inspired by the Paramount Theatre")
 }`;
 }
 
@@ -144,9 +174,11 @@ export async function callCitizenAgent(
   agent: AgentDoc,
   city: CityStateDoc,
   nearbyActions: string,
-  plotBuildingCount: number = 0
+  plotBuildingCount: number = 0,
+  plotBuildingNames: string[] = [],
+  nearbyBuildings: Record<number, string[]> = {},
 ): Promise<CitizenAction> {
-  const prompt = buildCitizenPrompt(agent, city, nearbyActions, plotBuildingCount);
+  const prompt = buildCitizenPrompt(agent, city, nearbyActions, plotBuildingCount, plotBuildingNames, nearbyBuildings);
 
   const response = await mistral.chat.complete({
     model: "mistral-small-latest",
