@@ -59,8 +59,13 @@ function separator() {
 
 export default function MetricsBar() {
   const city = useQuery(api.simulation.cityState.get);
+  const plots = useQuery(api.plots.getPlots);
 
   if (!city) return null;
+
+  const generatingCount =
+    plots?.filter((p) => p.status === "generating").length ?? 0;
+  const buildCap = city.simMode === "live" ? 12 : 2;
 
   return (
     <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 pointer-events-auto">
@@ -78,7 +83,7 @@ export default function MetricsBar() {
         {separator()}
         {badge("Pop", city.population)}
         {separator()}
-        {badge("Builds", `${city.activeBuildCount}/${city.simMode === "live" ? 12 : 4}`)}
+        {badge("Builds", `${generatingCount}/${buildCap}`)}
         {separator()}
         <div className="text-[10px] text-white/40 font-mono px-2 py-0.5">
           Week {Math.max(1, Math.ceil(city.totalTicks / 12))}
