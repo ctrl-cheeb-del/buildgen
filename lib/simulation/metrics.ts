@@ -46,7 +46,7 @@ const BASE_INCOME: Record<BuildingCategory, number> = {
   commercial: 80,
   industrial: 100,
   office: 90,
-  civic: -30,
+  civic: 10,       // was -30 — civic buildings now modestly profitable (they attract residents/tourism)
   entertainment: 50,
   luxury: 120,
 };
@@ -108,13 +108,13 @@ export function computeMetrics(
   const taxRevenue = Math.round(baseIncome) + citizenTaxRevenue;
 
   // ── EXPENSES ──
-  // Base upkeep: citizens need basic services
-  const baseUpkeep = Math.round(population * 0.15);
-  // Service costs: budget allocation * population
+  // Base upkeep: citizens need basic services (reduced from 0.15 — old value bled treasury dry with 0 buildings)
+  const baseUpkeep = Math.round(population * 0.06);
+  // Service costs: budget allocation * population (reduced from 0.3 — was 60g/tick baseline, now ~24g)
   const budgetTotal = budget.education + budget.healthcare + budget.security + budget.infrastructure;
-  const serviceCosts = Math.round(budgetTotal * population * 0.3);
-  // Building maintenance: QUADRATIC — more buildings = exponentially harder to maintain
-  const maintenance = Math.round(totalBuildings * 15 + totalBuildings * totalBuildings * 1.5);
+  const serviceCosts = Math.round(budgetTotal * population * 0.12);
+  // Building maintenance: LINEAR with mild scaling — old quadratic (n²*1.5) was unsustainable past 15 buildings
+  const maintenance = Math.round(totalBuildings * 12 + Math.max(0, totalBuildings - 10) * totalBuildings * 0.3);
   // Inflation: expenses creep up 1% every 10 ticks
   const inflationMultiplier = 1 + Math.floor(tickNumber / 10) * 0.01;
   const expenses = Math.round((baseUpkeep + serviceCosts + maintenance) * inflationMultiplier);
@@ -122,9 +122,9 @@ export function computeMetrics(
   const treasuryDelta = taxRevenue - expenses;
 
   // Treasury stress: when city is broke, can't fund services → crime rises
-  const treasuryStress = Math.max(0, 1 - treasury / 5000) * 25;
+  const treasuryStress = Math.max(0, 1 - treasury / 3000) * 15;
   const crimeRate = clamp(
-    30 + census.industrial * 8 - census.civic * 15 - budget.security * 40 + treasuryStress,
+    12 + census.industrial * 8 - census.civic * 15 - budget.security * 50 + treasuryStress,
     0,
     100
   );

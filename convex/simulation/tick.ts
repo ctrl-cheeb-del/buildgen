@@ -235,7 +235,7 @@ export const run = internalAction({
     // 1. Base building income — economic activity, always flows to treasury
     const baseIncomeMap: Record<string, number> = {
       residential: 40, commercial: 80, industrial: 100, office: 90,
-      civic: -30, entertainment: 50, luxury: 120,
+      civic: 10, entertainment: 50, luxury: 120,
     };
     // Crime penalty: high crime from LAST tick scares away businesses
     // At 100 crime → 50% revenue cut on commercial/office/luxury
@@ -254,10 +254,10 @@ export const run = internalAction({
     const taxRevenue = Math.round(baseIncome) + citizenTaxRevenue;
 
     // ── EXPENSES: population-scaled + QUADRATIC building maintenance + inflation ──
-    const baseUpkeep = Math.round(population * 0.15);
+    const baseUpkeep = Math.round(population * 0.06);
     const budgetTotal = budget.education + budget.healthcare + budget.security + budget.infrastructure;
-    const serviceCosts = Math.round(budgetTotal * population * 0.3);
-    const maintenanceCost = Math.round(totalBuildings * 15 + totalBuildings * totalBuildings * 1.5);
+    const serviceCosts = Math.round(budgetTotal * population * 0.12);
+    const maintenanceCost = Math.round(totalBuildings * 12 + Math.max(0, totalBuildings - 10) * totalBuildings * 0.3);
     const inflationMultiplier = 1 + Math.floor(tickNumber / 10) * 0.01;
     const totalExpenses = Math.round((baseUpkeep + serviceCosts + maintenanceCost) * inflationMultiplier);
 
@@ -265,8 +265,8 @@ export const run = internalAction({
 
     // ── TREASURY STRESS: when money is low, can't fund services → crime rises ──
     // Below $5000 treasury, crime starts creeping up. At $0 → +25 crime.
-    const treasuryStress = Math.max(0, 1 - city.treasury / 5000) * 25;
-    const crimeRate = clamp(30 + census.industrial * 8 - census.civic * 15 - budget.security * 40 + treasuryStress, 0, 100);
+    const treasuryStress = Math.max(0, 1 - city.treasury / 3000) * 15;
+    const crimeRate = clamp(12 + census.industrial * 8 - census.civic * 15 - budget.security * 50 + treasuryStress, 0, 100);
     const pollutionLevel = clamp(10 + census.industrial * 12 + census.commercial * 3 - budget.infrastructure * 20, 0, 100);
     const educationLevel = clamp(20 + census.civic * 10 + budget.education * 60, 0, 100);
     const healthLevel = clamp(20 + census.civic * 8 + budget.healthcare * 60, 0, 100);
@@ -274,34 +274,34 @@ export const run = internalAction({
     // High taxes reduce happiness (citizens feel the burden)
     const taxBurden = avgTaxRate > 0.3 ? (avgTaxRate - 0.3) * 30 : 0;
 
-    // ── RANDOM CRISIS EVENTS (8% chance per tick) ──
+    // ── RANDOM EVENTS (6% chance per tick — 3% negative, 3% positive) ──
     let crisisMessage = "";
     let crisisHappinessMod = 0;
     let crisisTreasuryHit = 0;
     let crisisCrimeMod = 0;
     const crisisRoll = Math.random();
-    if (crisisRoll < 0.02) {
-      // Crime wave — 2% chance
-      crisisCrimeMod = 20;
-      crisisHappinessMod = -10;
+    if (crisisRoll < 0.01) {
+      // Crime wave — 1% chance
+      crisisCrimeMod = 15;
+      crisisHappinessMod = -8;
       crisisMessage = "A crime wave has swept through the city! Citizens live in fear.";
       console.log(`[tick ${tickNumber}] CRISIS: Crime wave!`);
-    } else if (crisisRoll < 0.04) {
-      // Epidemic — 2% chance
-      crisisHappinessMod = -15;
-      crisisTreasuryHit = Math.round(population * 0.5);
+    } else if (crisisRoll < 0.02) {
+      // Epidemic — 1% chance (halved cost from pop*0.5 to pop*0.2)
+      crisisHappinessMod = -10;
+      crisisTreasuryHit = Math.round(population * 0.2);
       crisisMessage = "An epidemic is spreading! Healthcare costs skyrocket.";
       console.log(`[tick ${tickNumber}] CRISIS: Epidemic! Treasury hit: ${crisisTreasuryHit}`);
-    } else if (crisisRoll < 0.06) {
-      // Industrial accident — 2% chance (only if industrial buildings exist)
+    } else if (crisisRoll < 0.03) {
+      // Industrial accident — 1% chance (only if industrial buildings exist, halved cost)
       if (census.industrial > 0) {
-        crisisHappinessMod = -8;
-        crisisTreasuryHit = Math.round(census.industrial * 200);
+        crisisHappinessMod = -5;
+        crisisTreasuryHit = Math.round(census.industrial * 100);
         crisisMessage = "An industrial accident has occurred! Cleanup costs are massive.";
         console.log(`[tick ${tickNumber}] CRISIS: Industrial accident! Cost: ${crisisTreasuryHit}`);
       }
-    } else if (crisisRoll < 0.08) {
-      // Foreign delegation — 2% chance (positive event, boosts trade multiplier)
+    } else if (crisisRoll < 0.06) {
+      // Foreign delegation — 3% chance (positive event, boosts trade multiplier)
       crisisHappinessMod = 5;
       crisisMessage = "A foreign delegation has arrived! Trade relations flourish!";
       console.log(`[tick ${tickNumber}] EVENT: Foreign delegation! Trade multiplier boosted for 5 ticks.`);
@@ -355,8 +355,8 @@ export const run = internalAction({
 
     // ── AGENT WAGES & SPENDING ──
     const wageMap: Record<string, number> = {
-      luxury: 35, industrial: 30, office: 25, commercial: 20,
-      entertainment: 15, civic: 10, residential: 5,
+      luxury: 45, industrial: 40, office: 35, commercial: 30,
+      entertainment: 25, civic: 20, residential: 15,
     };
     const tradeEligible = new Set(["industrial", "commercial", "office"]);
 
@@ -628,11 +628,11 @@ export const run = internalAction({
       // Level 1 (tick 1): Warning + austerity
       if (consecutiveBankrupt >= 1) {
         bankruptcyPenalty = 5 * consecutiveBankrupt; // escalating happiness hit
-        // Auto-raise taxes
-        newTaxRates.residential = Math.min(0.5, newTaxRates.residential + 0.03);
-        newTaxRates.commercial = Math.min(0.5, newTaxRates.commercial + 0.03);
-        newTaxRates.industrial = Math.min(0.5, newTaxRates.industrial + 0.03);
-        newTaxRates.luxury = Math.min(0.5, newTaxRates.luxury + 0.03);
+        // Auto-raise taxes (gentle: +1% capped at 30% to avoid tax fatigue death spiral)
+        newTaxRates.residential = Math.min(0.3, newTaxRates.residential + 0.01);
+        newTaxRates.commercial = Math.min(0.3, newTaxRates.commercial + 0.01);
+        newTaxRates.industrial = Math.min(0.3, newTaxRates.industrial + 0.01);
+        newTaxRates.luxury = Math.min(0.3, newTaxRates.luxury + 0.01);
 
         if (mayor) {
           await ctx.runMutation(internal.simulation.agentMessages.create, {
@@ -862,10 +862,16 @@ export const run = internalAction({
 
     // Step 6: City collapse → bailout (sim never stops)
     if (cityCollapsed) {
-      console.log(`[tick ${tickNumber}] CITY BAILOUT — treasury reset to 5000, bankruptcy cleared, activeBuildCount reset, happiness degraded.`);
+      console.log(`[tick ${tickNumber}] CITY BAILOUT — treasury reset to 8000, bankruptcy cleared, taxes reset, happiness degraded.`);
+      // Reset taxes back to sane defaults so the new mayor isn't crippled by fatigue
+      newTaxRates.residential = 0.10;
+      newTaxRates.commercial = 0.10;
+      newTaxRates.industrial = 0.15;
+      newTaxRates.luxury = 0.20;
       await ctx.runMutation(internal.simulation.cityState.update, {
         patch: {
-          treasury: 5000,
+          treasury: 8000,
+          taxRates: newTaxRates,
           consecutiveBankruptTicks: 0,
           activeBuildCount: 0,
           happiness: Math.max(10, Math.round(happiness) - 20),
