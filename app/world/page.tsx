@@ -38,6 +38,7 @@ import { useRemoteBoats } from "@/lib/hooks/useRemoteBoats";
 import { usePlaneMode } from "@/lib/hooks/usePlaneMode";
 import { useRemotePlanes } from "@/lib/hooks/useRemotePlanes";
 import { useChat } from "@/lib/hooks/useChat";
+import { useNPCTraffic } from "@/lib/hooks/useNPCTraffic";
 import { useChatStore } from "@/lib/stores/chat-store";
 import { useWorldStore } from "@/lib/stores/world-store";
 import { usePipelineStore } from "@/lib/stores/pipeline-store";
@@ -367,6 +368,9 @@ export default function Home() {
       cleanup();
     };
   }, [carUserId, removeCarPosition, removeBoatPosition, removePlanePosition]);
+
+  // NPC traffic (cars + pedestrians)
+  useNPCTraffic();
 
   // First-person walk mode
   const fpMode = useFPStore((s) => s.fpMode);

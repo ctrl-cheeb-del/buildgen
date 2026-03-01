@@ -7,6 +7,7 @@ import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
  */
 function materialKey(mat: THREE.MeshStandardMaterial): string {
   const c = mat.color;
+  const e = mat.emissive;
   return [
     c.r.toFixed(4),
     c.g.toFixed(4),
@@ -14,7 +15,14 @@ function materialKey(mat: THREE.MeshStandardMaterial): string {
     mat.roughness.toFixed(3),
     mat.metalness.toFixed(3),
     mat.opacity.toFixed(3),
-    mat.userData?.textureId ?? "",
+    mat.transparent ? "T" : "O",
+    mat.side,
+    // Texture identity — materials with different maps must NOT merge
+    mat.map?.uuid ?? "",
+    mat.normalMap?.uuid ?? "",
+    mat.emissiveMap?.uuid ?? "",
+    e.r + e.g + e.b > 0 ? `${e.r.toFixed(3)},${e.g.toFixed(3)},${e.b.toFixed(3)}` : "",
+    mat.alphaTest > 0 ? mat.alphaTest.toFixed(3) : "",
   ].join("|");
 }
 
@@ -89,6 +97,9 @@ export function mergeBuildingGeometry(group: THREE.Group): void {
     // Skip multi-material meshes
     if (Array.isArray(mat)) return;
     if (!(mat instanceof THREE.MeshStandardMaterial)) return;
+    // Skip transparent meshes — merging breaks render ordering
+    // which causes z-fighting shimmer on glass/windows
+    if (mat.transparent) return;
 
     const key = materialKey(mat);
     let bucket = buckets.get(key);
@@ -171,10 +182,11 @@ export function mergeBuildingGeometry(group: THREE.Group): void {
 
     if (!mergedGeo) continue;
 
-    // Stagger depth per material so coplanar faces don't z-fight
+    // Stagger depth per material so coplanar faces don't z-fight.
+    // Negative values pull toward camera; stagger by -1 per bucket.
     bucket.material.polygonOffset = true;
-    bucket.material.polygonOffsetFactor = offsetIndex;
-    bucket.material.polygonOffsetUnits = offsetIndex;
+    bucket.material.polygonOffsetFactor = -1 - offsetIndex;
+    bucket.material.polygonOffsetUnits = -1 - offsetIndex;
     offsetIndex++;
 
     const mesh = new THREE.Mesh(mergedGeo, bucket.material);

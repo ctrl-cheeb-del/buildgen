@@ -6,6 +6,7 @@ import { useCarStore } from "@/lib/stores/car-store";
 import { useBoatStore } from "@/lib/stores/boat-store";
 import { usePlaneStore } from "@/lib/stores/plane-store";
 import { useWorldStore } from "@/lib/stores/world-store";
+import { getActiveNPCManager } from "@/lib/npc/npc-manager";
 
 function esc(str: string): string {
   return str
@@ -83,10 +84,21 @@ export default function VehicleNameTags() {
       });
     }
 
-    // NPC vehicles — when agent vehicle stores are added, collect them here:
-    // e.g. for (const [id, npcCar] of agentCarStore.getState().agentCars) {
-    //   vehicles.push({ key: `npc-car-${id}`, x: ..., y: 3, z: ..., name: npcCar.agentName, isNpc: true });
-    // }
+    // NPC vehicles — cars and pedestrians from NPC manager
+    const npcManager = getActiveNPCManager();
+    if (npcManager && camera) {
+      const npcs = npcManager.getVisibleNPCs(camera.position.x, camera.position.z, 300);
+      for (const npc of npcs) {
+        vehicles.push({
+          key: npc.key,
+          x: npc.x,
+          y: npc.y,
+          z: npc.z,
+          name: npc.name,
+          isNpc: true,
+        });
+      }
+    }
 
     const activeKeys = new Set<string>();
 
