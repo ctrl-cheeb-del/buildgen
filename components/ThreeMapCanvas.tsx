@@ -111,7 +111,7 @@ export default function ThreeMapCanvas() {
 
     // ── Scene ─────────────────────────────────────────────────
     const scene = new THREE.Scene();
-    scene.fog = new THREE.FogExp2(0x6ba3d6, 0.00018);
+    scene.fog = new THREE.FogExp2(0x6ba3d6, 0.0008);
 
     const envMap = createEnvironmentMap(renderer);
     scene.environment = envMap;

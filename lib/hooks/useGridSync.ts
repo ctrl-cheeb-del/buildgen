@@ -35,7 +35,7 @@ export function useGridSync() {
   }, [plots, initializePlots]);
 
   // Sync buildings from Convex to Zustand/Three.js
-  const { addBuilding, removeBuilding, replaceGeometry, updateTransform, layer } = useWorldStore();
+  const { addBuilding, removeBuilding, replaceGeometry, applyRemoteTransform, layer } = useWorldStore();
   const syncedIds = useRef(new Set<string>());
   const syncedCodes = useRef(new Map<string, string>());
   const localPendingUpdates = useRef(new Map<string, number>());
@@ -80,7 +80,7 @@ export function useGridSync() {
           : [0, 0, 0];
         const scale = b.scale ?? 1;
 
-        updateTransform(id, { offset, rotation, scale });
+        applyRemoteTransform(id, { offset, rotation, scale });
         continue;
       }
 
@@ -129,7 +129,7 @@ export function useGridSync() {
         syncedCodes.current.delete(id);
       }
     }
-  }, [buildings, layer, addBuilding, removeBuilding, updateTransform]);
+  }, [buildings, layer, addBuilding, removeBuilding, applyRemoteTransform]);
 
   // ── Loading placeholders for "generating" plots ──────────────
   const placeholders = useRef(

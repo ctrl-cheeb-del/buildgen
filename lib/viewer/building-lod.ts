@@ -19,7 +19,9 @@ function computeBuildingStats(group: THREE.Group): {
   group.traverse((child) => {
     if (!(child instanceof THREE.Mesh)) return;
     const mat = child.material;
-    if (Array.isArray(mat) || !(mat instanceof THREE.MeshStandardMaterial)) return;
+    if (Array.isArray(mat)) return;
+    // Accept any material with a color property (MeshStandard, MeshBasic, MeshPhong, etc.)
+    if (!("color" in mat) || !(mat.color instanceof THREE.Color)) return;
 
     const weight = child.geometry.getAttribute("position")?.count ?? 1;
     color.r += mat.color.r * weight;
