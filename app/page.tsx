@@ -116,11 +116,9 @@ export default function LandingPage() {
       <StorySection />
 
       {/* ── Footer ── */}
-      <footer className="px-[--gutter] py-6 flex items-center justify-between">
-        <span className="font-[family-name:var(--px)] text-[11px] text-[var(--ink-light)]">
-          MistralVerse
-        </span>
-        <span className="font-[family-name:var(--px)] text-[10px] text-[var(--ink-light)] tracking-wider">
+      <footer className="ld-footer">
+        <span className="ld-footer-wordmark">MistralVerse</span>
+        <span className="ld-footer-stack">
           Convex&ensp;/&ensp;Three.js&ensp;/&ensp;Mistral
         </span>
       </footer>

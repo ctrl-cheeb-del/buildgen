@@ -61,7 +61,7 @@ const BEATS = [
       </svg>
     ),
     headline: "A living economy",
-    body: "Buildings generate income. The mayor sets tax rates. Citizens earn, spend, and react to economic pressure.",
+    body: "Every building generates taxed income. The mayor sets rates, funds services, and balances the budget. Citizens earn wages, accumulate wealth, and push back when the squeeze gets too tight.",
   },
   {
     id: "mayor",

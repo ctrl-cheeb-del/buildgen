@@ -466,6 +466,31 @@ body {
   margin: 0;
 }
 
+/* ── Footer ────────────────────────── */
+
+.ld-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px var(--gutter);
+  background: #1a1a2e;
+  border-top: 1px solid rgba(177, 158, 239, 0.12);
+}
+
+.ld-footer-wordmark {
+  font-family: var(--px);
+  font-size: 11px;
+  color: rgba(245, 243, 240, 0.45);
+  user-select: none;
+}
+
+.ld-footer-stack {
+  font-family: var(--px);
+  font-size: 10px;
+  color: rgba(245, 243, 240, 0.3);
+  letter-spacing: 0.06em;
+}
+
 /* ── Mobile ─────────────────────────── */
 
 @media (max-width: 640px) {
