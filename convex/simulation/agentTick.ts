@@ -86,6 +86,11 @@ export const run = internalAction({
         (plotBuildingCounts[b.plotIndex] ?? 0) + 1;
     }
 
+    // Count pending + active builds to enforce queue cap of 12
+    const BUILD_QUEUE_CAP = 12;
+    let pendingBuildCount = agents.filter((a) => a.pendingBuildDescription).length;
+    let totalBuildSlots = city.activeBuildCount + pendingBuildCount;
+
     let processed = 0;
 
     // 6. Process each agent sequentially
@@ -146,6 +151,9 @@ export const run = internalAction({
           if (plotCount >= 8) {
             // Plot full — convert to CHAT
             effectiveAction = "CHAT";
+          } else if (totalBuildSlots >= BUILD_QUEUE_CAP) {
+            // Build queue full — drop the request
+            effectiveAction = "CHAT";
           } else if (action.build_description) {
             // Set pending build for city tick to pick up
             await ctx.runMutation(internal.simulation.agents.update, {
@@ -154,6 +162,7 @@ export const run = internalAction({
                 pendingBuildDescription: action.build_description,
               },
             });
+            totalBuildSlots++;
           }
         }
 
