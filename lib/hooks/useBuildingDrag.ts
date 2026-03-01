@@ -16,6 +16,10 @@ interface Obstacle {
   halfZ: number; // half-width on Z
 }
 
+// Pre-allocated objects for measureHalfExtents (avoid per-call allocations)
+const _box = new THREE.Box3();
+const _size = new THREE.Vector3();
+
 /**
  * Measure a container's XZ half-extents at its current scale,
  * ignoring its world-space position.
@@ -24,22 +28,23 @@ function measureHalfExtents(
   container: THREE.Group,
   scale: number
 ): { halfX: number; halfZ: number } {
-  const savedPos = container.position.clone();
-  const savedScale = container.scale.clone();
-  const savedRot = container.rotation.clone();
+  const px = container.position.x, py = container.position.y, pz = container.position.z;
+  const sx = container.scale.x, sy = container.scale.y, sz = container.scale.z;
+  const rx = container.rotation.x, ry = container.rotation.y, rz = container.rotation.z;
+
   container.position.set(0, 0, 0);
   container.scale.set(scale, scale, scale);
   container.rotation.set(0, 0, 0);
 
-  const box = new THREE.Box3().setFromObject(container);
+  _box.setFromObject(container);
 
-  container.position.copy(savedPos);
-  container.scale.copy(savedScale);
-  container.rotation.copy(savedRot);
+  container.position.set(px, py, pz);
+  container.scale.set(sx, sy, sz);
+  container.rotation.set(rx, ry, rz);
 
-  if (box.isEmpty()) return { halfX: 0, halfZ: 0 };
-  const size = box.getSize(new THREE.Vector3());
-  return { halfX: size.x / 2, halfZ: size.z / 2 };
+  if (_box.isEmpty()) return { halfX: 0, halfZ: 0 };
+  _box.getSize(_size);
+  return { halfX: _size.x / 2, halfZ: _size.z / 2 };
 }
 
 // Pre-allocated objects for raycasting
@@ -103,16 +108,18 @@ export function useBuildingDrag(
     }
 
     function raycastAtPixel(px: number, py: number): string | null {
-      const scene = layer!.getScene();
       const camera = layer!.getCamera();
-      if (!scene || !camera) return null;
+      if (!camera) return null;
+
+      const { containers } = useWorldStore.getState();
+      if (containers.size === 0) return null;
 
       screenToNDC(px, py);
       _raycaster.setFromCamera(_ndc, camera);
 
-      const intersects = _raycaster.intersectObjects(scene.children, true);
+      const targets = Array.from(containers.values());
+      const intersects = _raycaster.intersectObjects(targets, true);
       for (const hit of intersects) {
-        if (hit.object.parent?.name === "ground-planes") continue;
         const id = findBuildingId(hit.object);
         if (id) return id;
       }
@@ -262,11 +269,25 @@ export function useBuildingDrag(
       }
     };
 
+    let idleRafPending = false;
+    let lastIdleEvent: MouseEvent | null = null;
+
+    const processIdleHover = (e: MouseEvent) => {
+      const hitId = raycastAtPixel(e.clientX, e.clientY);
+      canvas.style.cursor =
+        hitId && ownedRef.current.has(hitId) ? "grab" : "";
+    };
+
     const onMouseMove = (e: MouseEvent) => {
       if (stateRef.current === "idle") {
-        const hitId = raycastAtPixel(e.clientX, e.clientY);
-        canvas.style.cursor =
-          hitId && ownedRef.current.has(hitId) ? "grab" : "";
+        lastIdleEvent = e;
+        if (!idleRafPending) {
+          idleRafPending = true;
+          requestAnimationFrame(() => {
+            idleRafPending = false;
+            if (lastIdleEvent) processIdleHover(lastIdleEvent);
+          });
+        }
         return;
       }
 

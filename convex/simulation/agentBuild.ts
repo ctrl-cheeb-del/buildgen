@@ -25,6 +25,12 @@ export const run = internalAction({
   handler: async (ctx, { plotIndex, agentName, buildDescription, category }) => {
     console.log(`[agentBuild] ${agentName} building "${buildDescription}" on plot #${plotIndex}`);
 
+    /** Check if simulation was stopped — abort early if so. */
+    async function shouldAbort(): Promise<boolean> {
+      const city = await ctx.runQuery(internal.simulation.cityState.getInternal);
+      return !city || !city.isRunning;
+    }
+
     try {
       // 1. Mark plot as generating (shows loading cube)
       await ctx.runMutation(internal.plots.markGeneratingInternal, { plotIndex });
@@ -70,6 +76,14 @@ export const run = internalAction({
         });
 
         console.log(`[agentBuild] "${buildDescription}" (adapted) complete on plot #${plotIndex}!`);
+        return;
+      }
+
+      // ── Checkpoint: abort before expensive Replicate call
+      if (await shouldAbort()) {
+        console.log(`[agentBuild] Sim stopped, aborting "${buildDescription}" before image gen`);
+        await ctx.runMutation(internal.plots.resetPlotInternal, { plotIndex });
+        await ctx.runMutation(internal.simulation._simBuildHelpers.onBuildFailed, {});
         return;
       }
 
@@ -166,6 +180,14 @@ Each view should:
       const storageId = await ctx.storage.store(blob);
       const gridUrl = await ctx.storage.getUrl(storageId);
 
+      // ── Checkpoint: abort before expensive Bedrock call
+      if (await shouldAbort()) {
+        console.log(`[agentBuild] Sim stopped, aborting "${buildDescription}" before geometry gen`);
+        await ctx.runMutation(internal.plots.resetPlotInternal, { plotIndex });
+        await ctx.runMutation(internal.simulation._simBuildHelpers.onBuildFailed, {});
+        return;
+      }
+
       // 5. Call Claude Opus 4 via Bedrock for geometry code
       console.log(`[agentBuild] Calling Claude Opus 4.6 (Bedrock) for geometry code...`);
 
@@ -240,6 +262,14 @@ Generate the code now for "${buildDescription}".`;
       const code = codeMatch ? codeMatch[1].trim() : text.trim();
       if (!code) throw new Error("LLM returned no usable geometry code");
       console.log(`[agentBuild] Got geometry code (${code.length} chars)`);
+
+      // ── Checkpoint: abort before writing building to DB
+      if (await shouldAbort()) {
+        console.log(`[agentBuild] Sim stopped, aborting "${buildDescription}" before save`);
+        await ctx.runMutation(internal.plots.resetPlotInternal, { plotIndex });
+        await ctx.runMutation(internal.simulation._simBuildHelpers.onBuildFailed, {});
+        return;
+      }
 
       // 6. Create building
       await ctx.runMutation(internal.buildings.createBuildingInternal, {
