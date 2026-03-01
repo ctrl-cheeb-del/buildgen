@@ -179,6 +179,15 @@ export const run = internalAction({
 
     const tickNumber = city.totalTicks + 1;
 
+    // Bootstrap agent tick chain if not running (self-healing after deploy)
+    if (!city.nextAgentTickId) {
+      console.log(`[tick ${tickNumber}] Agent tick chain not running, bootstrapping...`);
+      const agentTickId = await ctx.scheduler.runAfter(2000, internal.simulation.agentTick.run, {});
+      await ctx.runMutation(internal.simulation.cityState.update, {
+        patch: { nextAgentTickId: agentTickId },
+      });
+    }
+
     try {
     const agents: AgentDoc[] = await ctx.runQuery(internal.simulation.agents.getAllInternal);
     const mistral = getMistral();
