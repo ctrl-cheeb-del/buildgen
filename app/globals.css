@@ -360,10 +360,9 @@ body {
     to bottom,
     var(--page-bg) 0%,
     #1a1a2e 3%,
-    #1a1a2e 97%,
-    var(--page-bg) 100%
+    #1a1a2e 100%
   );
-  padding: 96px var(--gutter);
+  padding: 96px var(--gutter) 72px;
 }
 
 .ld-story-inner {
@@ -472,22 +471,23 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 20px var(--gutter);
+  padding: 24px var(--gutter);
   background: #1a1a2e;
-  border-top: 1px solid rgba(177, 158, 239, 0.12);
+  border-top: 1px solid rgba(177, 158, 239, 0.08);
 }
 
 .ld-footer-wordmark {
   font-family: var(--px);
   font-size: 11px;
-  color: rgba(245, 243, 240, 0.45);
+  color: var(--accent);
+  opacity: 0.5;
   user-select: none;
 }
 
 .ld-footer-stack {
   font-family: var(--px);
   font-size: 10px;
-  color: rgba(245, 243, 240, 0.3);
+  color: rgba(245, 243, 240, 0.25);
   letter-spacing: 0.06em;
 }
 
