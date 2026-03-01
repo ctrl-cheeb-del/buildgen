@@ -199,6 +199,24 @@ export default function ThreeMapCanvas() {
     controls.listenToKeyEvents(window);
     controls.update();
 
+    // ── WASD camera pan ───────────────────────────────────────
+    const keysDown = new Set<string>();
+    const PAN_SPEED = 400; // meters per second
+
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      const k = e.key.toLowerCase();
+      if (k === "w" || k === "a" || k === "s" || k === "d") {
+        keysDown.add(k);
+        e.preventDefault();
+      }
+    }
+    function onKeyUp(e: KeyboardEvent) {
+      keysDown.delete(e.key.toLowerCase());
+    }
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+
     // ── Adaptive quality ─────────────────────────────────────
     const quality = new AdaptiveQuality(renderer, sun, scene);
 
@@ -228,6 +246,26 @@ export default function ThreeMapCanvas() {
       // Damping needs update() every frame when active
       // Skip when disabled (car mode owns the camera)
       const controlsUpdated = controls.enabled ? controls.update() : false;
+
+      // WASD pan — move camera + target along camera-relative XZ plane
+      if (keysDown.size > 0 && controls.enabled) {
+        const dist = PAN_SPEED * dt;
+        const forward = new THREE.Vector3();
+        camera.getWorldDirection(forward);
+        forward.y = 0;
+        forward.normalize();
+        const right = new THREE.Vector3().crossVectors(forward, camera.up).normalize();
+
+        const offset = new THREE.Vector3();
+        if (keysDown.has("w")) offset.add(forward.clone().multiplyScalar(dist));
+        if (keysDown.has("s")) offset.add(forward.clone().multiplyScalar(-dist));
+        if (keysDown.has("a")) offset.add(right.clone().multiplyScalar(-dist));
+        if (keysDown.has("d")) offset.add(right.clone().multiplyScalar(dist));
+
+        camera.position.add(offset);
+        controls.target.add(offset);
+        dirty = true;
+      }
 
       // Ocean + cloud animation: throttle to ~30fps to preserve on-demand rendering
       if (elapsed - lastCloudTick > 1 / 30) {
@@ -318,6 +356,8 @@ export default function ThreeMapCanvas() {
     cleanupRef.current = () => {
       resizeObserver.disconnect();
       cancelAnimationFrame(animId);
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
       controls.removeEventListener("change", markDirty);
       controls.dispose();
       clouds.dispose();
