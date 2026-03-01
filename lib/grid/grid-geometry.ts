@@ -20,6 +20,7 @@ export interface PlotState {
   isAgentOwned?: boolean;
   agentName?: string;
   buildingPrompts?: string[];
+  generatingPrompt?: string;
 }
 
 export function gridIndexToColRow(index: number): { col: number; row: number } {

@@ -277,6 +277,7 @@ export function useGridSync() {
           plotBuildings.length > 0
             ? plotBuildings.map((b) => b.prompt)
             : undefined,
+        generatingPrompt: agent?.pendingBuildDescription ?? undefined,
       };
     });
   }, [plots, buildings, agents]);

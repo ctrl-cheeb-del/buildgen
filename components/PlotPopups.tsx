@@ -481,8 +481,9 @@ export default function PlotPopups({
       if (state.status === "empty") {
         hover.innerHTML = `<div style="font-size:11px;color:#6b7280;text-align:center">Plot #${plotIndex}<br><span style="color:#3b82f6;font-weight:600">Click to claim</span></div>`;
       } else if (state.status === "generating") {
-        const agentLabel = state.isAgentOwned && state.agentName ? ` (${esc(state.agentName)})` : "";
-        hover.innerHTML = `<div style="font-size:11px;text-align:center;color:#3b82f6;font-weight:600">Generating...${agentLabel}</div>`;
+        const agentLabel = state.isAgentOwned && state.agentName ? `<div style="font-size:10px;color:#6b7280;margin-top:1px">${esc(state.agentName)}</div>` : "";
+        const promptLabel = state.generatingPrompt ? `<div style="font-size:10px;color:#374151;margin-top:2px;font-weight:400;max-width:180px;white-space:normal">${esc(state.generatingPrompt)}</div>` : "";
+        hover.innerHTML = `<div style="font-size:11px;text-align:center;color:#3b82f6;font-weight:600">Generating...${agentLabel}${promptLabel}</div>`;
       } else if (state.isAgentOwned && state.agentName) {
         hover.innerHTML = `<div style="font-size:11px;text-align:center"><span style="font-weight:600;color:#374151">${esc(state.agentName)}</span><br><span style="color:#9ca3af">Plot #${plotIndex}</span></div>`;
       } else if (state.ownerName) {

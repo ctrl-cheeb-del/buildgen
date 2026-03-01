@@ -80,6 +80,16 @@ export const run = internalAction({
     }
 
     try {
+      // 0. Check if plot is full before doing anything expensive
+      const existingCount = await ctx.runQuery(internal.simulation._buildingHelpers.countOnPlot, {
+        plotIndex,
+      });
+      if (existingCount >= 9) {
+        console.log(`[agentBuild] Plot #${plotIndex} is full (${existingCount}/9), skipping build`);
+        await ctx.runMutation(internal.simulation._simBuildHelpers.onBuildFailed, {});
+        return;
+      }
+
       // 1. Mark plot as generating (shows loading cube)
       await ctx.runMutation(internal.plots.markGeneratingInternal, { plotIndex });
 
