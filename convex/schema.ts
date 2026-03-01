@@ -132,6 +132,7 @@ export default defineSchema({
     simMode: v.optional(v.union(v.literal("overnight"), v.literal("live"))),
     activeBuildCount: v.number(),
     consecutiveBankruptTicks: v.optional(v.number()),
+    nextTickId: v.optional(v.id("_scheduled_functions")),
     activeDecree: v.optional(
       v.object({
         title: v.string(),

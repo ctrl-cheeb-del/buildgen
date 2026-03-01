@@ -342,6 +342,17 @@ export const run = internalAction({
     const agents: AgentDoc[] = await ctx.runQuery(internal.simulation.agents.getAllInternal);
     const mistral = getMistral();
 
+    // Reconcile activeBuildCount with ground truth (count "generating" plots).
+    // Prevents permanent drift from missed onBuildComplete/onBuildFailed calls.
+    const actualGenerating: number = await ctx.runQuery(internal.plots.countGenerating, {});
+    if (city.activeBuildCount !== actualGenerating) {
+      console.log(`[tick ${tickNumber}] Reconciling activeBuildCount: ${city.activeBuildCount} → ${actualGenerating}`);
+      await ctx.runMutation(internal.simulation.cityState.update, {
+        patch: { activeBuildCount: actualGenerating },
+      });
+      city.activeBuildCount = actualGenerating;
+    }
+
     console.log(`[tick ${tickNumber}] Starting...`);
 
 
@@ -949,7 +960,11 @@ export const run = internalAction({
     const freshCity = await ctx.runQuery(internal.simulation.cityState.getInternal);
     const currentMode = freshCity?.simMode ?? "overnight";
     const tickInterval = currentMode === "live" ? 45000 : 300000;
-    await ctx.scheduler.runAfter(tickInterval, internal.simulation.tick.run, {});
+    const nextTickId = await ctx.scheduler.runAfter(tickInterval, internal.simulation.tick.run, {});
+    // Store the scheduled ID so setSimMode can cancel + reschedule
+    await ctx.runMutation(internal.simulation.cityState.update, {
+      patch: { nextTickId },
+    });
   },
 });
 

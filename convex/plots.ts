@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { query, mutation, internalMutation } from "./_generated/server";
+import { query, mutation, internalMutation, internalQuery } from "./_generated/server";
 
 const GRID_COLS = 8;
 const GRID_ROWS = 10;
@@ -281,5 +281,14 @@ export const resetPlotInternal = internalMutation({
       pipelineStep: undefined,
       pipelineMultiViewUrl: undefined,
     });
+  },
+});
+
+/** Count plots currently in "generating" status (ground-truth active build count). */
+export const countGenerating = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const plots = await ctx.db.query("plots").collect();
+    return plots.filter((p) => p.status === "generating").length;
   },
 });
