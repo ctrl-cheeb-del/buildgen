@@ -9,13 +9,18 @@
  */
 
 import type * as boats from "../boats.js";
+import type * as buildingDesigns from "../buildingDesigns.js";
 import type * as buildings from "../buildings.js";
 import type * as cars from "../cars.js";
 import type * as crons from "../crons.js";
+import type * as fillWorld from "../fillWorld.js";
+import type * as lib_normalizePrompt from "../lib/normalizePrompt.js";
 import type * as multiViewPreviews from "../multiViewPreviews.js";
+import type * as npcTraffic from "../npcTraffic.js";
 import type * as pipeline from "../pipeline.js";
 import type * as planes from "../planes.js";
 import type * as plots from "../plots.js";
+import type * as resetWorld from "../resetWorld.js";
 import type * as seedBuildings from "../seedBuildings.js";
 import type * as simulation__agentPrompts from "../simulation/_agentPrompts.js";
 import type * as simulation__buildingHelpers from "../simulation/_buildingHelpers.js";
@@ -46,13 +51,18 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   boats: typeof boats;
+  buildingDesigns: typeof buildingDesigns;
   buildings: typeof buildings;
   cars: typeof cars;
   crons: typeof crons;
+  fillWorld: typeof fillWorld;
+  "lib/normalizePrompt": typeof lib_normalizePrompt;
   multiViewPreviews: typeof multiViewPreviews;
+  npcTraffic: typeof npcTraffic;
   pipeline: typeof pipeline;
   planes: typeof planes;
   plots: typeof plots;
+  resetWorld: typeof resetWorld;
   seedBuildings: typeof seedBuildings;
   "simulation/_agentPrompts": typeof simulation__agentPrompts;
   "simulation/_buildingHelpers": typeof simulation__buildingHelpers;

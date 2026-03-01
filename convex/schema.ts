@@ -101,6 +101,29 @@ export default defineSchema({
     createdAt: v.number(),
   }).index("by_created", ["createdAt"]),
 
+  buildingDesigns: defineTable({
+    normalizedPrompt: v.string(),
+    originalPrompt: v.string(),
+    proceduralCode: v.string(),
+    multiViewGridUrl: v.optional(v.string()),
+    category: v.optional(v.string()),
+    createdAt: v.number(),
+  }).index("by_normalizedPrompt", ["normalizedPrompt"]),
+
+  npcCarSnapshot: defineTable({
+    cars: v.array(
+      v.object({
+        index: v.number(),
+        x: v.number(),
+        z: v.number(),
+        heading: v.number(),
+        speed: v.number(),
+        colorIndex: v.number(),
+      })
+    ),
+    updatedAt: v.number(),
+  }),
+
   // ── Simulation tables ──────────────────────────────────────────────
 
   cityState: defineTable({
@@ -134,6 +157,7 @@ export default defineSchema({
     consecutiveBankruptTicks: v.optional(v.number()),
     nextAgentTickId: v.optional(v.id("_scheduled_functions")),
     nextCityTickId: v.optional(v.id("_scheduled_functions")),
+    civilUnrest: v.optional(v.number()),
     activeDecree: v.optional(
       v.object({
         title: v.string(),

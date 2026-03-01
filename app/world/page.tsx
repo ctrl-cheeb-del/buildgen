@@ -38,6 +38,7 @@ import { useRemoteBoats } from "@/lib/hooks/useRemoteBoats";
 import { usePlaneMode } from "@/lib/hooks/usePlaneMode";
 import { useRemotePlanes } from "@/lib/hooks/useRemotePlanes";
 import { useChat } from "@/lib/hooks/useChat";
+import { useNPCTraffic } from "@/lib/hooks/useNPCTraffic";
 import { useTradeDock } from "@/lib/hooks/useTradeDock";
 import { useChatStore } from "@/lib/stores/chat-store";
 import { useWorldStore } from "@/lib/stores/world-store";
@@ -372,6 +373,9 @@ export default function Home() {
     };
   }, [carUserId, removeCarPosition, removeBoatPosition, removePlanePosition]);
 
+  // NPC traffic (cars + pedestrians)
+  useNPCTraffic();
+
   // First-person walk mode
   const fpMode = useFPStore((s) => s.fpMode);
   const setFPMode = useFPStore((s) => s.setFPMode);
@@ -561,13 +565,14 @@ export default function Home() {
   // Agent detail panel
   const [selectedAgentPlot, setSelectedAgentPlot] = useState<number | null>(null);
 
-  // Fly camera to agent's plot when clicking in feed
+  // Fly camera to agent's plot and open detail panel
   const handleAgentClick = useCallback(
     (plotIndex: number) => {
       if (!layer) return;
       const { col, row } = gridIndexToColRow(plotIndex);
       const [mx, mz] = plotCenterMeters(col, row);
       layer.flyTo(mx, mz);
+      setSelectedAgentPlot(plotIndex);
     },
     [layer]
   );
@@ -649,7 +654,7 @@ export default function Home() {
       />
 
       {/* Floating name tags above remote vehicles */}
-      <VehicleNameTags />
+      <VehicleNameTags onNPCClick={handleAgentClick} />
 
       {/* Hidden IsolatedViewer for iteration screenshot capture */}
       <div

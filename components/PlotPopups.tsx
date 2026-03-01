@@ -13,6 +13,7 @@ import {
   PAVEMENT_WIDTH_M,
   GRID_STEP_M,
 } from "@/lib/grid/grid-constants";
+import { getActiveNPCManager } from "@/lib/npc/npc-manager";
 
 const _raycaster = new THREE.Raycaster();
 const _ndc = new THREE.Vector2();
@@ -375,6 +376,49 @@ export default function PlotPopups({
       if (useWorldStore.getState().isDragging) {
         removeHover();
         return;
+      }
+
+      // NPC hover — check instanced meshes
+      const npcManager = getActiveNPCManager();
+      if (npcManager && setNdc(e.clientX, e.clientY)) {
+        const carMesh = npcManager.getCarMesh();
+        const pedMesh = npcManager.getPedMesh();
+        const npcHits = _raycaster.intersectObjects([carMesh, pedMesh], false);
+        if (npcHits.length > 0) {
+          const hit = npcHits[0];
+          const instanceId = hit.instanceId;
+          if (instanceId !== undefined) {
+            const isCar = hit.object === carMesh;
+            const identity = isCar
+              ? npcManager.getNPCAtCarInstance(instanceId)
+              : npcManager.getNPCAtPedInstance(instanceId);
+            if (identity) {
+              canvas.style.cursor = "pointer";
+              if (!hoverRef.current) {
+                const hover = document.createElement("div");
+                hover.style.cssText = `
+                  position: fixed; z-index: 49; pointer-events: none;
+                  background: rgba(99,102,241,0.9); border-radius: 6px; padding: 4px 8px;
+                  box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+                  font-family: system-ui; white-space: nowrap; color: white;
+                `;
+                document.body.appendChild(hover);
+                hoverRef.current = hover;
+              }
+              const hover = hoverRef.current;
+              hover.style.background = "rgba(99,102,241,0.9)";
+              hover.style.color = "white";
+              hover.style.left = `${e.clientX}px`;
+              hover.style.top = `${e.clientY - 24}px`;
+              hover.style.transform = "translate(-50%, -100%)";
+              const actLabel = identity.activity.type === "strolling"
+                ? `${esc(identity.name)} strolling`
+                : `${esc(identity.name)} → ${esc(identity.activity.destinationLabel)}`;
+              hover.innerHTML = `<div style="font-size:11px;font-weight:600;text-align:center">${actLabel}</div>`;
+              return;
+            }
+          }
+        }
       }
 
       // Show pointer cursor on buildings (click to see name)

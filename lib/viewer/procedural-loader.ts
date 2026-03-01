@@ -151,10 +151,11 @@ export function loadProceduralGeometry(code: string): THREE.Group {
         for (const mat of mats) {
           mat.side = THREE.FrontSide;
           if (mat.transparent) {
-            // Write depth so the front glass face occludes internal
-            // geometry (floors, back walls, etc.) behind it — prevents
-            // all the layers blending into a messy see-through look.
-            mat.depthWrite = true;
+            // Don't write depth — prevents z-fighting with the opaque
+            // wall behind glass. renderOrder ensures glass draws after
+            // opaque geometry so it composites correctly.
+            mat.depthWrite = false;
+            child.renderOrder = 1;
           }
         }
       }

@@ -6,6 +6,7 @@ import { useCarStore } from "@/lib/stores/car-store";
 import { useBoatStore } from "@/lib/stores/boat-store";
 import { usePlaneStore } from "@/lib/stores/plane-store";
 import { useWorldStore } from "@/lib/stores/world-store";
+import { getActiveNPCManager } from "@/lib/npc/npc-manager";
 
 function esc(str: string): string {
   return str
@@ -25,6 +26,10 @@ interface VehicleTag {
   name: string;
   /** Whether this is an NPC-driven vehicle (vs player) */
   isNpc: boolean;
+  /** Agent's home plot index (NPC only) */
+  plotIndex?: number;
+  /** Activity description (NPC only) */
+  activity?: string;
 }
 
 /**
@@ -32,10 +37,17 @@ interface VehicleTag {
  * Supports both player vehicles (shows username) and NPC vehicles (shows agent name).
  * Projects 3D vehicle positions to screen coordinates each frame.
  */
-export default function VehicleNameTags() {
+export default function VehicleNameTags({
+  onNPCClick,
+}: {
+  onNPCClick?: (plotIndex: number) => void;
+}) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const tagsRef = useRef<Map<string, HTMLDivElement>>(new Map());
   const rafRef = useRef<number>(0);
+
+  const onNPCClickRef = useRef(onNPCClick);
+  onNPCClickRef.current = onNPCClick;
 
   const updateTags = useCallback(() => {
     const layer = useWorldStore.getState().layer;
@@ -83,10 +95,23 @@ export default function VehicleNameTags() {
       });
     }
 
-    // NPC vehicles — when agent vehicle stores are added, collect them here:
-    // e.g. for (const [id, npcCar] of agentCarStore.getState().agentCars) {
-    //   vehicles.push({ key: `npc-car-${id}`, x: ..., y: 3, z: ..., name: npcCar.agentName, isNpc: true });
-    // }
+    // NPC vehicles — cars and pedestrians from NPC manager
+    const npcManager = getActiveNPCManager();
+    if (npcManager && camera) {
+      const npcs = npcManager.getVisibleNPCs(camera.position.x, camera.position.z, 300);
+      for (const npc of npcs) {
+        vehicles.push({
+          key: npc.key,
+          x: npc.x,
+          y: npc.y,
+          z: npc.z,
+          name: npc.name,
+          isNpc: true,
+          plotIndex: npc.plotIndex,
+          activity: npc.activity,
+        });
+      }
+    }
 
     const activeKeys = new Set<string>();
 
@@ -109,12 +134,22 @@ export default function VehicleNameTags() {
       if (!tag) {
         tag = document.createElement("div");
         tag.style.cssText = `
-          position: fixed; z-index: 48; pointer-events: none;
+          position: fixed; z-index: 48;
           transform: translate(-50%, -100%);
           border-radius: 4px; padding: 2px 6px;
           font-family: system-ui; white-space: nowrap;
           font-size: 11px; font-weight: 600; color: white;
         `;
+        if (v.isNpc) {
+          tag.style.pointerEvents = "auto";
+          tag.style.cursor = "pointer";
+          const plotIdx = v.plotIndex;
+          tag.addEventListener("click", () => {
+            if (plotIdx !== undefined) onNPCClickRef.current?.(plotIdx);
+          });
+        } else {
+          tag.style.pointerEvents = "none";
+        }
         containerRef.current!.appendChild(tag);
         tagsRef.current.set(v.key, tag);
       }
@@ -124,7 +159,9 @@ export default function VehicleNameTags() {
       tag.style.display = "";
       tag.style.left = `${screenX}px`;
       tag.style.top = `${screenY}px`;
-      tag.innerHTML = esc(v.name);
+      tag.innerHTML = v.isNpc && v.activity
+        ? `${esc(v.name)}<br><span style="font-size:9px;font-weight:400;opacity:0.8">${esc(v.activity)}</span>`
+        : esc(v.name);
     }
 
     // Remove stale tags

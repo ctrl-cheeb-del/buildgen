@@ -30,18 +30,18 @@ export default function AgentDetailPanel({
         className="fixed inset-0 z-50"
         onClick={onClose}
       />
-      {/* Panel — liquid glass, darker variant */}
+      {/* Panel — liquid glass, matching kingdom feed / chat pill style */}
       <div
         className="fixed left-4 top-4 bottom-4 z-50 w-80 rounded-2xl overflow-hidden animate-slide-in"
         style={{
-          background: "rgba(0, 0, 0, 0.55)",
-          border: "1px solid rgba(255, 255, 255, 0.15)",
+          background: "rgba(255, 255, 255, 0.12)",
+          border: "1px solid rgba(255, 255, 255, 0.25)",
           boxShadow:
-            "inset 0 1px 0 rgba(255,255,255,0.12), inset 0 -1px 0 rgba(0,0,0,0.2), 0 8px 40px rgba(0,0,0,0.5)",
+            "inset 0 1px 0 rgba(255,255,255,0.3), inset 0 -1px 0 rgba(0,0,0,0.15), 0 8px 40px rgba(0,0,0,0.35)",
         }}
       >
         {/* Top highlight gradient */}
-        <div className="absolute inset-0 rounded-2xl bg-gradient-to-b from-white/[0.06] to-transparent pointer-events-none" />
+        <div className="absolute inset-0 rounded-2xl bg-gradient-to-b from-white/[0.08] to-transparent pointer-events-none" />
 
         <div className="relative h-full overflow-y-auto scrollbar-hide backdrop-blur-2xl">
           <div className="p-5 space-y-5">
@@ -70,7 +70,7 @@ export default function AgentDetailPanel({
                   key={t}
                   className="text-[10px] text-white/70 font-medium px-2 py-0.5 rounded-full"
                   style={{
-                    background: "rgba(255, 255, 255, 0.1)",
+                    background: "rgba(255, 255, 255, 0.12)",
                     border: "1px solid rgba(255, 255, 255, 0.15)",
                   }}
                 >
@@ -99,8 +99,8 @@ export default function AgentDetailPanel({
               <div
                 className="rounded-xl px-3.5 py-2.5"
                 style={{
-                  background: "rgba(255, 255, 255, 0.06)",
-                  border: "1px solid rgba(255, 255, 255, 0.1)",
+                  background: "rgba(255, 255, 255, 0.08)",
+                  border: "1px solid rgba(255, 255, 255, 0.12)",
                 }}
               >
                 <span className="text-[10px] text-white/35 uppercase tracking-wide">Building</span>
@@ -124,12 +124,12 @@ export default function AgentDetailPanel({
                       style={{
                         background:
                           msg.messageType === "announcement"
-                            ? "rgba(217, 168, 50, 0.12)"
-                            : "rgba(255, 255, 255, 0.06)",
+                            ? "rgba(217, 168, 50, 0.15)"
+                            : "rgba(255, 255, 255, 0.08)",
                         border:
                           msg.messageType === "announcement"
                             ? "1px solid rgba(217, 168, 50, 0.2)"
-                            : "1px solid rgba(255, 255, 255, 0.08)",
+                            : "1px solid rgba(255, 255, 255, 0.12)",
                       }}
                     >
                       <div className="flex items-center gap-1.5 mb-1">
@@ -179,8 +179,8 @@ function Stat({ label, value, color }: { label: string; value: string; color: "a
     <div
       className="rounded-xl px-3 py-2.5 text-center"
       style={{
-        background: "rgba(255, 255, 255, 0.06)",
-        border: "1px solid rgba(255, 255, 255, 0.1)",
+        background: "rgba(255, 255, 255, 0.08)",
+        border: "1px solid rgba(255, 255, 255, 0.12)",
       }}
     >
       <div className="text-[9px] text-white/35 uppercase tracking-wide">{label}</div>

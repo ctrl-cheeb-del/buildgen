@@ -11,6 +11,7 @@ import { initTextureQuality, disposeTextureCache } from "@/lib/viewer/texture-lo
 import { useWorldStore } from "@/lib/stores/world-store";
 import { updateShadowCulling } from "@/lib/viewer/shadow-culling";
 import { updateVisibilityCulling } from "@/lib/viewer/visibility-culling";
+import { getActiveNPCManager } from "@/lib/npc/npc-manager";
 import type { SceneLayer } from "@/lib/viewer/scene-layer";
 
 /**
@@ -264,6 +265,12 @@ export default function ThreeMapCanvas() {
 
         camera.position.add(offset);
         controls.target.add(offset);
+        dirty = true;
+      }
+
+      // NPC traffic tick (cars + pedestrians movement)
+      const npcMgr = getActiveNPCManager();
+      if (npcMgr && npcMgr.tick(dt)) {
         dirty = true;
       }
 
