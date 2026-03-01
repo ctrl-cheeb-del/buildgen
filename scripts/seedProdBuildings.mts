@@ -2,7 +2,6 @@ import { readFileSync } from "fs";
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "../convex/_generated/api.js";
 
-// Production URL - update if different from dev
 const PROD_URL =
   process.env.CONVEX_PROD_URL ||
   "https://rugged-puffin-771.convex.cloud";
@@ -28,7 +27,7 @@ for (let i = 0; i < payload.length; i += BATCH_SIZE) {
   );
 
   try {
-    const result = await client.mutation(api.seedBuildings.seed, {
+    const result = await client.mutation(api.seedBuildings.seedAndPlace, {
       buildings: batch,
     });
     console.log(`    ✓`, result);

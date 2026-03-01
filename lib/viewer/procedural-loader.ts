@@ -42,7 +42,7 @@ function normalizeToPlot(group: THREE.Group): void {
  * delimiters) without ever calling `new Function()`, which would throw
  * a SyntaxError and trigger the Next.js dev error overlay.
  */
-function hasBalancedDelimiters(code: string): boolean {
+export function hasBalancedDelimiters(code: string): boolean {
   let braces = 0,
     brackets = 0,
     parens = 0;
@@ -171,6 +171,84 @@ export function loadProceduralGeometry(code: string): THREE.Group {
     console.warn("[ProceduralLoader] Failed to execute generated code:", err);
     console.warn("[ProceduralLoader] First 200 chars:", code.slice(0, 200));
     return createFallbackGroup();
+  }
+}
+
+/**
+ * Like loadProceduralGeometry but returns null on failure instead of a fallback cube.
+ * Use this when you'd rather skip a broken building than show a grey box.
+ */
+export function tryLoadProceduralGeometry(code: string): THREE.Group | null {
+  if (!code || typeof code !== "string" || code.trim().length === 0) {
+    return null;
+  }
+
+  const forbidden = [
+    "fetch(",
+    "XMLHttpRequest",
+    "localStorage",
+    "sessionStorage",
+    "navigator.",
+    "import(",
+    "require(",
+    "eval(",
+    "document.cookie",
+    "sendBeacon",
+  ];
+  for (const keyword of forbidden) {
+    if (code.includes(keyword)) {
+      console.warn(`[ProceduralLoader] tryLoad: forbidden keyword "${keyword}"`);
+      return null;
+    }
+  }
+
+  try {
+    let cleanCode = code;
+    const wrapperMatch = cleanCode.match(
+      /^(?:function\s*\(THREE\)|(?:\(THREE\)|\bTHREE\b)\s*=>)\s*\{([\s\S]*)\}\s*$/
+    );
+    if (wrapperMatch) {
+      cleanCode = wrapperMatch[1].trim();
+    }
+
+    if (!hasBalancedDelimiters(cleanCode)) {
+      console.warn("[ProceduralLoader] tryLoad: unbalanced delimiters");
+      return null;
+    }
+
+    const fn = new Function("THREE", `"use strict";\n${cleanCode}`);
+    const result = fn(THREE);
+
+    let group: THREE.Group;
+    if (result instanceof THREE.Group) {
+      group = result;
+    } else if (result instanceof THREE.Object3D) {
+      group = new THREE.Group();
+      group.add(result);
+    } else {
+      return null;
+    }
+
+    group.traverse((child) => {
+      if (child instanceof THREE.Mesh && child.material) {
+        child.castShadow = true;
+        child.receiveShadow = true;
+        const mats = Array.isArray(child.material) ? child.material : [child.material];
+        for (const mat of mats) {
+          mat.side = THREE.FrontSide;
+          if (mat.transparent) {
+            mat.depthWrite = true;
+          }
+        }
+      }
+    });
+
+    normalizeToPlot(group);
+    mergeBuildingGeometry(group);
+    return group;
+  } catch (err) {
+    console.warn("[ProceduralLoader] tryLoad failed:", err);
+    return null;
   }
 }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "convex/react";
+import { useQuery, useMutation, useAction } from "convex/react";
 import { api } from "@/convex/_generated/api";
 
 export default function SimControls({
@@ -12,6 +12,8 @@ export default function SimControls({
 }) {
   const city = useQuery(api.simulation.cityState.get);
   const isRunning = city?.isRunning ?? false;
+  const stopSim = useMutation(api.simulation.control.stopSimulation);
+  const startSim = useAction(api.simulation.control.startSimulation);
 
   return (
     <div className="absolute bottom-4 left-4 z-10 flex items-center gap-2">
@@ -26,6 +28,20 @@ export default function SimControls({
           {city ? `Week ${Math.max(1, Math.ceil(city.totalTicks / 12))}` : "—"}
         </span>
       </div>
+
+      {/* Stop/Start sim toggle */}
+      <button
+        onClick={() => (isRunning ? stopSim() : startSim())}
+        className={`
+          px-3 py-2 rounded-full text-xs font-mono font-bold
+          bg-white/15 backdrop-blur-2xl border border-white/25
+          shadow-[inset_0_1px_0_rgba(255,255,255,0.3),0_4px_16px_rgba(0,0,0,0.2)]
+          cursor-pointer hover:bg-white/25 transition-all
+          ${isRunning ? "text-red-400" : "text-emerald-400"}
+        `}
+      >
+        {isRunning ? "Stop" : "Start"}
+      </button>
 
       {/* Show/Hide sim toggle */}
       <button

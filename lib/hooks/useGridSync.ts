@@ -6,7 +6,7 @@ import { useQuery, useMutation } from "convex/react";
 import { useUser } from "@clerk/nextjs";
 import { api } from "../../convex/_generated/api";
 import { useWorldStore } from "../stores/world-store";
-import { loadProceduralGeometry } from "../viewer/procedural-loader";
+import { tryLoadProceduralGeometry } from "../viewer/procedural-loader";
 import { applyBuildingTextures } from "../viewer/building-textures";
 import { createLoadingPlaceholder } from "../viewer/loading-placeholder";
 import {
@@ -21,6 +21,7 @@ export function useGridSync() {
   const buildings = useQuery(api.buildings.getAllBuildings);
   const agents = useQuery(api.simulation.agents.getAll);
   const initializePlots = useMutation(api.plots.initializePlots);
+  const deleteBuilding = useMutation(api.buildings.deleteBuilding);
   const initialized = useRef(false);
 
   // Initialize plots on first load if empty or wrong count
@@ -39,6 +40,7 @@ export function useGridSync() {
   const syncedIds = useRef(new Set<string>());
   const syncedCodes = useRef(new Map<string, string>());
   const localPendingUpdates = useRef(new Map<string, number>());
+  const deletedIds = useRef(new Set<string>());
 
   useEffect(() => {
     if (!buildings || !layer) return;
@@ -54,13 +56,17 @@ export function useGridSync() {
         const prevCode = syncedCodes.current.get(id);
         if (prevCode !== undefined && prevCode !== b.proceduralCode) {
           console.log(`[GridSync] Code changed for ${id}, reloading geometry`);
-          try {
-            const newGroup = loadProceduralGeometry(b.proceduralCode);
+          const newGroup = tryLoadProceduralGeometry(b.proceduralCode);
+          if (newGroup) {
             applyBuildingTextures(newGroup);
             replaceGeometry(id, newGroup);
             syncedCodes.current.set(id, b.proceduralCode);
-          } catch (err) {
-            console.error(`[GridSync] Failed to reload geometry for ${id}:`, err);
+          } else {
+            console.warn(`[GridSync] Updated code failed for ${id}, deleting building`);
+            if (!deletedIds.current.has(id)) {
+              deletedIds.current.add(id);
+              deleteBuilding({ buildingId: b._id });
+            }
           }
         }
 
@@ -95,8 +101,15 @@ export function useGridSync() {
           ? [b.rotation.x, b.rotation.y, b.rotation.z]
           : [0, 0, 0];
 
-        const group = loadProceduralGeometry(b.proceduralCode);
-        // Apply textures async — group is already in scene, textures pop in when loaded
+        const group = tryLoadProceduralGeometry(b.proceduralCode);
+        if (!group) {
+          console.warn(`[GridSync] Building ${id} code failed — deleting from DB`);
+          if (!deletedIds.current.has(id)) {
+            deletedIds.current.add(id);
+            deleteBuilding({ buildingId: b._id });
+          }
+          continue;
+        }
         applyBuildingTextures(group);
 
         addBuilding(
@@ -129,7 +142,7 @@ export function useGridSync() {
         syncedCodes.current.delete(id);
       }
     }
-  }, [buildings, layer, addBuilding, removeBuilding, applyRemoteTransform]);
+  }, [buildings, layer, addBuilding, removeBuilding, applyRemoteTransform, deleteBuilding]);
 
   // ── Loading placeholders for "generating" plots ──────────────
   const placeholders = useRef(
