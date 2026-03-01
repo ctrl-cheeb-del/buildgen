@@ -393,11 +393,20 @@ export const generateBuilding = action({
           step: "generating-code",
         });
 
-        const adaptedCode = await adaptExistingCode(
-          similar.proceduralCode,
-          similar.prompt,
-          buildingName,
-        );
+        let finalCode: string;
+        try {
+          finalCode = await adaptExistingCode(
+            similar.proceduralCode,
+            similar.prompt,
+            buildingName,
+          );
+        } catch (adaptErr) {
+          console.warn(
+            `[Pipeline] Adaptation failed, falling back to original building code:`,
+            adaptErr instanceof Error ? adaptErr.message : adaptErr,
+          );
+          finalCode = similar.proceduralCode;
+        }
 
         await ctx.runMutation(internal.plots.setPipelineStepInternal, {
           plotIndex,
@@ -408,7 +417,7 @@ export const generateBuilding = action({
           plotIndex,
           ownerId,
           prompt: buildingName,
-          proceduralCode: adaptedCode,
+          proceduralCode: finalCode,
           multiViewGrid: undefined,
         });
 

@@ -69,41 +69,49 @@ export const run = internalAction({
       // 1. Mark plot as generating (shows loading cube)
       await ctx.runMutation(internal.plots.markGeneratingInternal, { plotIndex });
 
-      // 1.5. Check for similar existing buildings to reuse (skip in overnight/robust mode)
-      if (!skipReuse) {
-        const similar = await ctx.runQuery(internal.buildings.searchSimilarBuildings, {
-          searchTerm: buildDescription,
-          category,
-        });
+      // 1.5. Check for similar existing buildings to reuse
+      const similar = await ctx.runQuery(internal.buildings.searchSimilarBuildings, {
+        searchTerm: buildDescription,
+        category,
+      });
 
-        if (similar) {
-          console.log(`[agentBuild] Found similar building "${similar.prompt}", adapting...`);
-          const adaptedCode = await adaptExistingCode(
+      if (similar) {
+        console.log(`[agentBuild] Found similar building "${similar.prompt}", adapting...`);
+
+        let finalCode: string;
+        try {
+          finalCode = await adaptExistingCode(
             similar.proceduralCode,
             similar.prompt,
             buildDescription,
           );
-
-          // Skip directly to building creation — no image gen needed
-          await ctx.runMutation(internal.buildings.createBuildingInternal, {
-            plotIndex,
-            ownerId: `agent:${agentName}`,
-            prompt: buildDescription,
-            proceduralCode: adaptedCode,
-            multiViewGrid: undefined,
-            createdAtTick: tickNumber,
-          });
-
-          await ctx.runMutation(internal.plots.resetPlotInternal, { plotIndex });
-          await ctx.runMutation(internal.simulation._simBuildHelpers.onBuildComplete, {
-            plotIndex,
-            category,
-            agentName,
-          });
-
-          console.log(`[agentBuild] "${buildDescription}" (adapted) complete on plot #${plotIndex}!`);
-          return;
+        } catch (adaptErr) {
+          console.warn(
+            `[agentBuild] Adaptation failed, falling back to original building code:`,
+            adaptErr instanceof Error ? adaptErr.message : adaptErr,
+          );
+          finalCode = similar.proceduralCode;
         }
+
+        // Skip directly to building creation — no image gen needed
+        await ctx.runMutation(internal.buildings.createBuildingInternal, {
+          plotIndex,
+          ownerId: `agent:${agentName}`,
+          prompt: buildDescription,
+          proceduralCode: finalCode,
+          multiViewGrid: undefined,
+          createdAtTick: tickNumber,
+        });
+
+        await ctx.runMutation(internal.plots.resetPlotInternal, { plotIndex });
+        await ctx.runMutation(internal.simulation._simBuildHelpers.onBuildComplete, {
+          plotIndex,
+          category,
+          agentName,
+        });
+
+        console.log(`[agentBuild] "${buildDescription}" (adapted) complete on plot #${plotIndex}!`);
+        return;
       }
 
       // 2. Generate multi-view image via Replicate
