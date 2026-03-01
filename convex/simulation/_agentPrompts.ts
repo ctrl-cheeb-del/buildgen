@@ -19,6 +19,9 @@ export interface AgentDoc {
   isActive: boolean;
   nextActionAt?: number | null;
   pendingBuildDescription?: string | null;
+  income?: number;
+  totalEarned?: number;
+  jobType?: string;
 }
 
 export interface CityStateDoc {
@@ -44,6 +47,13 @@ export interface CityStateDoc {
   nextAgentTickId?: string;
   nextCityTickId?: string;
   activeDecree?: { title: string; description: string; effect: string; remainingTicks: number } | null;
+  tradeStats?: {
+    totalShipsDocked: number;
+    totalTradeIncome: number;
+    lastShipTick: number;
+    portLevel: number;
+    tradeMultiplier: number;
+  } | null;
 }
 
 export interface CitizenAction {
@@ -91,7 +101,7 @@ Your story: ${agent.personality}
 
 You own plot #${agent.plotIndex}. Your plot has: ${plotStatus}.${plotBuildingCount > 0 ? ` Types: ${agent.buildingCategory ?? "mixed"}.` : ""}
 Each plot can hold up to ${MAX_BUILDINGS_PER_PLOT} buildings arranged around the perimeter.
-Your wealth: $${agent.wealth}. Your satisfaction: ${agent.satisfaction}/100.
+Your wealth: ${agent.wealth}g (earning ${agent.income ?? 0}g/tick as ${agent.jobType ?? "resident"}). Your satisfaction: ${agent.satisfaction}/100.
 
 What you remember:
 ${agent.memoryBuffer.length > 0 ? agent.memoryBuffer.map((m) => `- ${m}`).join("\n") : "- Nothing notable yet."}

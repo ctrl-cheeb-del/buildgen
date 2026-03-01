@@ -41,6 +41,15 @@ export const create = internalMutation({
     }),
     currentMayorId: v.optional(v.id("agents")),
     mayorTerm: v.number(),
+    tradeStats: v.optional(
+      v.object({
+        totalShipsDocked: v.number(),
+        totalTradeIncome: v.number(),
+        lastShipTick: v.number(),
+        portLevel: v.number(),
+        tradeMultiplier: v.number(),
+      })
+    ),
   },
   handler: async (ctx, args) => {
     return await ctx.db.insert("cityState", {

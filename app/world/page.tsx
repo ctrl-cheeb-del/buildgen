@@ -38,6 +38,7 @@ import { useRemoteBoats } from "@/lib/hooks/useRemoteBoats";
 import { usePlaneMode } from "@/lib/hooks/usePlaneMode";
 import { useRemotePlanes } from "@/lib/hooks/useRemotePlanes";
 import { useChat } from "@/lib/hooks/useChat";
+import { useTradeDock } from "@/lib/hooks/useTradeDock";
 import { useChatStore } from "@/lib/stores/chat-store";
 import { useWorldStore } from "@/lib/stores/world-store";
 import { usePipelineStore } from "@/lib/stores/pipeline-store";
@@ -346,6 +347,9 @@ export default function Home() {
 
   usePlaneMode(layer, handlePlaneSync, handlePlaneExit);
   useRemotePlanes(carUserId);
+
+  // Trade dock visual
+  useTradeDock(layer);
 
   // Clean up all vehicle positions on tab close / navigate away
   useEffect(() => {
