@@ -44,7 +44,7 @@ export default function ReplayTimeline({
   const sortedTicks = [...tickGroups.keys()].sort((a, b) => a - b);
 
   return (
-    <div className="fixed inset-x-0 top-16 z-40 flex justify-center pointer-events-none animate-fade-in">
+    <div className="fixed inset-0 z-40 flex items-center justify-center pointer-events-none animate-fade-in">
       <div
         className="w-96 rounded-2xl overflow-hidden pointer-events-auto backdrop-blur-2xl"
         style={{

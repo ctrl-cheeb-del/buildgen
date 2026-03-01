@@ -65,6 +65,14 @@ export const run = internalAction({
   handler: async (ctx, { plotIndex, agentName, buildDescription, category, tickNumber, skipReuse }) => {
     console.log(`[agentBuild] ${agentName} building "${buildDescription}" on plot #${plotIndex}`);
 
+    // Guard: abort if plot already has 9 buildings
+    const plotBuildingCount = await ctx.runQuery(internal.buildings.countByPlot, { plotIndex });
+    if (plotBuildingCount >= 9) {
+      console.log(`[agentBuild] Plot #${plotIndex} already has ${plotBuildingCount} buildings (max 9), skipping`);
+      await ctx.runMutation(internal.simulation._simBuildHelpers.onBuildFailed, {});
+      return;
+    }
+
     /** Check if simulation was stopped — abort early if so. */
     async function shouldAbort(): Promise<boolean> {
       const city = await ctx.runQuery(internal.simulation.cityState.getInternal);

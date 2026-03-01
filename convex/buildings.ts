@@ -97,6 +97,17 @@ export const createBuildingInternal = internalMutation({
   },
 });
 
+export const countByPlot = internalQuery({
+  args: { plotIndex: v.number() },
+  handler: async (ctx, { plotIndex }) => {
+    const buildings = await ctx.db
+      .query("buildings")
+      .withIndex("by_plotIndex", (q) => q.eq("plotIndex", plotIndex))
+      .collect();
+    return buildings.length;
+  },
+});
+
 export const searchSimilarBuildings = internalQuery({
   args: {
     searchTerm: v.string(),
