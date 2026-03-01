@@ -422,3 +422,34 @@ body {
 .animate-feed-in {
   animation: feed-in 0.35s cubic-bezier(0.16, 1, 0.3, 1);
 }
+
+/* ── Loading overlay ───────────────── */
+
+.loading-scanlines {
+  background: repeating-linear-gradient(
+    0deg,
+    transparent 0px,
+    transparent 2px,
+    rgba(177, 158, 239, 0.04) 2px,
+    rgba(177, 158, 239, 0.04) 4px
+  );
+}
+
+.loading-text-pulse {
+  animation: loading-text-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes loading-text-pulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+@keyframes loading-bar {
+  0% { width: 0%; }
+  50% { width: 80%; }
+  100% { width: 100%; }
+}
+
+.animate-loading-bar {
+  animation: loading-bar 1.8s ease-in-out infinite;
+}

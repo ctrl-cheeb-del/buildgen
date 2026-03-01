@@ -43,6 +43,8 @@ import { useTradeDock } from "@/lib/hooks/useTradeDock";
 import { useChatStore } from "@/lib/stores/chat-store";
 import { useWorldStore } from "@/lib/stores/world-store";
 import { usePipelineStore } from "@/lib/stores/pipeline-store";
+import LoadingOverlay from "@/components/LoadingOverlay";
+import { useIntroReveal } from "@/lib/hooks/useIntroReveal";
 import { gridIndexToColRow, plotCenterMeters } from "@/lib/grid/grid-geometry";
 import type { Id } from "../../convex/_generated/dataModel";
 
@@ -117,6 +119,7 @@ export default function Home() {
   const pipelineIterationCount = usePipelineStore((s) => s.iterationCount);
   const { isSignedIn, user } = useUser();
   const { plotStates, buildings, localPendingUpdates } = useGridSync();
+  useIntroReveal();
 
   const myPlot = useQuery(api.plots.getMyPlot);
   const claimPlot = useMutation(api.plots.claimPlot);
@@ -731,6 +734,7 @@ export default function Home() {
 
   return (
     <div className="relative w-screen h-screen overflow-hidden">
+      <LoadingOverlay />
       <ThreeMapCanvas />
 
       {/* Plot click/hover popups */}

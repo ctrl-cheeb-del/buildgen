@@ -118,11 +118,11 @@ export const useWorldStore = create<WorldState>((set, get) => ({
     newHidden.delete(id);
     set({ replayHiddenIds: newHidden });
 
-    // Animate scale 0→1 over 500ms (ease-out cubic)
+    // Animate scale 0→1 over 150ms (ease-out cubic)
     container.visible = true;
     const targetScale = building.scale;
     const startTime = performance.now();
-    const duration = 500;
+    const duration = 150;
     const animate = (now: number) => {
       const elapsed = now - startTime;
       const t = Math.min(1, elapsed / duration);
@@ -162,10 +162,13 @@ export const useWorldStore = create<WorldState>((set, get) => ({
 
     state.layer?.addGroup(container);
 
+    // Don't rapid-fire select every building during batch load
+    const skipSelect = state.replayHiddenIds.has(building.id);
+
     set({
       buildings: newBuildings,
       containers: newContainers,
-      selectedId: building.id,
+      selectedId: skipSelect ? state.selectedId : building.id,
     });
   },
 

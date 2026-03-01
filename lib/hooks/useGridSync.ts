@@ -6,6 +6,7 @@ import { useQuery, useMutation } from "convex/react";
 import { useUser } from "@clerk/nextjs";
 import { api } from "../../convex/_generated/api";
 import { useWorldStore } from "../stores/world-store";
+import { useIntroStore } from "../stores/intro-store";
 import { tryLoadProceduralGeometry } from "../viewer/procedural-loader";
 import { applyBuildingTextures } from "../viewer/building-textures";
 import { createLoadingPlaceholder } from "../viewer/loading-placeholder";
@@ -41,9 +42,22 @@ export function useGridSync() {
   const syncedCodes = useRef(new Map<string, string>());
   const localPendingUpdates = useRef(new Map<string, number>());
   const deletedIds = useRef(new Set<string>());
+  const initialSyncDone = useRef(false);
 
   useEffect(() => {
     if (!buildings || !layer) return;
+
+    // On first sync, pre-populate replayHiddenIds so buildings start at scale 0
+    const isFirstSync = !initialSyncDone.current;
+    if (isFirstSync) {
+      const allIds = buildings
+        .map((b) => b._id as string)
+        .filter((id) => !syncedIds.current.has(id));
+      if (allIds.length > 0) {
+        const { setReplayHiddenIds } = useWorldStore.getState();
+        setReplayHiddenIds(new Set(allIds));
+      }
+    }
 
     const convexIds = new Set(buildings.map((b) => b._id as string));
 
@@ -141,6 +155,15 @@ export function useGridSync() {
         syncedIds.current.delete(id);
         syncedCodes.current.delete(id);
       }
+    }
+
+    // After first sync completes, trigger intro reveal
+    if (isFirstSync) {
+      initialSyncDone.current = true;
+      const syncedList = [...syncedIds.current];
+      const { setInitialBuildingIds, setPhase } = useIntroStore.getState();
+      setInitialBuildingIds(syncedList);
+      setPhase("revealing");
     }
   }, [buildings, layer, addBuilding, removeBuilding, applyRemoteTransform, deleteBuilding]);
 
