@@ -183,14 +183,27 @@ export const run = internalAction({
             // Build queue full — drop the request
             effectiveAction = "CHAT";
           } else if (action.build_description) {
-            // Set pending build for city tick to pick up
-            await ctx.runMutation(internal.simulation.agents.update, {
-              agentId: agent._id as any,
-              patch: {
-                pendingBuildDescription: action.build_description,
-              },
-            });
-            totalBuildSlots++;
+            // Check for duplicate: reject if same prompt already exists on this plot
+            const existingNames = plotBuildingNames[agent.plotIndex] ?? [];
+            const descLower = action.build_description.toLowerCase().trim();
+            const isDuplicate = existingNames.some(
+              (name) => name.toLowerCase().trim() === descLower,
+            );
+            if (isDuplicate) {
+              console.log(
+                `[agentTick] Rejected duplicate build "${action.build_description}" on plot #${agent.plotIndex}`,
+              );
+              effectiveAction = "CHAT";
+            } else {
+              // Set pending build for city tick to pick up
+              await ctx.runMutation(internal.simulation.agents.update, {
+                agentId: agent._id as any,
+                patch: {
+                  pendingBuildDescription: action.build_description,
+                },
+              });
+              totalBuildSlots++;
+            }
           }
         }
 
