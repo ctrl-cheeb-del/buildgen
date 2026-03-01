@@ -75,6 +75,7 @@ export const createBuildingInternal = internalMutation({
     prompt: v.string(),
     proceduralCode: v.string(),
     multiViewGrid: v.optional(v.string()),
+    createdAtTick: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const pos = await findFreePosition(ctx.db, args.plotIndex);
@@ -91,6 +92,7 @@ export const createBuildingInternal = internalMutation({
       multiViewGrid: args.multiViewGrid,
       position: { x: pos.x, y: 0, z: pos.z },
       createdAt: Date.now(),
+      createdAtTick: args.createdAtTick,
     });
   },
 });

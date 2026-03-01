@@ -3,6 +3,10 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import { useWorldStore } from "@/lib/stores/world-store";
+import { loadProceduralGeometry } from "@/lib/viewer/procedural-loader";
+import { applyBuildingTextures } from "@/lib/viewer/building-textures";
+import { gridIndexToColRow, plotCenterMeters } from "@/lib/grid/grid-geometry";
 
 interface ReplayPlaybackProps {
   lastSeenTick: number;
@@ -25,6 +29,7 @@ export default function ReplayPlayback({
   const [speed, setSpeed] = useState(1);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const completedRef = useRef(false);
+  const addedBuildingIds = useRef(new Set<string>());
 
   const tickRange = currentTick - lastSeenTick;
   const progress = tickRange > 0 ? (playbackTick - lastSeenTick) / tickRange : 1;
@@ -67,12 +72,87 @@ export default function ReplayPlayback({
     }
   }, [playbackTick, currentTick, isPlaying, handleComplete]);
 
+  // Visual timelapse: add buildings to the 3D scene as playback reaches their tick
+  const { addBuilding, layer } = useWorldStore();
+  useEffect(() => {
+    if (!replay?.buildings || !layer) return;
+
+    const newBuildings = replay.buildings.filter(
+      (b) =>
+        b.createdAtTick != null &&
+        b.createdAtTick <= playbackTick &&
+        !addedBuildingIds.current.has(b._id as string)
+    );
+
+    for (const b of newBuildings) {
+      const id = b._id as string;
+      addedBuildingIds.current.add(id);
+
+      try {
+        const group = loadProceduralGeometry(b.proceduralCode);
+        applyBuildingTextures(group);
+
+        const { col, row } = gridIndexToColRow(b.plotIndex);
+        const [mx, mz] = plotCenterMeters(col, row);
+        const offset: [number, number, number] = b.position
+          ? [b.position.x, b.position.y, b.position.z]
+          : [0, 0, 0];
+
+        // Start at scale 0 for animation
+        group.scale.set(0, 0, 0);
+
+        addBuilding(
+          {
+            id,
+            name: b.prompt,
+            x: mx,
+            z: mz,
+            path: "A",
+            scale: b.scale ?? 1,
+            offset,
+            rotation: b.rotation
+              ? [b.rotation.x, b.rotation.y, b.rotation.z]
+              : [0, 0, 0],
+            visible: true,
+            proceduralCode: b.proceduralCode,
+          },
+          group,
+        );
+
+        // Animate scale-up 0→1 over 500ms
+        const container = useWorldStore.getState().containers.get(id);
+        if (container) {
+          const targetScale = b.scale ?? 1;
+          const startTime = performance.now();
+          const duration = 500;
+          const animate = (now: number) => {
+            const elapsed = now - startTime;
+            const t = Math.min(1, elapsed / duration);
+            // Ease-out cubic
+            const eased = 1 - Math.pow(1 - t, 3);
+            const s = eased * targetScale;
+            container.scale.set(s, s, s);
+            if (t < 1) requestAnimationFrame(animate);
+          };
+          requestAnimationFrame(animate);
+        }
+      } catch (err) {
+        console.warn(`[ReplayPlayback] Failed to load building ${id}:`, err);
+      }
+    }
+  }, [playbackTick, replay?.buildings, layer, addBuilding]);
+
   if (!replay) return null;
 
   // Get messages for current playback tick
   const currentMessages = replay.messages.filter(
     (m) => m.tickNumber === playbackTick
   );
+
+  // Count buildings that appeared so far during replay
+  const buildingsAppeared = replay.buildings?.filter(
+    (b) => b.createdAtTick != null && b.createdAtTick <= playbackTick
+  ).length ?? 0;
 
   return (
     <div className="fixed inset-x-0 bottom-20 z-40 flex justify-center pointer-events-none">
@@ -147,6 +227,11 @@ export default function ReplayPlayback({
           </div>
 
           <div className="flex items-center gap-3">
+            {buildingsAppeared > 0 && (
+              <span className="text-[10px] text-emerald-400/60 font-mono">
+                +{buildingsAppeared} built
+              </span>
+            )}
             <span className="text-[10px] text-white/40 font-mono">
               T{playbackTick}/{currentTick}
             </span>

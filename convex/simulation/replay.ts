@@ -20,6 +20,12 @@ export const getReplaySince = query({
       .withIndex("by_tick", (q) => q.gte("tickNumber", afterTick))
       .take(50);
 
-    return { messages, tickLogs, elections };
+    // Buildings created during the replay window (for visual timelapse)
+    const buildings = await ctx.db
+      .query("buildings")
+      .withIndex("by_createdAtTick", (q) => q.gte("createdAtTick", afterTick))
+      .take(100);
+
+    return { messages, tickLogs, elections, buildings };
   },
 });

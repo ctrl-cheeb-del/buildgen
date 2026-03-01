@@ -52,6 +52,7 @@ export default defineSchema({
     createdAtTick: v.optional(v.number()),
   })
     .index("by_plotIndex", ["plotIndex"])
+    .index("by_createdAtTick", ["createdAtTick"])
     .searchIndex("search_prompt", {
       searchField: "prompt",
       filterFields: ["category"],

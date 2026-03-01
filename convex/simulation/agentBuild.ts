@@ -59,8 +59,9 @@ export const run = internalAction({
     agentName: v.string(),
     buildDescription: v.string(),
     category: v.string(),
+    tickNumber: v.optional(v.number()),
   },
-  handler: async (ctx, { plotIndex, agentName, buildDescription, category }) => {
+  handler: async (ctx, { plotIndex, agentName, buildDescription, category, tickNumber }) => {
     console.log(`[agentBuild] ${agentName} building "${buildDescription}" on plot #${plotIndex}`);
 
     try {
@@ -88,6 +89,7 @@ export const run = internalAction({
           prompt: buildDescription,
           proceduralCode: adaptedCode,
           multiViewGrid: undefined,
+          createdAtTick: tickNumber,
         });
 
         await ctx.runMutation(internal.plots.resetPlotInternal, { plotIndex });
@@ -284,6 +286,7 @@ Generate the code now for "${buildDescription}".`;
         prompt: buildDescription,
         proceduralCode: evaluatedCode,
         multiViewGrid: gridUrl ?? undefined,
+        createdAtTick: tickNumber,
       });
 
       // 7. Mark plot back to claimed (not occupied) so more buildings can be added
