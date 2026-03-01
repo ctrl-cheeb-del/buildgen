@@ -50,6 +50,11 @@ export const run = internalAction({
       return;
     }
 
-    // Healthy → no-op
+    // Healthy → check if agents need expansion
+    const agents: any[] = await ctx.runQuery(internal.simulation.agents.getAllInternal);
+    if (agents.length < 55) {
+      console.log(`[ensureRunning] Only ${agents.length} agents, expanding...`);
+      await ctx.runAction(internal.simulation.expandAgents.run, {});
+    }
   },
 });
