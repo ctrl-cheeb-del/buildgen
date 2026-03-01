@@ -92,6 +92,15 @@ export const run = internalAction({
       plotBuildingNames[b.plotIndex].push(b.prompt);
     }
 
+    // Also include pending (in-flight) build descriptions so duplicates
+    // are caught even before the building finishes generating
+    for (const a of agents) {
+      if (a.pendingBuildDescription) {
+        if (!plotBuildingNames[a.plotIndex]) plotBuildingNames[a.plotIndex] = [];
+        plotBuildingNames[a.plotIndex].push(a.pendingBuildDescription);
+      }
+    }
+
     // Count pending + active builds to enforce queue cap of 12
     const BUILD_QUEUE_CAP = 12;
     let pendingBuildCount = agents.filter((a) => a.pendingBuildDescription).length;
