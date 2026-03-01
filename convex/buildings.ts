@@ -126,6 +126,7 @@ export const searchSimilarBuildings = internalQuery({
     return {
       prompt: match.prompt,
       proceduralCode: match.proceduralCode,
+      multiViewGrid: match.multiViewGrid,
     };
   },
 });

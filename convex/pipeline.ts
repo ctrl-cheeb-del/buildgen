@@ -388,9 +388,18 @@ export const generateBuilding = action({
 
       if (similar) {
         console.log(`[Pipeline] Found similar building "${similar.prompt}", adapting...`);
+
+        // Show cached blueprint views in the pipeline UI
+        await ctx.runMutation(internal.plots.setPipelineStepInternal, {
+          plotIndex,
+          step: "generating-views",
+          multiViewUrl: similar.multiViewGrid,
+        });
+
         await ctx.runMutation(internal.plots.setPipelineStepInternal, {
           plotIndex,
           step: "generating-code",
+          multiViewUrl: similar.multiViewGrid,
         });
 
         let finalCode: string;
@@ -411,6 +420,7 @@ export const generateBuilding = action({
         await ctx.runMutation(internal.plots.setPipelineStepInternal, {
           plotIndex,
           step: "placing",
+          multiViewUrl: similar.multiViewGrid,
         });
 
         await ctx.runMutation(internal.buildings.createBuildingInternal, {
@@ -418,7 +428,7 @@ export const generateBuilding = action({
           ownerId,
           prompt: buildingName,
           proceduralCode: finalCode,
-          multiViewGrid: undefined,
+          multiViewGrid: similar.multiViewGrid,
         });
 
         await ctx.runMutation(internal.plots.markOccupiedInternal, { plotIndex });
