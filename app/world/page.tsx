@@ -565,13 +565,14 @@ export default function Home() {
   // Agent detail panel
   const [selectedAgentPlot, setSelectedAgentPlot] = useState<number | null>(null);
 
-  // Fly camera to agent's plot when clicking in feed
+  // Fly camera to agent's plot and open detail panel
   const handleAgentClick = useCallback(
     (plotIndex: number) => {
       if (!layer) return;
       const { col, row } = gridIndexToColRow(plotIndex);
       const [mx, mz] = plotCenterMeters(col, row);
       layer.flyTo(mx, mz);
+      setSelectedAgentPlot(plotIndex);
     },
     [layer]
   );
@@ -653,7 +654,7 @@ export default function Home() {
       />
 
       {/* Floating name tags above remote vehicles */}
-      <VehicleNameTags />
+      <VehicleNameTags onNPCClick={handleAgentClick} />
 
       {/* Hidden IsolatedViewer for iteration screenshot capture */}
       <div

@@ -57,10 +57,10 @@ export function useNPCTraffic(): void {
     };
   }, [layer, syncToConvex]);
 
-  // Rebuild NPCs when buildings or agents change
+  // Rebuild NPCs when buildings or agents change (require both)
   useEffect(() => {
     const manager = managerRef.current;
-    if (!manager || !buildings) return;
+    if (!manager || !buildings || !agents) return;
 
     const agentData = agents?.map((a) => ({
       plotIndex: a.plotIndex,

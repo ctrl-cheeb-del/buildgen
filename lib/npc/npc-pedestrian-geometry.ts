@@ -11,7 +11,7 @@ const PED_COLORS = [
   0x336688, // teal jacket
 ];
 
-const MAX_PEDESTRIANS = 120;
+const MAX_PEDESTRIANS = 40;
 
 /** Shared pedestrian geometry — capsule figure (~1.7m tall) */
 let sharedGeometry: THREE.BufferGeometry | null = null;

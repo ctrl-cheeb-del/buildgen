@@ -22,7 +22,6 @@ import { playCollisionSound, initNPCSounds } from "./npc-sounds";
 import { classifyBuilding } from "../simulation/classify-building";
 import type { BuildingCategory } from "../simulation/classify-building";
 import { gridIndexToColRow, plotCenterMeters } from "../grid/grid-geometry";
-import { drawNames } from "./npc-names";
 import { isGreen } from "./npc-traffic-lights";
 import {
   createTrafficLightMeshes,
@@ -89,6 +88,7 @@ export interface VisibleNPC {
   name: string;
   isNpc: true;
   activity?: string;
+  plotIndex: number;
 }
 
 export class NPCManager {
@@ -133,7 +133,9 @@ export class NPCManager {
     this.group.add(this.trafficLights.group);
   }
 
-  /** Rebuild NPCs from current building data */
+  private lastAgentCount = -1;
+
+  /** Rebuild NPCs from current building and agent data. Only real agents spawn. */
   rebuild(
     buildings: Array<{
       plotIndex: number;
@@ -147,6 +149,27 @@ export class NPCManager {
       jobType?: string | null;
     }>
   ): void {
+    // No agents = no NPCs
+    if (!agents || agents.length === 0) {
+      this.cars = [];
+      this.pedestrians = [];
+      this.identities = [];
+      this.activeCars = 0;
+      this.activePeds = 0;
+      this.carMesh.count = 0;
+      this.pedMesh.count = 0;
+      this.updateCarMatrices();
+      this.updatePedMatrices();
+      this.lastAgentCount = 0;
+      return;
+    }
+
+    // If agent count hasn't changed, skip full rebuild (prevents flicker)
+    if (agents.length === this.lastAgentCount && this.cars.length + this.pedestrians.length > 0) {
+      return;
+    }
+    this.lastAgentCount = agents.length;
+
     // Classify buildings
     const buildingData: BuildingData[] = buildings.map((b) => {
       const cat =
@@ -156,115 +179,82 @@ export class NPCManager {
       return { plotIndex: b.plotIndex, category: cat, x, z, prompt: b.prompt };
     });
 
-    // Group by category
-    const homes = buildingData.filter((b) =>
-      RESIDENTIAL_CATEGORIES.has(b.category)
-    );
+    // Build lookup maps
+    const buildingByPlot = new Map<number, BuildingData>();
+    for (const b of buildingData) buildingByPlot.set(b.plotIndex, b);
+
     const workplaces = buildingData.filter((b) =>
       WORKPLACE_CATEGORIES.has(b.category)
     );
     const shops = buildingData.filter((b) =>
       SHOPPING_CATEGORIES.has(b.category)
     );
-
-    // Fallback: if no residential, treat all buildings as both origins and destinations
-    const carOrigins = homes.length > 0 ? homes : buildingData;
-    const carDestinations =
-      workplaces.length > 0 ? workplaces : buildingData;
+    const carDestinations = workplaces.length > 0 ? workplaces : buildingData;
     const shopDestinations = shops.length > 0 ? shops : buildingData;
 
     const uniquePlots = new Set(buildingData.map((b) => b.plotIndex));
     const hasCrossRoutes = uniquePlots.size >= 2;
 
-    // Build agent lookup by plot for name/wealth integration
-    const agentByPlot = new Map<number, { name: string; wealth: number; jobType?: string | null }>();
-    if (agents) {
-      for (const a of agents) agentByPlot.set(a.plotIndex, a);
-    }
+    const CAR_WEALTH_THRESHOLD = 1000;
 
-    // Agents with wealth >= 200 can afford a car, others walk
-    const CAR_WEALTH_THRESHOLD = 200;
-    const carAgents = agents
-      ? agents.filter((a) => a.wealth >= CAR_WEALTH_THRESHOLD && carOrigins.some((h) => h.plotIndex === a.plotIndex))
-      : [];
-
-    // Determine NPC counts scaled with buildings
-    // If agents provided, car count = agents who can afford cars; otherwise ~2 per residential
-    const rawCarCount = hasCrossRoutes
-      ? Math.min(
-          carAgents.length > 0 ? carAgents.length : carOrigins.length * 2,
-          MAX_CARS
-        )
-      : 0;
-    const rawPedCount = Math.min(buildingData.length * 3, MAX_PEDESTRIANS);
-
-    // Use agent names when available, fall back to random pool
-    const agentNames = agents ? agents.map((a) => a.name) : [];
-    const totalNPCs = rawCarCount + rawPedCount;
-    const fallbackNames = drawNames(Math.max(0, totalNPCs - agentNames.length));
-    const names = [...agentNames, ...fallbackNames];
-
-    // --- Build identity pool ---
+    // --- Build identity pool + spawn NPCs ---
     this.identities = [];
-
-    // --- Spawn cars ---
     this.cars = [];
+    this.pedestrians = [];
     this.activeCars = 0;
+    this.activePeds = 0;
 
-    if (hasCrossRoutes) {
-      for (let i = 0; i < rawCarCount; i++) {
-        // If agents provided, use agent's home plot; otherwise cycle through residential
-        const agent = carAgents.length > 0 ? carAgents[i % carAgents.length] : null;
-        const home = agent
-          ? (carOrigins.find((h) => h.plotIndex === agent.plotIndex) ?? carOrigins[i % carOrigins.length])
-          : carOrigins[i % carOrigins.length];
+    for (let i = 0; i < agents.length; i++) {
+      const agent = agents[i];
+      // Use agent's home building, or fall back to any building so they still appear
+      const homeBuilding = buildingByPlot.get(agent.plotIndex)
+        ?? buildingData[i % buildingData.length];
+      if (!homeBuilding) continue; // no buildings at all — skip
 
-        // Pick activity based on agent job type, or random
-        const roll = Math.random();
+      const canAffordCar = agent.wealth >= CAR_WEALTH_THRESHOLD;
+
+      if (canAffordCar && hasCrossRoutes && this.activeCars < MAX_CARS) {
+        // --- Spawn car for this agent ---
+        // Pick deterministic destination based on agent index
         let dest: BuildingData;
         let activityType: NPCActivityType;
 
-        if (agent?.jobType) {
-          // Agent has a job — commute to a matching workplace
+        if (agent.jobType) {
           const jobWorkplaces = buildingData.filter(
-            (b) => b.category === agent.jobType && b.plotIndex !== home.plotIndex
+            (b) => b.category === agent.jobType && b.plotIndex !== agent.plotIndex
           );
           if (jobWorkplaces.length > 0) {
             dest = jobWorkplaces[i % jobWorkplaces.length];
             activityType = "commute_to_work";
-          } else if (roll < 0.6) {
+          } else {
             dest = carDestinations[i % carDestinations.length];
             activityType = "commute_to_work";
-          } else {
-            dest = shopDestinations[i % shopDestinations.length];
-            activityType = "shopping";
           }
-        } else if (roll < 0.6) {
-          // Commute to work
+        } else if (i % 3 < 2) {
           dest = carDestinations[i % carDestinations.length];
           activityType = "commute_to_work";
-        } else if (roll < 0.85) {
-          // Shopping
+        } else {
           dest = shopDestinations[i % shopDestinations.length];
           activityType = "shopping";
-        } else {
-          // Leisure — pick random building
-          dest = buildingData[Math.floor(Math.random() * buildingData.length)];
-          activityType = "leisure";
         }
 
         // Ensure different plot
-        if (dest.plotIndex === home.plotIndex) {
-          dest =
-            buildingData.find((w) => w.plotIndex !== home.plotIndex) ?? dest;
+        if (dest.plotIndex === agent.plotIndex) {
+          dest = buildingData.find((w) => w.plotIndex !== agent.plotIndex) ?? dest;
         }
-        if (dest.plotIndex === home.plotIndex) continue;
+        if (dest.plotIndex === agent.plotIndex) {
+          // Can't find a cross-plot route — fall through to pedestrian
+          this.spawnPedestrian(agent, i, homeBuilding, buildingData, shopDestinations, hasCrossRoutes);
+          continue;
+        }
 
-        const { col: hc, row: hr } = gridIndexToColRow(home.plotIndex);
+        const { col: hc, row: hr } = gridIndexToColRow(agent.plotIndex);
         const { col: wc, row: wr } = gridIndexToColRow(dest.plotIndex);
-
         const route = buildCarRoute(hc, hr, wc, wr);
-        if (route.length < 2) continue;
+        if (route.length < 2) {
+          this.spawnPedestrian(agent, i, homeBuilding, buildingData, shopDestinations, hasCrossRoutes);
+          continue;
+        }
 
         const colorIndex = i % 8;
         const identityId = this.identities.length;
@@ -276,18 +266,19 @@ export class NPCManager {
 
         this.identities.push({
           id: identityId,
-          name: agent?.name ?? names[identityId] ?? "NPC",
-          homePlot: home.plotIndex,
+          name: agent.name,
+          homePlot: agent.plotIndex,
           mode: "driving",
           activity,
           colorIndex,
         });
 
-        const baseSpeed = CAR_SPEED * (0.8 + Math.random() * 0.4);
+        // Deterministic speed based on agent index
+        const baseSpeed = CAR_SPEED * (0.8 + (((i * 7) % 10) / 10) * 0.4);
 
-        // Stagger spawn position along route to avoid overlap at origin
-        const startWP = Math.floor(Math.random() * route.length);
-        const startProgress = Math.random();
+        // Deterministic spawn position based on agent's plotIndex
+        const startWP = agent.plotIndex % route.length;
+        const startProgress = ((agent.plotIndex * 13) % 100) / 100;
         const wp0 = route[startWP];
         const wp1 = route[(startWP + 1) % route.length];
         const spawnX = wp0.x + (wp1.x - wp0.x) * startProgress;
@@ -310,128 +301,11 @@ export class NPCManager {
           identityId,
           stoppedAtLight: false,
         });
+        this.activeCars++;
+      } else if (this.activePeds < MAX_PEDESTRIANS) {
+        // --- Spawn pedestrian for this agent ---
+        this.spawnPedestrian(agent, i, homeBuilding, buildingData, shopDestinations, hasCrossRoutes);
       }
-      this.activeCars = this.cars.length;
-    }
-
-    // --- Spawn pedestrians ---
-    this.pedestrians = [];
-    this.activePeds = 0;
-
-    if (buildingData.length > 0) {
-      let pedCount = 0;
-      const nameOffset = this.identities.length;
-
-      for (const building of buildingData) {
-        const numPeds = 2 + Math.floor(Math.random() * 2); // 2-3 per building
-        const { col, row } = gridIndexToColRow(building.plotIndex);
-
-        for (let j = 0; j < numPeds && pedCount < rawPedCount; j++) {
-          // Decide activity: 30% stroll own plot, rest cross-plot if possible
-          const roll = Math.random();
-          let route;
-          let activityType: NPCActivityType;
-          let destLabel = "";
-          let destPlot = building.plotIndex;
-
-          if (!hasCrossRoutes || roll < 0.3) {
-            // Stroll own plot
-            route = buildPedestrianRoute(col, row);
-            activityType = "strolling";
-            destLabel = extractLabel(building.prompt);
-          } else if (roll < 0.5) {
-            // Walk to shop
-            const shop =
-              shopDestinations[
-                Math.floor(Math.random() * shopDestinations.length)
-              ];
-            if (shop.plotIndex !== building.plotIndex) {
-              const { col: dc, row: dr } = gridIndexToColRow(shop.plotIndex);
-              route = buildPedestrianCrossRoute(col, row, dc, dr);
-              activityType = "walking_to_shop";
-              destLabel = extractLabel(shop.prompt);
-              destPlot = shop.plotIndex;
-            } else {
-              route = buildPedestrianRoute(col, row);
-              activityType = "strolling";
-              destLabel = extractLabel(building.prompt);
-            }
-          } else if (roll < 0.7) {
-            // Walk to work
-            const work =
-              carDestinations[
-                Math.floor(Math.random() * carDestinations.length)
-              ];
-            if (work.plotIndex !== building.plotIndex) {
-              const { col: dc, row: dr } = gridIndexToColRow(work.plotIndex);
-              route = buildPedestrianCrossRoute(col, row, dc, dr);
-              activityType = "walking_to_shop"; // reuse label logic
-              destLabel = extractLabel(work.prompt);
-              destPlot = work.plotIndex;
-            } else {
-              route = buildPedestrianRoute(col, row);
-              activityType = "strolling";
-              destLabel = extractLabel(building.prompt);
-            }
-          } else {
-            // Visit friend — pick random building on different plot
-            const friend =
-              buildingData[Math.floor(Math.random() * buildingData.length)];
-            if (friend.plotIndex !== building.plotIndex) {
-              const { col: dc, row: dr } = gridIndexToColRow(
-                friend.plotIndex
-              );
-              route = buildPedestrianCrossRoute(col, row, dc, dr);
-              activityType = "visiting";
-              destLabel = extractLabel(friend.prompt);
-              destPlot = friend.plotIndex;
-            } else {
-              route = buildPedestrianRoute(col, row);
-              activityType = "strolling";
-              destLabel = extractLabel(building.prompt);
-            }
-          }
-
-          if (route.length < 2) continue;
-
-          const colorIndex = pedCount % 8;
-          const identityId = this.identities.length;
-          const activity: NPCActivity = {
-            type: activityType,
-            destinationLabel: destLabel,
-            destinationPlot: destPlot,
-          };
-
-          // Use agent name if a pedestrian is on an agent's home plot
-          const plotAgent = agentByPlot.get(building.plotIndex);
-          const pedName = (pedCount === 0 && plotAgent)
-            ? plotAgent.name
-            : (names[nameOffset + pedCount] ?? "NPC");
-
-          this.identities.push({
-            id: identityId,
-            name: pedName,
-            homePlot: building.plotIndex,
-            mode: "walking",
-            activity,
-            colorIndex,
-          });
-
-          const startIdx = Math.floor(Math.random() * route.length);
-          this.pedestrians.push({
-            x: route[startIdx].x,
-            z: route[startIdx].z,
-            route,
-            waypointIndex: startIdx,
-            progress: Math.random(),
-            speed: PED_SPEED * (0.7 + Math.random() * 0.6),
-            colorIndex,
-            identityId,
-          });
-          pedCount++;
-        }
-      }
-      this.activePeds = this.pedestrians.length;
     }
 
     // Update mesh counts
@@ -441,6 +315,104 @@ export class NPCManager {
     // Set initial transforms
     this.updateCarMatrices();
     this.updatePedMatrices();
+  }
+
+  /** Spawn a single pedestrian for an agent */
+  private spawnPedestrian(
+    agent: { plotIndex: number; name: string; wealth: number; jobType?: string | null },
+    agentIdx: number,
+    homeBuilding: BuildingData,
+    buildingData: BuildingData[],
+    shopDestinations: BuildingData[],
+    hasCrossRoutes: boolean,
+  ): void {
+    if (this.activePeds >= MAX_PEDESTRIANS) return;
+
+    // Use the building's plot for routing (agent may not have a building on their own plot)
+    const spawnPlot = homeBuilding.plotIndex;
+    const { col, row } = gridIndexToColRow(spawnPlot);
+    let route;
+    let activityType: NPCActivityType;
+    let destLabel = "";
+    let destPlot = spawnPlot;
+
+    // Deterministic activity based on agent index
+    const activityChoice = agentIdx % 4;
+
+    if (!hasCrossRoutes || activityChoice === 0) {
+      route = buildPedestrianRoute(col, row);
+      activityType = "strolling";
+      destLabel = extractLabel(homeBuilding.prompt);
+    } else if (activityChoice === 1) {
+      // Walk to shop
+      const shop = shopDestinations[agentIdx % shopDestinations.length];
+      if (shop.plotIndex !== spawnPlot) {
+        const { col: dc, row: dr } = gridIndexToColRow(shop.plotIndex);
+        route = buildPedestrianCrossRoute(col, row, dc, dr);
+        activityType = "walking_to_shop";
+        destLabel = extractLabel(shop.prompt);
+        destPlot = shop.plotIndex;
+      } else {
+        route = buildPedestrianRoute(col, row);
+        activityType = "strolling";
+        destLabel = extractLabel(homeBuilding.prompt);
+      }
+    } else if (activityChoice === 2) {
+      // Visit another building
+      const other = buildingData[agentIdx % buildingData.length];
+      if (other.plotIndex !== spawnPlot) {
+        const { col: dc, row: dr } = gridIndexToColRow(other.plotIndex);
+        route = buildPedestrianCrossRoute(col, row, dc, dr);
+        activityType = "visiting";
+        destLabel = extractLabel(other.prompt);
+        destPlot = other.plotIndex;
+      } else {
+        route = buildPedestrianRoute(col, row);
+        activityType = "strolling";
+        destLabel = extractLabel(homeBuilding.prompt);
+      }
+    } else {
+      route = buildPedestrianRoute(col, row);
+      activityType = "strolling";
+      destLabel = extractLabel(homeBuilding.prompt);
+    }
+
+    if (route.length < 2) return;
+
+    const colorIndex = agentIdx % 8;
+    const identityId = this.identities.length;
+    const activity: NPCActivity = {
+      type: activityType,
+      destinationLabel: destLabel,
+      destinationPlot: destPlot,
+    };
+
+    this.identities.push({
+      id: identityId,
+      name: agent.name,
+      homePlot: agent.plotIndex,
+      mode: "walking",
+      activity,
+      colorIndex,
+    });
+
+    // Deterministic spawn position based on agent's plotIndex
+    const startIdx = agent.plotIndex % route.length;
+    const startProgress = ((agent.plotIndex * 17) % 100) / 100;
+    const wp0 = route[startIdx];
+    const wp1 = route[(startIdx + 1) % route.length];
+
+    this.pedestrians.push({
+      x: wp0.x + (wp1.x - wp0.x) * startProgress,
+      z: wp0.z + (wp1.z - wp0.z) * startProgress,
+      route,
+      waypointIndex: startIdx,
+      progress: startProgress,
+      speed: PED_SPEED * (0.7 + (((agentIdx * 11) % 10) / 10) * 0.6),
+      colorIndex,
+      identityId,
+    });
+    this.activePeds++;
   }
 
   /** Tick NPC movement. Returns true if anything moved (needs repaint). */
@@ -669,6 +641,7 @@ export class NPCManager {
         name: identity.name,
         isNpc: true,
         activity: this.formatActivity(identity),
+        plotIndex: identity.homePlot,
       });
     }
 
@@ -690,6 +663,7 @@ export class NPCManager {
         name: identity.name,
         isNpc: true,
         activity: this.formatActivity(identity),
+        plotIndex: identity.homePlot,
       });
     }
 

@@ -11,7 +11,7 @@ const CAR_COLORS = [
   0x999999, // silver
 ];
 
-const MAX_CARS = 80;
+const MAX_CARS = 40;
 
 /** Shared car geometry — boxy sedan (~6m × 2.2m × 1.7m) */
 let sharedGeometry: THREE.BufferGeometry | null = null;
