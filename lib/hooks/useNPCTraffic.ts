@@ -13,11 +13,13 @@ const SYNC_INTERVAL = 3000; // Write to Convex every 3 seconds
 
 /**
  * React hook that creates NPC traffic (cars + pedestrians) from building data.
- * Reads buildings from Convex and spawns NPCs accordingly.
+ * Reads buildings and agents from Convex and spawns NPCs accordingly.
+ * Agents with enough wealth get cars; others walk. Names come from agent data.
  * Periodically syncs NPC car positions to Convex for cross-client visibility.
  */
 export function useNPCTraffic(): void {
   const buildings = useQuery(api.buildings.getAllBuildings);
+  const agents = useQuery(api.simulation.agents.getAll);
   const layer = useWorldStore((s) => s.layer);
   const managerRef = useRef<NPCManager | null>(null);
   const syncTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -55,17 +57,25 @@ export function useNPCTraffic(): void {
     };
   }, [layer, syncToConvex]);
 
-  // Rebuild NPCs when buildings change
+  // Rebuild NPCs when buildings or agents change
   useEffect(() => {
     const manager = managerRef.current;
     if (!manager || !buildings) return;
+
+    const agentData = agents?.map((a) => ({
+      plotIndex: a.plotIndex,
+      name: a.name,
+      wealth: a.wealth,
+      jobType: a.jobType ?? null,
+    }));
 
     manager.rebuild(
       buildings.map((b) => ({
         plotIndex: b.plotIndex,
         prompt: b.prompt,
         category: b.category ?? null,
-      }))
+      })),
+      agentData
     );
-  }, [buildings]);
+  }, [buildings, agents]);
 }

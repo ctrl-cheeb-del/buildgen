@@ -85,6 +85,10 @@ export default function MetricsBar() {
         {separator()}
         {badge("Builds", `${generatingCount}/${buildCap}`)}
         {separator()}
+        {badge("Trade", `${(city.tradeStats?.tradeMultiplier ?? 1.0).toFixed(1)}x`)}
+        {separator()}
+        {badge("Port", `Lv${city.tradeStats?.portLevel ?? 1}`)}
+        {separator()}
         <div className="text-[10px] text-white/40 font-mono px-2 py-0.5">
           Week {Math.max(1, Math.ceil(city.totalTicks / 12))}
         </div>

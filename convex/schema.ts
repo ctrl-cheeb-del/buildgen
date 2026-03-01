@@ -166,6 +166,15 @@ export default defineSchema({
         remainingTicks: v.number(),
       })
     ),
+    tradeStats: v.optional(
+      v.object({
+        totalShipsDocked: v.number(),
+        totalTradeIncome: v.number(),
+        lastShipTick: v.number(),
+        portLevel: v.number(),
+        tradeMultiplier: v.number(),
+      })
+    ),
   }),
 
   agents: defineTable({
@@ -184,6 +193,9 @@ export default defineSchema({
     isActive: v.boolean(),
     nextActionAt: v.optional(v.number()),
     pendingBuildDescription: v.optional(v.string()),
+    income: v.optional(v.number()),
+    totalEarned: v.optional(v.number()),
+    jobType: v.optional(v.string()),
   })
     .index("by_plotIndex", ["plotIndex"])
     .index("by_role", ["role"]),

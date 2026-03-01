@@ -21,6 +21,7 @@ import type * as pipeline from "../pipeline.js";
 import type * as planes from "../planes.js";
 import type * as plots from "../plots.js";
 import type * as resetWorld from "../resetWorld.js";
+import type * as seedBuildings from "../seedBuildings.js";
 import type * as simulation__agentPrompts from "../simulation/_agentPrompts.js";
 import type * as simulation__buildingHelpers from "../simulation/_buildingHelpers.js";
 import type * as simulation__electionHelpers from "../simulation/_electionHelpers.js";
@@ -62,6 +63,7 @@ declare const fullApi: ApiFromModules<{
   planes: typeof planes;
   plots: typeof plots;
   resetWorld: typeof resetWorld;
+  seedBuildings: typeof seedBuildings;
   "simulation/_agentPrompts": typeof simulation__agentPrompts;
   "simulation/_buildingHelpers": typeof simulation__buildingHelpers;
   "simulation/_electionHelpers": typeof simulation__electionHelpers;

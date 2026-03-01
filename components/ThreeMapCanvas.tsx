@@ -61,7 +61,7 @@ class AdaptiveQuality {
     if (this.level === 0 && avgFPS < 45) {
       this.level = 1;
       if (this.scene.fog instanceof THREE.FogExp2) {
-        this.scene.fog.density = 0.0015;
+        this.scene.fog.density = 0.0006;
       }
       console.log(`[Perf] L1: Fog tightened (avg ${avgFPS.toFixed(0)} FPS)`);
     } else if (this.level === 1 && avgFPS < 35) {
@@ -112,7 +112,7 @@ export default function ThreeMapCanvas() {
 
     // ── Scene ─────────────────────────────────────────────────
     const scene = new THREE.Scene();
-    scene.fog = new THREE.FogExp2(0x6ba3d6, 0.00018);
+    scene.fog = new THREE.FogExp2(0x6ba3d6, 0.00035);
 
     const envMap = createEnvironmentMap(renderer);
     scene.environment = envMap;

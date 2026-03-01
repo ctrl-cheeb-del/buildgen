@@ -5,6 +5,9 @@ import { createCloudDome } from "../viewer/clouds";
 import { createEnvironmentMap } from "../viewer/environment";
 import { loadProceduralGeometry } from "../viewer/procedural-loader";
 import { applyBuildingTextures } from "../viewer/building-textures";
+import { createBuildingLOD } from "../viewer/building-lod";
+import { updateVisibilityCulling } from "../viewer/visibility-culling";
+import { updateShadowCulling } from "../viewer/shadow-culling";
 import { plotCenterMeters } from "../grid/grid-geometry";
 import { gridIndexToColRow } from "../grid/grid-geometry";
 import {
@@ -28,8 +31,9 @@ export interface FPSceneResult {
   scene: THREE.Scene;
   colliders: THREE.Box3[];
   bounds: THREE.Box3;
+  containers: Map<string, THREE.Group>;
   dispose: () => void;
-  update: (elapsed: number, camera?: THREE.Camera) => void;
+  update: (elapsed: number, camera: THREE.Camera) => void;
 }
 
 export function buildFPScene(
@@ -59,8 +63,8 @@ export function buildFPScene(
   const sun = new THREE.DirectionalLight(0xfff4e6, 1.6);
   sun.position.set(500, 800, 400);
   sun.castShadow = true;
-  sun.shadow.mapSize.width = 2048;
-  sun.shadow.mapSize.height = 2048;
+  sun.shadow.mapSize.width = 1024;
+  sun.shadow.mapSize.height = 1024;
   sun.shadow.camera.left = -800;
   sun.shadow.camera.right = 800;
   sun.shadow.camera.top = 800;
@@ -90,7 +94,9 @@ export function buildFPScene(
   const ocean = createOcean();
   scene.add(ocean.mesh);
 
-  // Buildings
+  // Buildings — use LOD + track containers for per-frame culling
+  const containers = new Map<string, THREE.Group>();
+
   for (const b of buildings) {
     try {
       const group = loadProceduralGeometry(b.proceduralCode);
@@ -111,12 +117,16 @@ export function buildFPScene(
       // Apply textures (async — pops in)
       applyBuildingTextures(group);
 
+      // Wrap in LOD: full detail nearby, simple box at distance
+      const lod = createBuildingLOD(group);
+
       // Position building at plot center
       const { col, row } = gridIndexToColRow(b.plotIndex);
       const [cx, cz] = plotCenterMeters(col, row);
 
       const wrapper = new THREE.Group();
-      wrapper.add(group);
+      wrapper.name = `building-${b._id}`;
+      wrapper.add(lod);
       wrapper.position.set(cx, 0, cz);
 
       // Apply persisted offset/rotation/scale
@@ -133,6 +143,7 @@ export function buildFPScene(
       }
 
       scene.add(wrapper);
+      containers.set(b._id, wrapper);
 
       // Compute AABB for collision
       const box = new THREE.Box3().setFromObject(wrapper);
@@ -173,15 +184,23 @@ export function buildFPScene(
   };
 
   let lastCloudTick = 0;
-  const update = (elapsed: number, camera?: THREE.Camera) => {
+  let cullFrame = 0;
+  const update = (elapsed: number, camera: THREE.Camera) => {
     ocean.update(elapsed);
     if (elapsed - lastCloudTick > 2) {
       lastCloudTick = elapsed;
       clouds.update(elapsed, camera);
     }
+
+    // Visibility + shadow culling every 2nd frame (cheap enough)
+    cullFrame++;
+    if (cullFrame % 2 === 0) {
+      updateVisibilityCulling(containers, camera);
+      updateShadowCulling(containers, camera);
+    }
   };
 
-  return { scene, colliders, bounds, dispose, update };
+  return { scene, colliders, bounds, containers, dispose, update };
 }
 
 /** Spawn at grid center on a road intersection */

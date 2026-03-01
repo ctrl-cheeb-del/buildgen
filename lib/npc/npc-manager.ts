@@ -139,6 +139,12 @@ export class NPCManager {
       plotIndex: number;
       prompt: string;
       category?: string | null;
+    }>,
+    agents?: Array<{
+      plotIndex: number;
+      name: string;
+      wealth: number;
+      jobType?: string | null;
     }>
   ): void {
     // Classify buildings
@@ -170,16 +176,33 @@ export class NPCManager {
     const uniquePlots = new Set(buildingData.map((b) => b.plotIndex));
     const hasCrossRoutes = uniquePlots.size >= 2;
 
+    // Build agent lookup by plot for name/wealth integration
+    const agentByPlot = new Map<number, { name: string; wealth: number; jobType?: string | null }>();
+    if (agents) {
+      for (const a of agents) agentByPlot.set(a.plotIndex, a);
+    }
+
+    // Agents with wealth >= 200 can afford a car, others walk
+    const CAR_WEALTH_THRESHOLD = 200;
+    const carAgents = agents
+      ? agents.filter((a) => a.wealth >= CAR_WEALTH_THRESHOLD && carOrigins.some((h) => h.plotIndex === a.plotIndex))
+      : [];
+
     // Determine NPC counts scaled with buildings
-    // ~2 cars per residential building, ~3 pedestrians per building
+    // If agents provided, car count = agents who can afford cars; otherwise ~2 per residential
     const rawCarCount = hasCrossRoutes
-      ? Math.min(carOrigins.length * 2, MAX_CARS)
+      ? Math.min(
+          carAgents.length > 0 ? carAgents.length : carOrigins.length * 2,
+          MAX_CARS
+        )
       : 0;
     const rawPedCount = Math.min(buildingData.length * 3, MAX_PEDESTRIANS);
 
-    // Draw names for all NPCs
+    // Use agent names when available, fall back to random pool
+    const agentNames = agents ? agents.map((a) => a.name) : [];
     const totalNPCs = rawCarCount + rawPedCount;
-    const names = drawNames(totalNPCs);
+    const fallbackNames = drawNames(Math.max(0, totalNPCs - agentNames.length));
+    const names = [...agentNames, ...fallbackNames];
 
     // --- Build identity pool ---
     this.identities = [];
@@ -190,14 +213,33 @@ export class NPCManager {
 
     if (hasCrossRoutes) {
       for (let i = 0; i < rawCarCount; i++) {
-        const home = carOrigins[i % carOrigins.length];
+        // If agents provided, use agent's home plot; otherwise cycle through residential
+        const agent = carAgents.length > 0 ? carAgents[i % carAgents.length] : null;
+        const home = agent
+          ? (carOrigins.find((h) => h.plotIndex === agent.plotIndex) ?? carOrigins[i % carOrigins.length])
+          : carOrigins[i % carOrigins.length];
 
-        // Pick activity: 60% commute, 25% shopping, 15% leisure
+        // Pick activity based on agent job type, or random
         const roll = Math.random();
         let dest: BuildingData;
         let activityType: NPCActivityType;
 
-        if (roll < 0.6) {
+        if (agent?.jobType) {
+          // Agent has a job — commute to a matching workplace
+          const jobWorkplaces = buildingData.filter(
+            (b) => b.category === agent.jobType && b.plotIndex !== home.plotIndex
+          );
+          if (jobWorkplaces.length > 0) {
+            dest = jobWorkplaces[i % jobWorkplaces.length];
+            activityType = "commute_to_work";
+          } else if (roll < 0.6) {
+            dest = carDestinations[i % carDestinations.length];
+            activityType = "commute_to_work";
+          } else {
+            dest = shopDestinations[i % shopDestinations.length];
+            activityType = "shopping";
+          }
+        } else if (roll < 0.6) {
           // Commute to work
           dest = carDestinations[i % carDestinations.length];
           activityType = "commute_to_work";
@@ -234,7 +276,7 @@ export class NPCManager {
 
         this.identities.push({
           id: identityId,
-          name: names[identityId] ?? "NPC",
+          name: agent?.name ?? names[identityId] ?? "NPC",
           homePlot: home.plotIndex,
           mode: "driving",
           activity,
@@ -360,9 +402,15 @@ export class NPCManager {
             destinationPlot: destPlot,
           };
 
+          // Use agent name if a pedestrian is on an agent's home plot
+          const plotAgent = agentByPlot.get(building.plotIndex);
+          const pedName = (pedCount === 0 && plotAgent)
+            ? plotAgent.name
+            : (names[nameOffset + pedCount] ?? "NPC");
+
           this.identities.push({
             id: identityId,
-            name: names[nameOffset + pedCount] ?? "NPC",
+            name: pedName,
             homePlot: building.plotIndex,
             mode: "walking",
             activity,

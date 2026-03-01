@@ -167,6 +167,13 @@ export const run = internalAction({
       budgetAllocation: { education: 0.25, healthcare: 0.25, security: 0.25, infrastructure: 0.25 },
       currentMayorId: mayorId as any,
       mayorTerm: 20,
+      tradeStats: {
+        totalShipsDocked: 0,
+        totalTradeIncome: 0,
+        lastShipTick: 0,
+        portLevel: 1,
+        tradeMultiplier: 1.0,
+      },
     });
 
     // Welcome messages at tick 0 for the kingdom feed

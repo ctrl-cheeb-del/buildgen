@@ -169,6 +169,8 @@ export const updateTransform = mutation({
     scale: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    const existing = await ctx.db.get(args.buildingId);
+    if (!existing) return;
     const patch: Record<string, unknown> = {};
     if (args.position !== undefined) patch.position = args.position;
     if (args.rotation !== undefined) patch.rotation = args.rotation;

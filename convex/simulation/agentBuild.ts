@@ -84,19 +84,44 @@ export const run = internalAction({
       if (similar) {
         console.log(`[agentBuild] Found similar building "${similar.prompt}", adapting...`);
 
-        let finalCode: string;
-        try {
-          finalCode = await adaptExistingCode(
-            similar.proceduralCode,
-            similar.prompt,
-            buildDescription,
-          );
-        } catch (adaptErr) {
-          console.warn(
-            `[agentBuild] Adaptation failed, falling back to original building code:`,
-            adaptErr instanceof Error ? adaptErr.message : adaptErr,
-          );
-          finalCode = similar.proceduralCode;
+        let finalCode: string | null = null;
+
+        // Try adaptation up to 3 times with validation
+        for (let attempt = 1; attempt <= 3; attempt++) {
+          try {
+            const adapted = await adaptExistingCode(
+              similar.proceduralCode,
+              similar.prompt,
+              buildDescription,
+            );
+            const validation = validateCode(adapted);
+            if (validation.valid) {
+              finalCode = adapted;
+              console.log(`[agentBuild] Adaptation succeeded on attempt ${attempt}`);
+              break;
+            }
+            console.warn(`[agentBuild] Adaptation attempt ${attempt} invalid: ${validation.reason}`);
+          } catch (adaptErr) {
+            console.warn(
+              `[agentBuild] Adaptation attempt ${attempt} threw:`,
+              adaptErr instanceof Error ? adaptErr.message : adaptErr,
+            );
+          }
+        }
+
+        // Fall back to original code if all adaptation attempts failed
+        if (!finalCode) {
+          const origValidation = validateCode(similar.proceduralCode);
+          if (origValidation.valid) {
+            console.warn(`[agentBuild] All adaptations failed, using original code`);
+            finalCode = similar.proceduralCode;
+          } else {
+            // Original code is also suspect — skip this building entirely
+            console.warn(`[agentBuild] Original code also invalid (${origValidation.reason}), skipping build`);
+            await ctx.runMutation(internal.plots.resetPlotInternal, { plotIndex });
+            await ctx.runMutation(internal.simulation._simBuildHelpers.onBuildFailed, {});
+            return;
+          }
         }
 
         // Skip directly to building creation — no image gen needed
@@ -456,11 +481,9 @@ The code must create a THREE.Group and return it.`;
 
     const codeMatch = text.match(/```(?:javascript|js)?\s*\n([\s\S]*?)```/);
     const improved = codeMatch ? codeMatch[1].trim() : text.trim();
-    if (!improved || improved.length < 50) return code;
-
-    // Validate: must contain THREE.Group and return statement
-    if (!improved.includes("THREE.Group") || !improved.includes("return")) {
-      console.warn(`[agentBuild] Improved code missing THREE.Group or return, keeping original`);
+    const validation = validateCode(improved);
+    if (!validation.valid) {
+      console.warn(`[agentBuild] Improved code invalid (${validation.reason}), keeping original`);
       return code;
     }
 
@@ -470,6 +493,53 @@ The code must create a THREE.Group and return it.`;
     console.warn(`[agentBuild] Bedrock improve failed, keeping original:`, err);
     return code;
   }
+}
+
+/**
+ * Server-side validation for procedural building code.
+ * Catches common issues that would cause client-side grey-cube fallback.
+ */
+function validateCode(code: string): { valid: boolean; reason?: string } {
+  if (!code || code.trim().length < 50) {
+    return { valid: false, reason: "too short (< 50 chars)" };
+  }
+  if (!code.includes("THREE.Group")) {
+    return { valid: false, reason: "missing THREE.Group" };
+  }
+  if (!code.includes("return")) {
+    return { valid: false, reason: "missing return statement" };
+  }
+
+  // Check balanced delimiters (same algorithm as procedural-loader.ts)
+  let braces = 0, brackets = 0, parens = 0;
+  let inString = false;
+  let stringChar = "";
+  for (let i = 0; i < code.length; i++) {
+    const ch = code[i];
+    if (inString) {
+      if (ch === stringChar && code[i - 1] !== "\\") inString = false;
+      continue;
+    }
+    if (ch === '"' || ch === "'" || ch === "`") {
+      inString = true;
+      stringChar = ch;
+      continue;
+    }
+    if (ch === "{") braces++;
+    else if (ch === "}") braces--;
+    else if (ch === "[") brackets++;
+    else if (ch === "]") brackets--;
+    else if (ch === "(") parens++;
+    else if (ch === ")") parens--;
+    if (braces < 0 || brackets < 0 || parens < 0) {
+      return { valid: false, reason: "negative delimiter count (extra closing)" };
+    }
+  }
+  if (braces !== 0 || brackets !== 0 || parens !== 0) {
+    return { valid: false, reason: `unbalanced delimiters (braces=${braces} brackets=${brackets} parens=${parens})` };
+  }
+
+  return { valid: true };
 }
 
 /**
@@ -505,10 +575,9 @@ ${proceduralCode}
   const code = codeMatch ? codeMatch[1].trim() : text.trim();
   if (!code) throw new Error("Adaptation returned no usable geometry code");
 
-  // Validate: must contain THREE.Group and return statement
-  if (!code.includes("THREE.Group") || !code.includes("return")) {
-    console.warn(`[agentBuild] Adapted code missing THREE.Group or return, using original`);
-    return proceduralCode;
+  const validation = validateCode(code);
+  if (!validation.valid) {
+    throw new Error(`Adapted code invalid: ${validation.reason}`);
   }
 
   console.log(`[agentBuild] Adapted code via Bedrock (${code.length} chars)`);

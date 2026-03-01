@@ -50,6 +50,8 @@ City state:
 - Current tax rates: res ${Math.round(city.taxRates.residential * 100)}%, com ${Math.round(city.taxRates.commercial * 100)}%, ind ${Math.round(city.taxRates.industrial * 100)}%, lux ${Math.round(city.taxRates.luxury * 100)}%
   WARNING: Taxes above 20% trigger tax fatigue (evasion). Above 30% citizens get unhappy. But too low = deficit!
 - Budget: edu ${Math.round(city.budgetAllocation.education * 100)}%, health ${Math.round(city.budgetAllocation.healthcare * 100)}%, security ${Math.round(city.budgetAllocation.security * 100)}%, infra ${Math.round(city.budgetAllocation.infrastructure * 100)}%
+- Trade port: Level ${city.tradeStats?.portLevel ?? 1}, multiplier: ${city.tradeStats?.tradeMultiplier?.toFixed(1) ?? "1.0"}x, ships docked: ${city.tradeStats?.totalShipsDocked ?? 0}
+  TIP: More industrial/commercial/office buildings boost your trade multiplier, attracting richer ships!
 - Active decree: ${city.activeDecree?.title ?? "none"}
 - Next election in: ${city.mayorTerm} ticks${treasuryWarning}
 
@@ -299,11 +301,106 @@ export const run = internalAction({
         console.log(`[tick ${tickNumber}] CRISIS: Industrial accident! Cost: ${crisisTreasuryHit}`);
       }
     } else if (crisisRoll < 0.08) {
-      // Trade boom — 2% chance (positive event, but rare)
+      // Foreign delegation — 2% chance (positive event, boosts trade multiplier)
       crisisHappinessMod = 5;
-      crisisTreasuryHit = -Math.round(population * 0.3); // negative = bonus
-      crisisMessage = "A trade caravan has arrived! The economy flourishes briefly.";
-      console.log(`[tick ${tickNumber}] EVENT: Trade boom! Treasury bonus: ${-crisisTreasuryHit}`);
+      crisisMessage = "A foreign delegation has arrived! Trade relations flourish!";
+      console.log(`[tick ${tickNumber}] EVENT: Foreign delegation! Trade multiplier boosted for 5 ticks.`);
+    }
+
+    // ── TRADE SHIP SYSTEM ──
+    const prevTradeStats = city.tradeStats ?? {
+      totalShipsDocked: 0, totalTradeIncome: 0, lastShipTick: 0, portLevel: 1, tradeMultiplier: 1.0,
+    };
+
+    // Foreign delegation bonus: +0.5 multiplier for 5 ticks after event
+    const delegationBonus = (crisisMessage.includes("foreign delegation")) ? 0.5 : 0;
+
+    // Trade multiplier based on building types
+    const tradeMultiplier = +(1.0 + census.industrial * 0.25 + census.commercial * 0.15 + census.office * 0.1 + delegationBonus).toFixed(2);
+
+    // Port level: Lv1 start → Lv2 after 10 ships → Lv3 after 25 ships
+    const portLevel = prevTradeStats.totalShipsDocked >= 25 ? 3 : prevTradeStats.totalShipsDocked >= 10 ? 2 : 1;
+
+    // Ship frequency: Lv1=25%, Lv2=33%, Lv3=50%. Guaranteed if 6+ ticks since last ship.
+    const shipChance = portLevel === 3 ? 0.5 : portLevel === 2 ? 0.33 : 0.25;
+    const ticksSinceShip = tickNumber - prevTradeStats.lastShipTick;
+    const shipDocks = ticksSinceShip >= 6 || Math.random() < shipChance;
+
+    let tradeTreasuryIncome = 0;
+    let tradeWagePool = 0;
+    let tradeShipMessage = "";
+
+    if (shipDocks) {
+      const cargoValue = Math.round((200 + Math.random() * 300) * portLevel * tradeMultiplier);
+      tradeTreasuryIncome = Math.round(cargoValue * 0.7);
+      tradeWagePool = Math.round(cargoValue * 0.3);
+
+      const flavorMessages = [
+        `A trade ship just docked! ${cargoValue}g in cargo revenue!`,
+        `Merchant vessel arrived with ${cargoValue}g worth of exotic goods!`,
+        `Trade ship unloading! ${cargoValue}g flows into our economy!`,
+        `The port bustles as a cargo ship brings ${cargoValue}g in trade!`,
+      ];
+      tradeShipMessage = flavorMessages[Math.floor(Math.random() * flavorMessages.length)];
+      console.log(`[tick ${tickNumber}] TRADE SHIP: ${cargoValue}g cargo (treasury: +${tradeTreasuryIncome}, wages: +${tradeWagePool})`);
+    }
+
+    const newTradeStats = {
+      totalShipsDocked: prevTradeStats.totalShipsDocked + (shipDocks ? 1 : 0),
+      totalTradeIncome: prevTradeStats.totalTradeIncome + tradeTreasuryIncome,
+      lastShipTick: shipDocks ? tickNumber : prevTradeStats.lastShipTick,
+      portLevel,
+      tradeMultiplier,
+    };
+
+    // ── AGENT WAGES & SPENDING ──
+    const wageMap: Record<string, number> = {
+      luxury: 35, industrial: 30, office: 25, commercial: 20,
+      entertainment: 15, civic: 10, residential: 5,
+    };
+    const tradeEligible = new Set(["industrial", "commercial", "office"]);
+
+    // Count trade-eligible workers for wage pool distribution
+    const tradeWorkerCount = agents.filter((a) => a.isActive && a.role === "citizen" && tradeEligible.has(a.buildingCategory ?? "")).length;
+
+    const perWorkerTradeBonus = tradeWorkerCount > 0 ? Math.round(tradeWagePool / tradeWorkerCount) : 0;
+
+    let totalConsumptionTax = 0;
+    const agentWageUpdates: Array<{ agentId: string; income: number; totalEarned: number; wealth: number; jobType: string }> = [];
+
+    for (const agent of agents) {
+      if (!agent.isActive || agent.role !== "citizen") continue;
+
+      const cat = agent.buildingCategory ?? "residential";
+      const baseWage = wageMap[cat] ?? 5;
+      const educBonus = 1 + (educationLevel / 200); // up to 1.5x
+      let tickIncome = Math.round(baseWage * educBonus);
+
+      // Trade bonus for eligible workers
+      if (shipDocks && tradeEligible.has(cat)) {
+        tickIncome += perWorkerTradeBonus;
+      }
+
+      // Spending: 30-60% of income, keep 200g safety floor
+      const spendRate = 0.3 + Math.random() * 0.3;
+      const potentialSpend = Math.round(tickIncome * spendRate);
+      const currentWealth = agent.wealth + tickIncome;
+      const actualSpend = currentWealth - potentialSpend >= 200 ? potentialSpend : Math.max(0, currentWealth - 200);
+
+      // Consumption tax on spending
+      const consumptionTax = Math.round(actualSpend * avgTaxRate);
+      totalConsumptionTax += consumptionTax;
+
+      const newWealth = currentWealth - actualSpend;
+      const prevTotalEarned = agent.totalEarned ?? 0;
+
+      agentWageUpdates.push({
+        agentId: agent._id,
+        income: tickIncome,
+        totalEarned: prevTotalEarned + tickIncome,
+        wealth: Math.round(newWealth),
+        jobType: cat,
+      });
     }
 
     const happiness = clamp(
@@ -481,8 +578,8 @@ export const run = internalAction({
       if (newDecree.remainingTicks <= 0) newDecree = undefined as any;
     }
 
-    // Collect taxes + pay expenses + crisis costs
-    let newTreasury = city.treasury + taxRevenue - totalExpenses - crisisTreasuryHit;
+    // Collect taxes + pay expenses + crisis costs + trade income + consumption tax
+    let newTreasury = city.treasury + taxRevenue + tradeTreasuryIncome + totalConsumptionTax - totalExpenses - crisisTreasuryHit;
     let consecutiveBankrupt = city.consecutiveBankruptTicks ?? 0;
 
     // Broadcast crisis event
@@ -491,6 +588,16 @@ export const run = internalAction({
         senderPlotIndex: mayor.plotIndex,
         senderName: mayor.name,
         content: crisisMessage.slice(0, 80),
+        messageType: "announcement" as const,
+        tickNumber,
+      });
+    }
+    // Broadcast trade ship event
+    if (tradeShipMessage && mayor) {
+      await ctx.runMutation(internal.simulation.agentMessages.create, {
+        senderPlotIndex: mayor.plotIndex,
+        senderName: mayor.name,
+        content: tradeShipMessage.slice(0, 80),
         messageType: "announcement" as const,
         tickNumber,
       });
@@ -621,7 +728,7 @@ export const run = internalAction({
       consecutiveBankrupt = 0;
     }
 
-    // Update ALL active agents: satisfaction, loyalty, memory
+    // Update ALL active agents: satisfaction, loyalty, memory, wages
     // Track which agents had builds approved/denied this city tick
     const approvedPlots = new Set(approvedBuilds.map((r) => r.agent.plotIndex));
     const deniedPlots = new Set(
@@ -629,6 +736,9 @@ export const run = internalAction({
         .filter((r) => !approvedBuilds.some((a) => a.agent._id === r.agent._id))
         .map((r) => r.agent.plotIndex),
     );
+
+    // Build a lookup for wage updates
+    const wageUpdateMap = new Map(agentWageUpdates.map((u) => [u.agentId, u]));
 
     for (const agent of citizens) {
       const happinessDelta = happiness - city.happiness;
@@ -652,7 +762,22 @@ export const run = internalAction({
       if (consecutiveBankrupt >= 3) {
         newMemory.push(`Tick ${tickNumber}: City bankrupt for ${consecutiveBankrupt} ticks! Buildings being sold!`);
       }
+      if (tradeShipMessage) {
+        newMemory.push(`Tick ${tickNumber}: ${tradeShipMessage}`);
+      }
       while (newMemory.length > 5) newMemory.shift();
+
+      // Merge wage update if available
+      const wageUpdate = wageUpdateMap.get(agent._id);
+      const wagePatch = wageUpdate ? {
+        wealth: wageUpdate.wealth,
+        income: wageUpdate.income,
+        totalEarned: wageUpdate.totalEarned,
+        jobType: wageUpdate.jobType,
+      } : {};
+
+      // Remove from map so we don't double-apply
+      wageUpdateMap.delete(agent._id);
 
       await ctx.runMutation(internal.simulation.agents.update, {
         agentId: agent._id as any,
@@ -660,6 +785,20 @@ export const run = internalAction({
           satisfaction: Math.round(newSatisfaction),
           loyaltyToMayor: Math.round(newLoyalty),
           memoryBuffer: newMemory,
+          ...wagePatch,
+        },
+      });
+    }
+
+    // Apply wage updates for agents not in citizenResults (inactive this tick but still earn wages)
+    for (const [agentId, wageUpdate] of wageUpdateMap) {
+      await ctx.runMutation(internal.simulation.agents.update, {
+        agentId: agentId as any,
+        patch: {
+          wealth: wageUpdate.wealth,
+          income: wageUpdate.income,
+          totalEarned: wageUpdate.totalEarned,
+          jobType: wageUpdate.jobType,
         },
       });
     }
@@ -687,6 +826,7 @@ export const run = internalAction({
         lastTickAt: Date.now(),
         activeBuildCount: city.activeBuildCount + newBuildsApproved,
         consecutiveBankruptTicks: consecutiveBankrupt,
+        tradeStats: newTradeStats,
       },
     });
 
@@ -697,12 +837,15 @@ export const run = internalAction({
       agentsActed: citizens.length,
       metricsSnapshot: JSON.stringify({
         population, taxRevenue, expenses: totalExpenses, happiness, crimeRate, pollutionLevel,
-        consecutiveBankrupt, treasuryDelta: taxRevenue - totalExpenses - crisisTreasuryHit,
+        consecutiveBankrupt, treasuryDelta: taxRevenue + tradeTreasuryIncome + totalConsumptionTax - totalExpenses - crisisTreasuryHit,
         crisis: crisisMessage || null, inflationMultiplier,
+        tradeIncome: tradeTreasuryIncome, consumptionTax: totalConsumptionTax,
+        shipDocked: shipDocks, portLevel, tradeMultiplier,
       }),
     });
 
-    console.log(`[tick ${tickNumber}] Done. ${newBuildsApproved} builds approved. Treasury: ${Math.round(newTreasury)} (income: ${taxRevenue}, expenses: ${totalExpenses}${crisisTreasuryHit ? `, crisis: -${crisisTreasuryHit}` : ""}, inflation: ${inflationMultiplier.toFixed(2)}x)`);
+    console.log(`[tick ${tickNumber}] Done. ${newBuildsApproved} builds approved. Treasury: ${Math.round(newTreasury)} (income: ${taxRevenue}, trade: +${tradeTreasuryIncome}, consTax: +${totalConsumptionTax}, expenses: ${totalExpenses}${crisisTreasuryHit ? `, crisis: -${crisisTreasuryHit}` : ""}, inflation: ${inflationMultiplier.toFixed(2)}x) Port Lv${portLevel} Trade ${tradeMultiplier}x${shipDocks ? " SHIP DOCKED" : ""}`);
+
 
     // Step 6: City collapse → bailout (sim never stops)
     if (cityCollapsed) {

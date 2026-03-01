@@ -35,6 +35,11 @@ interface WorldState {
     id: string,
     updates: Partial<Pick<WorldBuilding, "scale" | "offset" | "rotation">>
   ) => void;
+  /** Apply transform from Convex without triggering Convex sync (prevents loop) */
+  applyRemoteTransform: (
+    id: string,
+    updates: Partial<Pick<WorldBuilding, "scale" | "offset" | "rotation">>
+  ) => void;
   getAllBuildings: () => WorldBuilding[];
   generateId: () => string;
   clear: () => void;
@@ -265,6 +270,22 @@ export const useWorldStore = create<WorldState>((set, get) => ({
         }, 200)
       );
     }
+  },
+
+  applyRemoteTransform: (id, updates) => {
+    const state = get();
+    const building = state.buildings.get(id);
+    const container = state.containers.get(id);
+    if (!building || !container) return;
+
+    if (updates.scale !== undefined) building.scale = updates.scale;
+    if (updates.offset !== undefined) building.offset = [...updates.offset];
+    if (updates.rotation !== undefined)
+      building.rotation = [...updates.rotation];
+
+    applyTransforms(building, container);
+    state.layer?.repaint();
+    // No Convex sync — this data came FROM Convex
   },
 
   getAllBuildings: () => {
