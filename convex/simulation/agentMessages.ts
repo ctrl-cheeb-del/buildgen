@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { query, internalMutation } from "../_generated/server";
+import { query, internalQuery, internalMutation } from "../_generated/server";
 
 export const getRecent = query({
   args: { afterTick: v.number() },
@@ -20,6 +20,17 @@ export const getByAgent = query({
       .order("desc")
       .collect();
     return limit ? msgs.slice(0, limit) : msgs;
+  },
+});
+
+export const getRange = internalQuery({
+  args: { afterTick: v.number(), upToTick: v.number() },
+  handler: async (ctx, { afterTick, upToTick }) => {
+    const msgs = await ctx.db
+      .query("agentMessages")
+      .withIndex("by_tick", (q) => q.gte("tickNumber", afterTick))
+      .take(500);
+    return msgs.filter((m) => m.tickNumber <= upToTick);
   },
 });
 
