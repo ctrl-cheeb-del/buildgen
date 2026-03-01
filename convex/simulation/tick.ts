@@ -512,12 +512,9 @@ export const run = internalAction({
             // Plot full — convert to chat
             result.action.action = "CHAT";
             result.action.message = result.action.message || "My plot is fully developed!";
-          } else if (city.activeBuildCount + buildRequests.length < (isLive ? liveBuildCap : 4)) {
-            buildRequests.push(result);
           } else {
-            // Capacity full — convert to a chat about waiting
-            result.action.action = "CHAT";
-            result.action.message = result.action.message || "Building capacity is full... we must wait.";
+            // Collect ALL valid build requests — cap is enforced at approval time
+            buildRequests.push(result);
           }
         }
         if (result.action.action === "PROTEST" || result.action.action === "PETITION") {
@@ -607,52 +604,48 @@ export const run = internalAction({
           agentName: req.agent.name,
           buildDescription: req.action.build_description,
           category,
+          tickNumber,
         });
       }
     }
 
-    // Overnight mode: use mayor approvals with robust matching
-    const usedPlots = new Set<number>();
-    for (const approval of mayorDecision.build_approvals) {
-      if (isLive) break; // Already handled above
-      if (approval.approved && city.activeBuildCount + newBuildsApproved < buildCap) {
-        // Match by plot number, fallback to next unmatched request
-        let req = buildRequests.find((r) => r.agent.plotIndex === approval.agentPlot && !usedPlots.has(r.agent.plotIndex));
-        // Fallback: if no match, just take the next unmatched build request
-        if (!req) {
-          req = buildRequests.find((r) => !usedPlots.has(r.agent.plotIndex));
+    // Overnight mode: bypass mayor JSON for build approvals — random 70% approval
+    if (!isLive && buildRequests.length > 0) {
+      for (const req of buildRequests) {
+        if (city.activeBuildCount + newBuildsApproved >= buildCap) break;
+        if (!req.action.build_description) continue;
+        // ~70% approval chance per request
+        if (Math.random() > 0.7) {
+          console.log(`[tick ${tickNumber}] BUILD DENIED (overnight random): ${req.agent.name}`);
+          continue;
         }
-        if (req && req.action.build_description) {
-          usedPlots.add(req.agent.plotIndex);
-          console.log(`[tick ${tickNumber}] BUILD APPROVED: ${req.agent.name} → "${req.action.build_description}"`);
-          newBuildsApproved++;
+        console.log(`[tick ${tickNumber}] BUILD APPROVED (overnight): ${req.agent.name} → "${req.action.build_description}"`);
+        newBuildsApproved++;
 
-          // Classify building category via keyword match
-          const desc = req.action.build_description.toLowerCase();
-          let category = "residential";
-          const catKeywords: Record<string, string[]> = {
-            commercial: ["shop", "market", "store", "cafe", "restaurant", "bar", "bakery", "boutique", "pub", "diner", "tavern", "mall"],
-            industrial: ["factory", "warehouse", "plant", "refinery", "forge", "foundry", "mill", "workshop", "smelter"],
-            office: ["office", "tower", "headquarters", "bank", "corporate", "firm"],
-            civic: ["school", "hospital", "police", "library", "fire station", "courthouse", "city hall", "clinic", "church", "temple", "government"],
-            entertainment: ["park", "stadium", "theater", "theatre", "museum", "gallery", "cinema", "arcade", "garden", "zoo", "arena"],
-            luxury: ["mansion", "penthouse", "resort", "spa", "palace", "casino", "yacht"],
-          };
-          for (const [cat, keywords] of Object.entries(catKeywords)) {
-            if (keywords.some((kw) => desc.includes(kw))) {
-              category = cat;
-              break;
-            }
+        const desc = req.action.build_description.toLowerCase();
+        let category = "residential";
+        const catKeywords: Record<string, string[]> = {
+          commercial: ["shop", "market", "store", "cafe", "restaurant", "bar", "bakery", "boutique", "pub", "diner", "tavern", "mall"],
+          industrial: ["factory", "warehouse", "plant", "refinery", "forge", "foundry", "mill", "workshop", "smelter"],
+          office: ["office", "tower", "headquarters", "bank", "corporate", "firm"],
+          civic: ["school", "hospital", "police", "library", "fire station", "courthouse", "city hall", "clinic", "church", "temple", "government"],
+          entertainment: ["park", "stadium", "theater", "theatre", "museum", "gallery", "cinema", "arcade", "garden", "zoo", "arena"],
+          luxury: ["mansion", "penthouse", "resort", "spa", "palace", "casino", "yacht"],
+        };
+        for (const [cat, keywords] of Object.entries(catKeywords)) {
+          if (keywords.some((kw) => desc.includes(kw))) {
+            category = cat;
+            break;
           }
-
-          // Fire the build pipeline asynchronously (don't await — it runs in background)
-          ctx.scheduler.runAfter(0, internal.simulation.agentBuild.run, {
-            plotIndex: req.agent.plotIndex,
-            agentName: req.agent.name,
-            buildDescription: req.action.build_description,
-            category,
-          });
         }
+
+        ctx.scheduler.runAfter(0, internal.simulation.agentBuild.run, {
+          plotIndex: req.agent.plotIndex,
+          agentName: req.agent.name,
+          buildDescription: req.action.build_description,
+          category,
+          tickNumber,
+        });
       }
     }
 
@@ -927,11 +920,12 @@ export const run = internalAction({
 
     // Step 6: City collapse → bailout (sim never stops)
     if (cityCollapsed) {
-      console.log(`[tick ${tickNumber}] CITY BAILOUT — treasury reset to 5000, bankruptcy cleared, happiness degraded.`);
+      console.log(`[tick ${tickNumber}] CITY BAILOUT — treasury reset to 5000, bankruptcy cleared, activeBuildCount reset, happiness degraded.`);
       await ctx.runMutation(internal.simulation.cityState.update, {
         patch: {
           treasury: 5000,
           consecutiveBankruptTicks: 0,
+          activeBuildCount: 0,
           happiness: Math.max(10, Math.round(happiness) - 20),
         },
       });
