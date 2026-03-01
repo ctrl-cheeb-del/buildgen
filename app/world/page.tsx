@@ -483,7 +483,7 @@ export default function Home() {
       // Only auto-start once — check if the building was just generated
       const genNodes = usePipelineStore.getState().nodes.slice(0, 3);
       const allGenDone = genNodes.every((n) => n.status === "done");
-      if (allGenDone && multiViewUrl) {
+      if (allGenDone && multiViewUrl && multiViewUrl !== "reused") {
         autoStartedRef.current = true;
         // Create a session for iteration using grid URL from Convex storage
         fetch("/api/iterate/session", {

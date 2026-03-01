@@ -37,6 +37,23 @@ function getClient(): BedrockRuntimeClient {
   return _client;
 }
 
+/** Reset the cached client so the next call picks up fresh credentials. */
+export function resetBedrockClient(): void {
+  _client = null;
+}
+
+function isAuthError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  const msg = err.message.toLowerCase();
+  return (
+    msg.includes("security token") ||
+    msg.includes("expired") ||
+    msg.includes("expiredtokenexception") ||
+    msg.includes("not authorized") ||
+    msg.includes("invalididentitytoken")
+  );
+}
+
 /* ------------------------------------------------------------------ */
 /*  Unified system prompt (cached) — covers generation + scoring       */
 /* ------------------------------------------------------------------ */
@@ -296,7 +313,16 @@ Generate the code now for "${buildingName}". Wrap it in a \`\`\`javascript code 
     inferenceConfig: { maxTokens: MAX_TOKENS },
   });
 
-  const response = await getClient().send(command);
+  let response;
+  try {
+    response = await getClient().send(command);
+  } catch (err) {
+    if (isAuthError(err)) {
+      resetBedrockClient();
+      throw new Error("AWS session expired — please retry");
+    }
+    throw err;
+  }
 
   // Log cache stats
   const usage = response.usage;
@@ -439,7 +465,16 @@ export async function runIterationStep(
     inferenceConfig: { maxTokens: MAX_TOKENS },
   });
 
-  const response = await getClient().send(command);
+  let response;
+  try {
+    response = await getClient().send(command);
+  } catch (err) {
+    if (isAuthError(err)) {
+      resetBedrockClient();
+      throw new Error("AWS session expired — please retry");
+    }
+    throw err;
+  }
 
   // Log token usage
   const usage = response.usage;

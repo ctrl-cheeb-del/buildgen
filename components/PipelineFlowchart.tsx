@@ -180,7 +180,7 @@ function NodeDetailPanel({
     >
       {/* Generate Views — show grid image from Convex storage */}
       {nodeId === "generate-views" &&
-        (multiViewUrl ? (
+        (multiViewUrl && multiViewUrl !== "reused" ? (
           <div>
             <div className="text-[10px] text-white/50 mb-1.5">
               Blueprint Views
@@ -194,6 +194,8 @@ function NodeDetailPanel({
               />
             </div>
           </div>
+        ) : multiViewUrl === "reused" || (isDone && !multiViewUrl) ? (
+          <StatusBadge status="done" text="Reused existing design" />
         ) : isActive ? (
           <StatusBadge status="active" text="Generating views..." />
         ) : (

@@ -21,6 +21,23 @@ function getBedrock(): BedrockRuntimeClient {
   return _bedrock;
 }
 
+/** Reset the cached client so the next call picks up fresh credentials. */
+export function resetProviderChainClient(): void {
+  _bedrock = null;
+}
+
+function isAuthError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  const msg = err.message.toLowerCase();
+  return (
+    msg.includes("security token") ||
+    msg.includes("expired") ||
+    msg.includes("expiredtokenexception") ||
+    msg.includes("not authorized") ||
+    msg.includes("invalididentitytoken")
+  );
+}
+
 async function callBedrock(
   modelId: string,
   prompt: string,
@@ -52,7 +69,16 @@ async function callBedrock(
     body: new TextEncoder().encode(body),
   });
 
-  const response = await getBedrock().send(command);
+  let response;
+  try {
+    response = await getBedrock().send(command);
+  } catch (err) {
+    if (isAuthError(err)) {
+      resetProviderChainClient();
+      throw new Error("AWS session expired — please retry");
+    }
+    throw err;
+  }
   const result = JSON.parse(new TextDecoder().decode(response.body));
   const text = result.content?.[0]?.text;
   if (!text) throw new Error(`Bedrock ${modelId} returned no content`);
@@ -90,7 +116,16 @@ async function callBedrockConverse(
     inferenceConfig: { maxTokens: 16384 },
   });
 
-  const response = await getBedrock().send(command);
+  let response;
+  try {
+    response = await getBedrock().send(command);
+  } catch (err) {
+    if (isAuthError(err)) {
+      resetProviderChainClient();
+      throw new Error("AWS session expired — please retry");
+    }
+    throw err;
+  }
 
   const outputContent = response.output;
   if (!outputContent || !("message" in outputContent) || !outputContent.message) {
