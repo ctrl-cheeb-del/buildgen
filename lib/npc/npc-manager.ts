@@ -34,6 +34,7 @@ const _matrix = new THREE.Matrix4();
 const _pos = new THREE.Vector3();
 const _quat = new THREE.Quaternion();
 const _scale = new THREE.Vector3(1, 1, 1);
+const _pedScale = new THREE.Vector3(2, 2, 2);
 const _euler = new THREE.Euler();
 
 // Singleton
@@ -599,7 +600,7 @@ export class NPCManager {
       const ped = this.pedestrians[i];
       _pos.set(ped.x, 0, ped.z);
       _quat.identity();
-      _matrix.compose(_pos, _quat, _scale);
+      _matrix.compose(_pos, _quat, _pedScale);
       this.pedMesh.setMatrixAt(i, _matrix);
     }
     this.pedMesh.count = this.pedestrians.length;
