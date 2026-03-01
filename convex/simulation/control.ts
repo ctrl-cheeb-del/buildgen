@@ -48,7 +48,7 @@ export const setSimMode = mutation({
     }
 
     // Schedule a new city tick at the correct interval for the new mode
-    const cityTickInterval = mode === "live" ? 75000 : 300000;
+    const cityTickInterval = mode === "live" ? 10000 : 300000;
     const newCityTickId = await ctx.scheduler.runAfter(
       cityTickInterval,
       internal.simulation.tick.run,

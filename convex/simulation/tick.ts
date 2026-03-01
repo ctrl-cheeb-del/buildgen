@@ -734,7 +734,7 @@ export const run = internalAction({
     // ALWAYS schedule next city tick — even after a crash
     const freshCity = await ctx.runQuery(internal.simulation.cityState.getInternal);
     const currentMode = freshCity?.simMode ?? "overnight";
-    const cityTickInterval = currentMode === "live" ? 75000 : 300000;
+    const cityTickInterval = currentMode === "live" ? 10000 : 300000;
     const nextCityTickId = await ctx.scheduler.runAfter(cityTickInterval, internal.simulation.tick.run, {});
     // Store the scheduled ID so setSimMode can cancel + reschedule
     await ctx.runMutation(internal.simulation.cityState.update, {
