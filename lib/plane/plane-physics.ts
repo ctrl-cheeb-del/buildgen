@@ -45,7 +45,7 @@ const REVERSE_MAX = 5; // m/s — taxiing backward
 
 // ── Rotation rates ──
 const ROLL_RATE = 2.5; // rad/s — how fast A/D rolls the plane
-const PITCH_RATE = 1.5; // rad/s — how fast space/shift pitches
+const PITCH_RATE = 0.7; // rad/s — how fast space/shift pitches
 const YAW_FROM_ROLL = 1.2; // rad/s per radian of roll — banking turns
 const ROLL_RETURN_RATE = 1.5; // rad/s — roll returns to level when no A/D
 const PITCH_RETURN_RATE = 0.5; // rad/s — gentle pitch return to 0
@@ -102,6 +102,16 @@ export interface RemotePlanePos {
   z: number;
 }
 
+/** Axis-aligned bounding box for building collision */
+export interface BuildingAABB {
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+  minZ: number;
+  maxZ: number;
+}
+
 const PLANE_COLLISION_RADIUS = 8;
 const PLANE_COLLISION_DIST = PLANE_COLLISION_RADIUS * 2;
 
@@ -119,7 +129,8 @@ export function updatePlane(
   state: PlaneState,
   keys: PlaneKeys,
   dt: number,
-  remotePlanes?: RemotePlanePos[]
+  remotePlanes?: RemotePlanePos[],
+  buildings?: BuildingAABB[]
 ): PlaneState {
   let { x, y, z, heading, pitch, roll, speed, grounded } = state;
 
@@ -167,7 +178,7 @@ export function updatePlane(
       // Gentle return toward level
       pitch = moveToward(pitch, 0, PITCH_RETURN_RATE, dt);
     }
-    pitch = clamp(pitch, -Math.PI / 3, Math.PI / 3); // max ±60°
+    pitch = clamp(pitch, -Math.PI / 5, Math.PI / 5); // max ±36°
   } else {
     // On ground — pitch toward level, allow slight nose-up for takeoff
     if (keys.space && speed > TAKEOFF_SPEED * 0.7) {
@@ -207,10 +218,12 @@ export function updatePlane(
     // Gravity always pulls down
     dy -= GRAVITY * dt;
 
-    // Lift — proportional to speed and pitch (need speed to stay airborne)
+    // Lift counteracts gravity proportional to speed (capped at full gravity).
+    // This means level flight stays flat — climbing/descending comes only from pitch.
     const liftSpeed = Math.max(0, speed - MIN_FLIGHT_SPEED * 0.5);
-    const lift = liftSpeed * LIFT_FACTOR * dt * Math.max(0, cosPitch);
-    dy += lift * 0.3; // moderate lift
+    const rawLift = liftSpeed * LIFT_FACTOR * dt * Math.max(0, cosPitch);
+    const lift = Math.min(rawLift, GRAVITY * dt); // never exceed gravity
+    dy += lift;
 
     // Stall — if too slow in air, nose drops
     if (speed < MIN_FLIGHT_SPEED) {
@@ -289,6 +302,67 @@ export function updatePlane(
         y += ny * overlap;
         z += nz * overlap;
         speed *= 0.3;
+      }
+    }
+  }
+
+  // ── Building collision (AABB) ──
+  if (buildings) {
+    // Plane collision sphere radius — roughly half-wingspan
+    const PR = 6;
+    for (let i = 0; i < buildings.length; i++) {
+      const b = buildings[i];
+      // Quick broad-phase: skip buildings far from the plane (center-to-center)
+      const bcx = (b.minX + b.maxX) * 0.5;
+      const bcy = (b.minY + b.maxY) * 0.5;
+      const bcz = (b.minZ + b.maxZ) * 0.5;
+      const bDx = x - bcx;
+      const bDz = z - bcz;
+      const bDy = y - bcy;
+      const broadDist2 = bDx * bDx + bDy * bDy + bDz * bDz;
+      if (broadDist2 > BUILDING_CHECK_RADIUS * BUILDING_CHECK_RADIUS) continue;
+
+      // Closest point on AABB to plane center
+      const cx = clamp(x, b.minX, b.maxX);
+      const cy = clamp(y, b.minY, b.maxY);
+      const cz = clamp(z, b.minZ, b.maxZ);
+
+      const ddx = x - cx;
+      const ddy = y - cy;
+      const ddz = z - cz;
+      const dist2 = ddx * ddx + ddy * ddy + ddz * ddz;
+
+      if (dist2 < PR * PR) {
+        // Collision! Push plane out of building
+        const dist = Math.sqrt(dist2);
+        if (dist > 0.001) {
+          const pen = PR - dist;
+          const nx = ddx / dist;
+          const ny = ddy / dist;
+          const nz = ddz / dist;
+          x += nx * pen;
+          y += ny * pen;
+          z += nz * pen;
+        } else {
+          // Plane center is inside the AABB — push out on the shallowest axis
+          const penX = Math.min(x - b.minX, b.maxX - x);
+          const penY = Math.min(y - b.minY, b.maxY - y);
+          const penZ = Math.min(z - b.minZ, b.maxZ - z);
+          if (penY <= penX && penY <= penZ) {
+            y += y - bcy > 0 ? penY + PR : -(penY + PR);
+          } else if (penX <= penZ) {
+            x += x - bcx > 0 ? penX + PR : -(penX + PR);
+          } else {
+            z += z - bcz > 0 ? penZ + PR : -(penZ + PR);
+          }
+        }
+
+        // Impact: kill most speed, flatten orientation
+        speed *= 0.15;
+        if (!grounded) {
+          pitch *= 0.3;
+          roll *= 0.3;
+        }
       }
     }
   }

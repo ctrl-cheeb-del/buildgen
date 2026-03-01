@@ -39,35 +39,47 @@ export function useChat(deps: ToolDeps) {
         while (rounds < MAX_ROUNDS) {
           rounds++;
 
-          const controller = new AbortController();
-          const timeout = setTimeout(() => controller.abort(), 30000);
+          const MAX_RETRIES = 3;
+          const TIMEOUT_MS = 5000;
+          let res: Response | undefined;
 
-          let res: Response;
-          try {
-            const carMode = useCarStore.getState().carMode;
-            const fpMode = useFPStore.getState().fpMode;
-            res = await fetch("/api/chat", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                messages: historyRef.current,
-                currentMode: carMode ? "driving" : fpMode ? "walking" : "default",
-              }),
-              signal: controller.signal,
-            });
-          } catch (fetchErr) {
-            clearTimeout(timeout);
-            const isAbort =
-              fetchErr instanceof Error && fetchErr.name === "AbortError";
-            addMessage({
-              role: "assistant",
-              content: isAbort
-                ? "Request timed out. Try again!"
-                : "Network error. Try again!",
-            });
-            break;
+          for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+            try {
+              const carMode = useCarStore.getState().carMode;
+              const fpMode = useFPStore.getState().fpMode;
+              res = await fetch("/api/chat", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  messages: historyRef.current,
+                  currentMode: carMode ? "driving" : fpMode ? "walking" : "default",
+                }),
+                signal: controller.signal,
+              });
+              clearTimeout(timeout);
+              break; // success
+            } catch (fetchErr) {
+              clearTimeout(timeout);
+              const isAbort =
+                fetchErr instanceof Error && fetchErr.name === "AbortError";
+              if (attempt < MAX_RETRIES - 1) {
+                console.warn(`[useChat] Attempt ${attempt + 1} failed (${isAbort ? "timeout" : "network"}), retrying...`);
+                continue;
+              }
+              addMessage({
+                role: "assistant",
+                content: isAbort
+                  ? "Request timed out after retries. Try again!"
+                  : "Network error. Try again!",
+              });
+              break;
+            }
           }
-          clearTimeout(timeout);
+
+          if (!res) break;
 
           if (!res.ok) {
             const err = await res

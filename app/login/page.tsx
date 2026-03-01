@@ -38,7 +38,7 @@ export default function LoginPage() {
                 Welcome back
               </h1>
               <p className="font-[family-name:var(--font-geist-pixel-square)] text-gray-500 text-sm">
-                Sign in to Ministral
+                Sign in to MistralVerse
               </p>
             </div>
 

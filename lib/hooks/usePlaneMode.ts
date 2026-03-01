@@ -5,9 +5,10 @@ import * as THREE from "three";
 import { usePlaneStore } from "../stores/plane-store";
 import { useCarStore } from "../stores/car-store";
 import { useBoatStore } from "../stores/boat-store";
+import { useWorldStore } from "../stores/world-store";
 import { usePlaneKeys } from "./usePlaneKeys";
 import { loadPlaneModel } from "../plane/plane-loader";
-import { updatePlane, findRunwayPosition } from "../plane/plane-physics";
+import { updatePlane, findRunwayPosition, type BuildingAABB } from "../plane/plane-physics";
 import { createContrailEffects, type ContrailEffects } from "../plane/contrail-effects";
 import type { SceneLayer } from "../viewer/scene-layer";
 
@@ -48,6 +49,12 @@ export function usePlaneMode(
     position: THREE.Vector3;
     target: THREE.Vector3;
   } | null>(null);
+
+  // Building AABB cache — recompute every ~500ms
+  const buildingAABBsRef = useRef<BuildingAABB[]>([]);
+  const buildingCacheTimeRef = useRef<number>(0);
+  const _box3 = useRef(new THREE.Box3());
+  const _size = useRef(new THREE.Vector3());
 
   const layerRef = useRef(layer);
   layerRef.current = layer;
@@ -115,7 +122,30 @@ export function usePlaneMode(
       ? Array.from(remoteMap.values(), (p) => ({ x: p.x, y: p.y, z: p.z }))
       : undefined;
 
-    const newState = updatePlane(store.planePosition, keys.current!, dt, remotePlanes);
+    // Recompute building AABBs every 500ms (buildings rarely move)
+    if (now - buildingCacheTimeRef.current > 500) {
+      buildingCacheTimeRef.current = now;
+      const containers = useWorldStore.getState().containers;
+      const aabbs: BuildingAABB[] = [];
+      for (const container of containers.values()) {
+        if (!container.visible) continue;
+        _box3.current.setFromObject(container);
+        _size.current.copy(_box3.current.max).sub(_box3.current.min);
+        // Skip tiny/degenerate boxes
+        if (_size.current.x < 0.5 && _size.current.z < 0.5) continue;
+        aabbs.push({
+          minX: _box3.current.min.x,
+          maxX: _box3.current.max.x,
+          minY: _box3.current.min.y,
+          maxY: _box3.current.max.y,
+          minZ: _box3.current.min.z,
+          maxZ: _box3.current.max.z,
+        });
+      }
+      buildingAABBsRef.current = aabbs;
+    }
+
+    const newState = updatePlane(store.planePosition, keys.current!, dt, remotePlanes, buildingAABBsRef.current);
     store.updatePosition(newState);
 
     // Update Three.js plane group with full 3D rotation

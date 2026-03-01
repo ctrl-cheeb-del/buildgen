@@ -83,37 +83,45 @@ export function useRemoteCars(userId: string | null) {
         existing.prevUpdateTime = existing.updateTime;
         existing.updateTime = now;
       } else if (!loadingRef.current.has(car.userId)) {
-        // Load new remote car
-        loadingRef.current.add(car.userId);
+        const carUserId = car.userId;
+        const cx = car.x, cz = car.z, ch = car.heading;
+        loadingRef.current.add(carUserId);
         loadCarModel().then((group) => {
-          group.name = `remote-car-${car.userId}`;
-          group.position.set(car.x, 0, car.z);
-          group.rotation.set(0, Math.PI - car.heading, 0);
+          // If this user left while model was loading, discard
+          if (!loadingRef.current.has(carUserId)) return;
+          group.name = `remote-car-${carUserId}`;
+          group.position.set(cx, 0, cz);
+          group.rotation.set(0, Math.PI - ch, 0);
           layer.addGroup(group);
-          carsRef.current.set(car.userId, {
+          carsRef.current.set(carUserId, {
             group,
-            prevX: car.x,
-            prevZ: car.z,
-            prevHeading: Math.PI - car.heading,
-            targetX: car.x,
-            targetZ: car.z,
-            targetHeading: Math.PI - car.heading,
+            prevX: cx,
+            prevZ: cz,
+            prevHeading: Math.PI - ch,
+            targetX: cx,
+            targetZ: cz,
+            targetHeading: Math.PI - ch,
             updateTime: now,
             prevUpdateTime: now - 200,
-            interval: 200, // initial estimate matching sync rate
+            interval: 200,
           });
-          loadingRef.current.delete(car.userId);
+          loadingRef.current.delete(carUserId);
         });
       }
     }
 
     useCarStore.getState().setRemoteCars(remoteCarsMap);
 
-    // Remove stale remote cars
+    // Remove stale remote cars (no longer in active list)
     for (const [id, state] of carsRef.current) {
       if (!seenIds.has(id)) {
         layer.removeGroup(state.group);
         carsRef.current.delete(id);
+      }
+    }
+    // Also clear loading entries for users who left
+    for (const id of loadingRef.current) {
+      if (!seenIds.has(id)) {
         loadingRef.current.delete(id);
       }
     }
@@ -122,32 +130,40 @@ export function useRemoteCars(userId: string | null) {
   // Animation loop — smoothly interpolate all remote cars every frame
   useEffect(() => {
     const animate = () => {
+      rafRef.current = requestAnimationFrame(animate);
+
+      if (carsRef.current.size === 0) return;
+
       const now = performance.now();
       let needsRepaint = false;
 
       for (const [, state] of carsRef.current) {
-        // t goes from 0 (at updateTime) to 1 (at updateTime + interval)
         const elapsed = now - state.updateTime;
-        // Allow slight overshoot (1.2) for extrapolation to keep motion smooth
-        // if the next update is slightly late
         const t = Math.min(elapsed / state.interval, 1.2);
-        const clamped = Math.min(t, 1);
 
+        // Car finished interpolation and is stationary — skip
+        if (t >= 1.2) continue;
+
+        const clamped = Math.min(t, 1);
         const x = state.prevX + (state.targetX - state.prevX) * t;
         const z = state.prevZ + (state.targetZ - state.prevZ) * t;
         const heading = lerpAngle(state.prevHeading, state.targetHeading, clamped);
 
-        state.group.position.x = x;
-        state.group.position.z = z;
-        state.group.rotation.y = heading;
-        needsRepaint = true;
+        // Only repaint if position actually changed
+        if (
+          Math.abs(state.group.position.x - x) > 0.001 ||
+          Math.abs(state.group.position.z - z) > 0.001
+        ) {
+          state.group.position.x = x;
+          state.group.position.z = z;
+          state.group.rotation.y = heading;
+          needsRepaint = true;
+        }
       }
 
       if (needsRepaint) {
         useWorldStore.getState().layer?.repaint();
       }
-
-      rafRef.current = requestAnimationFrame(animate);
     };
 
     rafRef.current = requestAnimationFrame(animate);

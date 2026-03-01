@@ -4,7 +4,6 @@ import {
   PLOT_SIZE_M,
   ROAD_WIDTH_M,
   GRID_STEP_M,
-  PAVEMENT_WIDTH_M,
 } from "../grid/grid-constants";
 
 export interface CarState {
@@ -43,42 +42,17 @@ const HANDBRAKE_FRICTION = 6; // lighter friction during handbrake (lets you sli
 const DRIFT_THRESHOLD = 0.15; // min angle (rad) between heading & velocity to count as drifting
 const DRIFT_SPEED_MIN = 8; // minimum speed to initiate drift
 
-export function isOnRoad(x: number, z: number): boolean {
+export interface BuildingAABB {
+  minX: number; maxX: number;
+  minY: number; maxY: number;
+  minZ: number; maxZ: number;
+}
+
+/** Check whether a position is within the driveable grid area (roads + plots) */
+export function isInGrid(x: number, z: number): boolean {
   const relX = x - startX;
   const relZ = z - startZ;
-
-  // Out of grid bounds entirely
-  if (relX < 0 || relX > totalW || relZ < 0 || relZ > totalH) return false;
-
-  const modX = ((relX % GRID_STEP_M) + GRID_STEP_M) % GRID_STEP_M;
-  const modZ = ((relZ % GRID_STEP_M) + GRID_STEP_M) % GRID_STEP_M;
-
-  // Vertical road strip
-  if (modX < ROAD_WIDTH_M) return true;
-
-  // Horizontal road strip
-  if (modZ < ROAD_WIDTH_M) return true;
-
-  // Pavement: within a plot cell but near the edges
-  const plotLocalX = modX - ROAD_WIDTH_M;
-  const plotLocalZ = modZ - ROAD_WIDTH_M;
-  if (
-    plotLocalX >= 0 &&
-    plotLocalX < PLOT_SIZE_M &&
-    plotLocalZ >= 0 &&
-    plotLocalZ < PLOT_SIZE_M
-  ) {
-    if (
-      plotLocalX < PAVEMENT_WIDTH_M ||
-      plotLocalX > PLOT_SIZE_M - PAVEMENT_WIDTH_M ||
-      plotLocalZ < PAVEMENT_WIDTH_M ||
-      plotLocalZ > PLOT_SIZE_M - PAVEMENT_WIDTH_M
-    ) {
-      return true;
-    }
-  }
-
-  return false;
+  return relX >= 0 && relX <= totalW && relZ >= 0 && relZ <= totalH;
 }
 
 export function findNearestRoadPosition(x: number, z: number): { x: number; z: number } {
@@ -110,7 +84,14 @@ const CAR_COLLISION_RADIUS = 4; // ~4m per car
 const CAR_COLLISION_DIST = CAR_COLLISION_RADIUS * 2; // sum of two radii
 const CAR_COLLISION_BROAD = CAR_COLLISION_DIST + 2; // broad-phase threshold (cheap axis check)
 
-export function updateCar(state: CarState, keys: CarKeys, dt: number, remoteCars?: RemoteCarPos[]): CarState {
+const CAR_COLLISION_SPHERE = 4; // car's collision radius for building checks
+const BUILDING_CHECK_RADIUS = 60; // broad-phase skip distance
+
+function clamp(v: number, lo: number, hi: number): number {
+  return v < lo ? lo : v > hi ? hi : v;
+}
+
+export function updateCar(state: CarState, keys: CarKeys, dt: number, remoteCars?: RemoteCarPos[], buildings?: BuildingAABB[]): CarState {
   let { x, z, heading, speed, velAngle, drifting } = state;
 
   // Clamp dt to avoid physics explosions on tab-away
@@ -199,13 +180,14 @@ export function updateCar(state: CarState, keys: CarKeys, dt: number, remoteCars
   const newX = x + dx;
   const newZ = z + dz;
 
-  if (isOnRoad(newX, newZ)) {
+  if (isInGrid(newX, newZ)) {
     x = newX;
     z = newZ;
   } else {
+    // Slide along grid boundary
     const slid =
-      isOnRoad(newX, z) ? { x: newX, z } :
-      isOnRoad(x, newZ) ? { x, z: newZ } :
+      isInGrid(newX, z) ? { x: newX, z } :
+      isInGrid(x, newZ) ? { x, z: newZ } :
       null;
     if (slid) {
       x = slid.x;
@@ -213,6 +195,46 @@ export function updateCar(state: CarState, keys: CarKeys, dt: number, remoteCars
       speed *= 0.7;
     } else {
       speed *= 0.3;
+    }
+  }
+
+  // ── Building collision (AABB) ──
+  if (buildings) {
+    for (let i = 0; i < buildings.length; i++) {
+      const b = buildings[i];
+      // Broad-phase: skip far buildings
+      const bcx = (b.minX + b.maxX) * 0.5;
+      const bcz = (b.minZ + b.maxZ) * 0.5;
+      const bDx = x - bcx;
+      const bDz = z - bcz;
+      if (bDx * bDx + bDz * bDz > BUILDING_CHECK_RADIUS * BUILDING_CHECK_RADIUS) continue;
+
+      // Closest point on AABB to car (Y fixed at ground level)
+      const cx = clamp(x, b.minX, b.maxX);
+      const cz = clamp(z, b.minZ, b.maxZ);
+
+      const ddx = x - cx;
+      const ddz = z - cz;
+      const dist2 = ddx * ddx + ddz * ddz;
+
+      if (dist2 < CAR_COLLISION_SPHERE * CAR_COLLISION_SPHERE) {
+        const dist = Math.sqrt(dist2);
+        if (dist > 0.001) {
+          const pen = CAR_COLLISION_SPHERE - dist;
+          x += (ddx / dist) * pen;
+          z += (ddz / dist) * pen;
+        } else {
+          // Car center inside AABB — push out on shallowest axis
+          const penX = Math.min(x - b.minX, b.maxX - x);
+          const penZ = Math.min(z - b.minZ, b.maxZ - z);
+          if (penX <= penZ) {
+            x += x - bcx > 0 ? penX + CAR_COLLISION_SPHERE : -(penX + CAR_COLLISION_SPHERE);
+          } else {
+            z += z - bcz > 0 ? penZ + CAR_COLLISION_SPHERE : -(penZ + CAR_COLLISION_SPHERE);
+          }
+        }
+        speed *= 0.15;
+      }
     }
   }
 

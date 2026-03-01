@@ -65,6 +65,12 @@ export const run = internalAction({
   handler: async (ctx, { plotIndex, agentName, buildDescription, category, tickNumber, skipReuse }) => {
     console.log(`[agentBuild] ${agentName} building "${buildDescription}" on plot #${plotIndex}`);
 
+    /** Check if simulation was stopped — abort early if so. */
+    async function shouldAbort(): Promise<boolean> {
+      const city = await ctx.runQuery(internal.simulation.cityState.getInternal);
+      return !city || !city.isRunning;
+    }
+
     try {
       // 1. Mark plot as generating (shows loading cube)
       await ctx.runMutation(internal.plots.markGeneratingInternal, { plotIndex });
@@ -114,6 +120,14 @@ export const run = internalAction({
         return;
       }
 
+      // ── Checkpoint: abort before expensive Replicate call
+      if (await shouldAbort()) {
+        console.log(`[agentBuild] Sim stopped, aborting "${buildDescription}" before image gen`);
+        await ctx.runMutation(internal.plots.resetPlotInternal, { plotIndex });
+        await ctx.runMutation(internal.simulation._simBuildHelpers.onBuildFailed, {});
+        return;
+      }
+
       // 2. Generate multi-view image via Replicate
       const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN });
 
@@ -137,7 +151,7 @@ Each view should:
         input: {
           prompt: replicatePrompt,
           aspect_ratio: "1:1",
-          resolution: "2K",
+          resolution: "1K",
           output_format: "png",
         },
       });
@@ -164,7 +178,7 @@ Each view should:
           }
           imageBuffer = Buffer.concat(chunks);
         } else {
-          imageBuffer = Buffer.from(first as any);
+          imageBuffer = Buffer.from(first as ArrayBuffer);
         }
       } else if (output instanceof ReadableStream) {
         const reader = output.getReader();
@@ -206,6 +220,14 @@ Each view should:
       const blob = new Blob([new Uint8Array(imageBuffer)], { type: "image/png" });
       const storageId = await ctx.storage.store(blob);
       const gridUrl = await ctx.storage.getUrl(storageId);
+
+      // ── Checkpoint: abort before expensive Bedrock call
+      if (await shouldAbort()) {
+        console.log(`[agentBuild] Sim stopped, aborting "${buildDescription}" before geometry gen`);
+        await ctx.runMutation(internal.plots.resetPlotInternal, { plotIndex });
+        await ctx.runMutation(internal.simulation._simBuildHelpers.onBuildFailed, {});
+        return;
+      }
 
       // 5. Call Claude Opus 4 via Bedrock for geometry code
       console.log(`[agentBuild] Calling Claude Opus 4.6 (Bedrock) for geometry code...`);
@@ -288,6 +310,14 @@ Generate the code now for "${buildDescription}".`;
         evaluatedCode = await evaluateAndImprove(code, buildDescription);
       } catch (evalErr) {
         console.warn(`[agentBuild] Eval/improve failed, using raw code:`, evalErr);
+      }
+
+      // ── Checkpoint: abort before writing building to DB
+      if (await shouldAbort()) {
+        console.log(`[agentBuild] Sim stopped, aborting "${buildDescription}" before save`);
+        await ctx.runMutation(internal.plots.resetPlotInternal, { plotIndex });
+        await ctx.runMutation(internal.simulation._simBuildHelpers.onBuildFailed, {});
+        return;
       }
 
       // 6. Create building

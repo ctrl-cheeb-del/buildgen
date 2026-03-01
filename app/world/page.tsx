@@ -12,6 +12,7 @@ import SettingsPanel from "@/components/SettingsPanel";
 import ChatInput from "@/components/chat/ChatInput";
 import ChatMessages from "@/components/chat/ChatMessages";
 import PlotPopups from "@/components/PlotPopups";
+import VehicleNameTags from "@/components/VehicleNameTags";
 import PipelineFlowchart from "@/components/PipelineFlowchart";
 import IsolatedViewer, {
   type IsolatedViewerHandle,
@@ -346,6 +347,27 @@ export default function Home() {
   usePlaneMode(layer, handlePlaneSync, handlePlaneExit);
   useRemotePlanes(carUserId);
 
+  // Clean up all vehicle positions on tab close / navigate away
+  useEffect(() => {
+    const cleanup = () => {
+      if (!carUserId) return;
+      if (useCarStore.getState().carMode) {
+        removeCarPosition({ userId: carUserId });
+      }
+      if (useBoatStore.getState().boatMode) {
+        removeBoatPosition({ userId: carUserId });
+      }
+      if (usePlaneStore.getState().planeMode) {
+        removePlanePosition({ userId: carUserId });
+      }
+    };
+    window.addEventListener("beforeunload", cleanup);
+    return () => {
+      window.removeEventListener("beforeunload", cleanup);
+      cleanup();
+    };
+  }, [carUserId, removeCarPosition, removeBoatPosition, removePlanePosition]);
+
   // First-person walk mode
   const fpMode = useFPStore((s) => s.fpMode);
   const setFPMode = useFPStore((s) => s.setFPMode);
@@ -621,6 +643,9 @@ export default function Home() {
         plotStates={plotStates}
         onPlotClick={handlePlotClick}
       />
+
+      {/* Floating name tags above remote vehicles */}
+      <VehicleNameTags />
 
       {/* Hidden IsolatedViewer for iteration screenshot capture */}
       <div

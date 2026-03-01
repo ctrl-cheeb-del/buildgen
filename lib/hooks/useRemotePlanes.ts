@@ -90,34 +90,45 @@ export function useRemotePlanes(userId: string | null) {
         existing.prevUpdateTime = existing.updateTime;
         existing.updateTime = now;
       } else if (!loadingRef.current.has(plane.userId)) {
-        loadingRef.current.add(plane.userId);
+        const planeUserId = plane.userId;
+        const px = plane.x, py = plane.y, pz = plane.z;
+        const ph = plane.heading, pp = plane.pitch, pr = plane.roll;
+        loadingRef.current.add(planeUserId);
         loadPlaneModel().then((group) => {
-          group.name = `remote-plane-${plane.userId}`;
-          group.position.set(plane.x, plane.y, plane.z);
-          _euler.set(-plane.pitch, Math.PI - plane.heading, plane.roll, "YXZ");
+          // If this user left while model was loading, discard
+          if (!loadingRef.current.has(planeUserId)) return;
+          group.name = `remote-plane-${planeUserId}`;
+          group.position.set(px, py, pz);
+          _euler.set(-pp, Math.PI - ph, pr, "YXZ");
           group.setRotationFromEuler(_euler);
           layer.addGroup(group);
-          planesRef.current.set(plane.userId, {
+          planesRef.current.set(planeUserId, {
             group,
-            prevX: plane.x, prevY: plane.y, prevZ: plane.z,
-            prevHeading: plane.heading, prevPitch: plane.pitch, prevRoll: plane.roll,
-            targetX: plane.x, targetY: plane.y, targetZ: plane.z,
-            targetHeading: plane.heading, targetPitch: plane.pitch, targetRoll: plane.roll,
+            prevX: px, prevY: py, prevZ: pz,
+            prevHeading: ph, prevPitch: pp, prevRoll: pr,
+            targetX: px, targetY: py, targetZ: pz,
+            targetHeading: ph, targetPitch: pp, targetRoll: pr,
             updateTime: now,
             prevUpdateTime: now - 200,
             interval: 200,
           });
-          loadingRef.current.delete(plane.userId);
+          loadingRef.current.delete(planeUserId);
         });
       }
     }
 
     usePlaneStore.getState().setRemotePlanes(remotePlanesMap);
 
+    // Remove stale remote planes (no longer in active list)
     for (const [id, state] of planesRef.current) {
       if (!seenIds.has(id)) {
         layer.removeGroup(state.group);
         planesRef.current.delete(id);
+      }
+    }
+    // Also clear loading entries for users who left
+    for (const id of loadingRef.current) {
+      if (!seenIds.has(id)) {
         loadingRef.current.delete(id);
       }
     }
