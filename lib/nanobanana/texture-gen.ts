@@ -25,6 +25,7 @@ export async function generateTextureImage(
     input: {
       prompt: def.prompt,
       aspect_ratio: "1:1",
+      resolution: "1K",
       output_format: "png",
     },
   });

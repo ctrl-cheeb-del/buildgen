@@ -18,7 +18,7 @@ export default function LandingPage() {
       {/* ── Nav pill ── */}
       <nav className="ld-nav">
         <div className="ld-nav-pill">
-          <span className="ld-nav-wordmark">Ministral</span>
+          <span className="ld-nav-wordmark">MistralVerse</span>
           <div className="ld-nav-right">
             <Link href="/world" className="ld-nav-link">
               Explore
@@ -114,7 +114,7 @@ export default function LandingPage() {
       {/* ── Footer ── */}
       <footer className="px-[--gutter] py-6 flex items-center justify-between">
         <span className="font-[family-name:var(--px)] text-[11px] text-[var(--ink-light)]">
-          Ministral
+          MistralVerse
         </span>
         <span className="font-[family-name:var(--px)] text-[10px] text-[var(--ink-light)] tracking-wider">
           Convex&ensp;/&ensp;Three.js&ensp;/&ensp;Mistral

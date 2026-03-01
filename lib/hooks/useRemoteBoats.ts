@@ -75,35 +75,45 @@ export function useRemoteBoats(userId: string | null) {
         existing.prevUpdateTime = existing.updateTime;
         existing.updateTime = now;
       } else if (!loadingRef.current.has(boat.userId)) {
-        loadingRef.current.add(boat.userId);
+        const boatUserId = boat.userId;
+        const bx = boat.x, bz = boat.z, bh = boat.heading;
+        loadingRef.current.add(boatUserId);
         loadBoatModel().then((group) => {
-          group.name = `remote-boat-${boat.userId}`;
-          group.position.set(boat.x, BOAT_Y, boat.z);
-          group.rotation.set(0, Math.PI - boat.heading, 0);
+          // If this user left while model was loading, discard
+          if (!loadingRef.current.has(boatUserId)) return;
+          group.name = `remote-boat-${boatUserId}`;
+          group.position.set(bx, BOAT_Y, bz);
+          group.rotation.set(0, Math.PI - bh, 0);
           layer.addGroup(group);
-          boatsRef.current.set(boat.userId, {
+          boatsRef.current.set(boatUserId, {
             group,
-            prevX: boat.x,
-            prevZ: boat.z,
-            prevHeading: Math.PI - boat.heading,
-            targetX: boat.x,
-            targetZ: boat.z,
-            targetHeading: Math.PI - boat.heading,
+            prevX: bx,
+            prevZ: bz,
+            prevHeading: Math.PI - bh,
+            targetX: bx,
+            targetZ: bz,
+            targetHeading: Math.PI - bh,
             updateTime: now,
             prevUpdateTime: now - 200,
             interval: 200,
           });
-          loadingRef.current.delete(boat.userId);
+          loadingRef.current.delete(boatUserId);
         });
       }
     }
 
     useBoatStore.getState().setRemoteBoats(remoteBoatsMap);
 
+    // Remove stale remote boats (no longer in active list)
     for (const [id, state] of boatsRef.current) {
       if (!seenIds.has(id)) {
         layer.removeGroup(state.group);
         boatsRef.current.delete(id);
+      }
+    }
+    // Also clear loading entries for users who left
+    for (const id of loadingRef.current) {
+      if (!seenIds.has(id)) {
         loadingRef.current.delete(id);
       }
     }

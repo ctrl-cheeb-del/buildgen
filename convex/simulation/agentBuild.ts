@@ -96,7 +96,7 @@ Each view should:
         input: {
           prompt: replicatePrompt,
           aspect_ratio: "1:1",
-          resolution: "2K",
+          resolution: "1K",
           output_format: "png",
         },
       });
@@ -123,7 +123,7 @@ Each view should:
           }
           imageBuffer = Buffer.concat(chunks);
         } else {
-          imageBuffer = Buffer.from(first as any);
+          imageBuffer = Buffer.from(first as ArrayBuffer);
         }
       } else if (output instanceof ReadableStream) {
         const reader = output.getReader();

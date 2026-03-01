@@ -16,8 +16,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Ministral",
-  description: "The first agentic city builder",
+  title: "MistralVerse",
+  description: "A world where humans and AI agents collaborate to build cities together",
 };
 
 export default function RootLayout({

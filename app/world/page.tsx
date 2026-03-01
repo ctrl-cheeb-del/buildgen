@@ -345,6 +345,27 @@ export default function Home() {
   usePlaneMode(layer, handlePlaneSync, handlePlaneExit);
   useRemotePlanes(carUserId);
 
+  // Clean up all vehicle positions on tab close / navigate away
+  useEffect(() => {
+    const cleanup = () => {
+      if (!carUserId) return;
+      if (useCarStore.getState().carMode) {
+        removeCarPosition({ userId: carUserId });
+      }
+      if (useBoatStore.getState().boatMode) {
+        removeBoatPosition({ userId: carUserId });
+      }
+      if (usePlaneStore.getState().planeMode) {
+        removePlanePosition({ userId: carUserId });
+      }
+    };
+    window.addEventListener("beforeunload", cleanup);
+    return () => {
+      window.removeEventListener("beforeunload", cleanup);
+      cleanup();
+    };
+  }, [carUserId, removeCarPosition, removeBoatPosition, removePlanePosition]);
+
   // First-person walk mode
   const fpMode = useFPStore((s) => s.fpMode);
   const setFPMode = useFPStore((s) => s.setFPMode);
