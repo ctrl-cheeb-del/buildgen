@@ -595,7 +595,7 @@ export default function Home() {
     initialLastSeenTickRef.current = liveLastSeenTick;
   }
   const snapshotLastSeenTick = initialLastSeenTickRef.current ?? 0;
-  const showReplay = isSignedIn && snapshotLastSeenTick > 0 && currentTick > snapshotLastSeenTick + 2;
+  const showReplay = !!isSignedIn && snapshotLastSeenTick > 0 && currentTick > snapshotLastSeenTick + 2;
 
   // Sim mode switching: live when authenticated user is on page.
   // Uses setTimeout(0) in cleanup to guard against React strict-mode:

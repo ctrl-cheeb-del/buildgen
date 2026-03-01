@@ -490,30 +490,21 @@ export const run = internalAction({
     // Process build requests — stagger scheduling 3s apart
     const approvedBuilds: Array<{ agent: AgentDoc; buildDescription: string }> = [];
 
-    // Per-plot building cap: skip agents whose plot already has 9 buildings
+    // Per-plot building cap
     const MAX_BUILDINGS_PER_PLOT = 9;
-    const plotBuildingCounts = new Map<number, number>();
-    for (const req of buildRequests) {
-      if (!plotBuildingCounts.has(req.agent.plotIndex)) {
-        const existing = await ctx.runQuery(internal.buildings.countByPlot, {
-          plotIndex: req.agent.plotIndex,
-        });
-        plotBuildingCounts.set(req.agent.plotIndex, existing);
-      }
-    }
 
     if (isLive && buildRequests.length > 0) {
       // Live mode: approve all build requests directly
       for (const req of buildRequests) {
         if (city.activeBuildCount + newBuildsApproved >= buildCap) break;
-        if ((plotBuildingCounts.get(req.agent.plotIndex) ?? 0) >= MAX_BUILDINGS_PER_PLOT) {
+        if ((plotBuildingCounts[req.agent.plotIndex] ?? 0) >= MAX_BUILDINGS_PER_PLOT) {
           console.log(`[tick ${tickNumber}] BUILD DENIED (plot #${req.agent.plotIndex} full, ${MAX_BUILDINGS_PER_PLOT} max): ${req.agent.name}`);
           continue;
         }
         console.log(`[tick ${tickNumber}] BUILD APPROVED (live): ${req.agent.name} → "${req.buildDescription}"`);
         newBuildsApproved++;
         approvedBuilds.push(req);
-        plotBuildingCounts.set(req.agent.plotIndex, (plotBuildingCounts.get(req.agent.plotIndex) ?? 0) + 1);
+        plotBuildingCounts[req.agent.plotIndex] = (plotBuildingCounts[req.agent.plotIndex] ?? 0) + 1;
       }
     }
 
@@ -522,7 +513,7 @@ export const run = internalAction({
       const overnightBuildCap = 2;
       for (const req of buildRequests) {
         if (city.activeBuildCount + newBuildsApproved >= overnightBuildCap) break;
-        if ((plotBuildingCounts.get(req.agent.plotIndex) ?? 0) >= MAX_BUILDINGS_PER_PLOT) {
+        if ((plotBuildingCounts[req.agent.plotIndex] ?? 0) >= MAX_BUILDINGS_PER_PLOT) {
           console.log(`[tick ${tickNumber}] BUILD DENIED (plot #${req.agent.plotIndex} full, ${MAX_BUILDINGS_PER_PLOT} max): ${req.agent.name}`);
           continue;
         }
@@ -533,7 +524,7 @@ export const run = internalAction({
         console.log(`[tick ${tickNumber}] BUILD APPROVED (overnight): ${req.agent.name} → "${req.buildDescription}"`);
         newBuildsApproved++;
         approvedBuilds.push(req);
-        plotBuildingCounts.set(req.agent.plotIndex, (plotBuildingCounts.get(req.agent.plotIndex) ?? 0) + 1);
+        plotBuildingCounts[req.agent.plotIndex] = (plotBuildingCounts[req.agent.plotIndex] ?? 0) + 1;
       }
     }
 
