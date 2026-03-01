@@ -132,7 +132,8 @@ export default defineSchema({
     simMode: v.optional(v.union(v.literal("overnight"), v.literal("live"))),
     activeBuildCount: v.number(),
     consecutiveBankruptTicks: v.optional(v.number()),
-    nextTickId: v.optional(v.id("_scheduled_functions")),
+    nextAgentTickId: v.optional(v.id("_scheduled_functions")),
+    nextCityTickId: v.optional(v.id("_scheduled_functions")),
     activeDecree: v.optional(
       v.object({
         title: v.string(),
@@ -157,6 +158,8 @@ export default defineSchema({
     lastActionTick: v.optional(v.number()),
     memoryBuffer: v.array(v.string()),
     isActive: v.boolean(),
+    nextActionAt: v.optional(v.number()),
+    pendingBuildDescription: v.optional(v.string()),
   })
     .index("by_plotIndex", ["plotIndex"])
     .index("by_role", ["role"]),

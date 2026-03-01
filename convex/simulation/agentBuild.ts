@@ -337,6 +337,10 @@ async function evaluateAndImprove(
   let currentCode = code;
 
   for (let i = 0; i < 3; i++) {
+    // Delay between eval iterations to spread API calls
+    if (i > 0) {
+      await new Promise((r) => setTimeout(r, 1000));
+    }
     const score = await withRetry(
       () => evaluateAgentBuildCode(mistral, currentCode, buildDescription),
       "eval-build",

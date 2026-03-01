@@ -23,6 +23,16 @@ export const getByAgent = query({
   },
 });
 
+export const getRecentInternal = internalQuery({
+  args: { afterTick: v.number() },
+  handler: async (ctx, { afterTick }) => {
+    return await ctx.db
+      .query("agentMessages")
+      .withIndex("by_tick", (q) => q.gte("tickNumber", afterTick))
+      .collect();
+  },
+});
+
 export const getRange = internalQuery({
   args: { afterTick: v.number(), upToTick: v.number() },
   handler: async (ctx, { afterTick, upToTick }) => {

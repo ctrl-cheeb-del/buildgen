@@ -38,6 +38,7 @@ export const create = internalMutation({
     wealth: v.number(),
     satisfaction: v.number(),
     loyaltyToMayor: v.number(),
+    nextActionAt: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     return await ctx.db.insert("agents", {

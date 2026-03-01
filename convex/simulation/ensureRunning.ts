@@ -18,7 +18,8 @@ export const run = internalAction({
         isRunning: true,
       });
       await ctx.scheduler.runAfter(1000, internal.simulation.tick.run, {});
-      console.log("[ensureRunning] City initialized and started");
+      await ctx.scheduler.runAfter(2000, internal.simulation.agentTick.run, {});
+      console.log("[ensureRunning] City initialized and started (both tick chains)");
       return;
     }
 
@@ -31,7 +32,8 @@ export const run = internalAction({
           isRunning: true,
         });
         await ctx.scheduler.runAfter(1000, internal.simulation.tick.run, {});
-        console.log("[ensureRunning] Sim restarted");
+        await ctx.scheduler.runAfter(2000, internal.simulation.agentTick.run, {});
+        console.log("[ensureRunning] Sim restarted (both tick chains)");
       }
       return;
     }
@@ -47,6 +49,7 @@ export const run = internalAction({
         patch: { lastTickAt: Date.now() },
       });
       await ctx.scheduler.runAfter(1000, internal.simulation.tick.run, {});
+      await ctx.scheduler.runAfter(2000, internal.simulation.agentTick.run, {});
       return;
     }
 

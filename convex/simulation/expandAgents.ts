@@ -102,11 +102,13 @@ export const run = internalAction({
     const mistral = new Mistral({ apiKey: process.env.MISTRAL_API_KEY });
 
     let created = 0;
+    const BATCH_SIZE = 4;
+    const expandNow = Date.now();
 
-    // Generate agents in batches of 8
-    for (let batch = 0; batch < Math.ceil(slotsNeeded / 8); batch++) {
-      const batchStart = batch * 8;
-      const batchAgents = selectedPlots.slice(batchStart, batchStart + 8);
+    // Generate agents in batches of 4
+    for (let batch = 0; batch < Math.ceil(slotsNeeded / BATCH_SIZE); batch++) {
+      const batchStart = batch * BATCH_SIZE;
+      const batchAgents = selectedPlots.slice(batchStart, batchStart + BATCH_SIZE);
 
       const backstories = await Promise.all(
         batchAgents.map((plot, i) => {
@@ -135,6 +137,7 @@ export const run = internalAction({
           wealth: 500 + Math.floor(Math.random() * 500),
           satisfaction: 40 + Math.floor(Math.random() * 30),
           loyaltyToMayor: Math.floor(Math.random() * 40) - 10,
+          nextActionAt: expandNow + Math.floor(Math.random() * 60000),
         });
 
         await ctx.runMutation(internal.simulation._plotHelpers.claimForAgent, {
@@ -146,7 +149,7 @@ export const run = internalAction({
       }
 
       // Small delay between batches to respect rate limits
-      if (batchStart + 8 < slotsNeeded) {
+      if (batchStart + BATCH_SIZE < slotsNeeded) {
         await new Promise((r) => setTimeout(r, 2000));
       }
     }

@@ -87,14 +87,16 @@ export const run = internalAction({
     }
     const selectedPlots = shuffle(allPlots).slice(0, 40);
 
-    // Generate agents in batches of 8 to avoid rate limits
+    // Generate agents in batches of 4 to avoid rate limits
+    const BATCH_SIZE = 4;
     const agentIds: string[] = [];
     let mayorIdx = -1;
     let mayorId: string | null = null;
+    const initNow = Date.now();
 
-    for (let batch = 0; batch < 5; batch++) {
-      const batchStart = batch * 8;
-      const batchAgents = selectedPlots.slice(batchStart, batchStart + 8);
+    for (let batch = 0; batch < Math.ceil(40 / BATCH_SIZE); batch++) {
+      const batchStart = batch * BATCH_SIZE;
+      const batchAgents = selectedPlots.slice(batchStart, batchStart + BATCH_SIZE);
 
       const backstories = await Promise.all(
         batchAgents.map((plot, i) => {
@@ -125,6 +127,7 @@ export const run = internalAction({
           wealth: 500 + Math.floor(Math.random() * 500),
           satisfaction: 40 + Math.floor(Math.random() * 30),
           loyaltyToMayor: Math.floor(Math.random() * 40) - 10,
+          nextActionAt: initNow + Math.floor(Math.random() * 60000),
         });
         agentIds.push(id);
 
@@ -133,6 +136,11 @@ export const run = internalAction({
           plotIndex: plot.index,
           agentName: name,
         });
+      }
+
+      // Delay between batches to respect rate limits
+      if (batchStart + BATCH_SIZE < 40) {
+        await new Promise((r) => setTimeout(r, 2000));
       }
     }
 
