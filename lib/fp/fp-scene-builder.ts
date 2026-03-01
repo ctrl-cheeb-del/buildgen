@@ -5,6 +5,9 @@ import { createCloudDome } from "../viewer/clouds";
 import { createEnvironmentMap } from "../viewer/environment";
 import { loadProceduralGeometry } from "../viewer/procedural-loader";
 import { applyBuildingTextures } from "../viewer/building-textures";
+import { createBuildingLOD } from "../viewer/building-lod";
+import { updateVisibilityCulling } from "../viewer/visibility-culling";
+import { updateShadowCulling } from "../viewer/shadow-culling";
 import { plotCenterMeters } from "../grid/grid-geometry";
 import { gridIndexToColRow } from "../grid/grid-geometry";
 import {
@@ -28,8 +31,9 @@ export interface FPSceneResult {
   scene: THREE.Scene;
   colliders: THREE.Box3[];
   bounds: THREE.Box3;
+  containers: Map<string, THREE.Group>;
   dispose: () => void;
-  update: (elapsed: number, camera?: THREE.Camera) => void;
+  update: (elapsed: number, camera: THREE.Camera) => void;
 }
 
 export function buildFPScene(
@@ -59,8 +63,8 @@ export function buildFPScene(
   const sun = new THREE.DirectionalLight(0xfff4e6, 1.6);
   sun.position.set(500, 800, 400);
   sun.castShadow = true;
-  sun.shadow.mapSize.width = 2048;
-  sun.shadow.mapSize.height = 2048;
+  sun.shadow.mapSize.width = 1024;
+  sun.shadow.mapSize.height = 1024;
   sun.shadow.camera.left = -800;
   sun.shadow.camera.right = 800;
   sun.shadow.camera.top = 800;
