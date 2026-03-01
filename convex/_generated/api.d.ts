@@ -20,8 +20,6 @@ import type * as npcTraffic from "../npcTraffic.js";
 import type * as pipeline from "../pipeline.js";
 import type * as planes from "../planes.js";
 import type * as plots from "../plots.js";
-import type * as reseedCity from "../reseedCity.js";
-import type * as reseedCityHelpers from "../reseedCityHelpers.js";
 import type * as resetWorld from "../resetWorld.js";
 import type * as seedBuildings from "../seedBuildings.js";
 import type * as simulation__agentPrompts from "../simulation/_agentPrompts.js";
@@ -64,8 +62,6 @@ declare const fullApi: ApiFromModules<{
   pipeline: typeof pipeline;
   planes: typeof planes;
   plots: typeof plots;
-  reseedCity: typeof reseedCity;
-  reseedCityHelpers: typeof reseedCityHelpers;
   resetWorld: typeof resetWorld;
   seedBuildings: typeof seedBuildings;
   "simulation/_agentPrompts": typeof simulation__agentPrompts;

@@ -273,27 +273,6 @@ export const cleanOldSeeds = mutation({
   },
 });
 
-/** Export all buildings with full data (including proceduralCode) for seeding */
-export const exportBuildings = query({
-  args: {},
-  handler: async (ctx) => {
-    const buildings = await ctx.db.query("buildings").collect();
-    return buildings.map((b) => ({
-      _id: b._id,
-      plotIndex: b.plotIndex,
-      ownerId: b.ownerId,
-      prompt: b.prompt,
-      proceduralCode: b.proceduralCode,
-      multiViewGrid: b.multiViewGrid,
-      position: b.position,
-      rotation: b.rotation,
-      scale: b.scale,
-      category: b.category,
-      createdAt: b.createdAt,
-    }));
-  },
-});
-
 /** Debug: list all buildings with just metadata (no proceduralCode) */
 export const listBuildingMeta = query({
   args: {},
