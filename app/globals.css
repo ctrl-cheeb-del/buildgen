@@ -353,6 +353,144 @@ body {
   animation: ld-scale-in 0.8s 0.5s ease-out both;
 }
 
+/* ── Story section ─────────────────── */
+
+.ld-story {
+  background: linear-gradient(
+    to bottom,
+    var(--page-bg) 0%,
+    #1a1a2e 3%,
+    #1a1a2e 100%
+  );
+  padding: 96px var(--gutter) 72px;
+}
+
+.ld-story-inner {
+  max-width: 680px;
+  margin: 0 auto;
+}
+
+.ld-story-eyebrow {
+  font-family: var(--px);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--accent);
+  text-align: center;
+  margin: 0 0 16px;
+}
+
+.ld-story-heading {
+  font-family: var(--px);
+  font-size: clamp(24px, 4vw, 40px);
+  color: rgba(245, 243, 240, 0.92);
+  text-align: center;
+  line-height: 1.2;
+  margin: 0 0 56px;
+}
+
+.ld-story-timeline {
+  position: relative;
+  padding-left: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 40px;
+}
+
+/* Vertical connector line */
+.ld-story-timeline::before {
+  content: "";
+  position: absolute;
+  left: 7px;
+  top: 8px;
+  bottom: 8px;
+  width: 2px;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgba(177, 158, 239, 0.35) 8%,
+    rgba(177, 158, 239, 0.35) 92%,
+    transparent 100%
+  );
+}
+
+.ld-story-beat {
+  position: relative;
+  opacity: 0;
+  transform: translateY(20px);
+}
+
+.ld-story-beat.ld-story-visible {
+  animation: ld-fade-up 0.5s ease-out forwards;
+  animation-delay: var(--beat-delay, 0s);
+}
+
+/* Timeline dot */
+.ld-story-dot {
+  position: absolute;
+  left: -32px;
+  top: 4px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid var(--accent);
+  background: #1a1a2e;
+  transition: background 0.3s, box-shadow 0.3s;
+}
+
+.ld-story-visible .ld-story-dot {
+  background: var(--accent);
+  box-shadow: 0 0 10px rgba(177, 158, 239, 0.5);
+}
+
+.ld-story-icon {
+  color: var(--accent);
+  margin-bottom: 8px;
+}
+
+.ld-story-beat-headline {
+  font-family: var(--px);
+  font-size: clamp(16px, 2.5vw, 22px);
+  color: rgba(245, 243, 240, 0.92);
+  line-height: 1.3;
+  margin: 0 0 6px;
+}
+
+.ld-story-beat-body {
+  font-family: var(--px);
+  font-size: 12px;
+  color: rgba(245, 243, 240, 0.6);
+  line-height: 1.7;
+  max-width: 480px;
+  margin: 0;
+}
+
+/* ── Footer ────────────────────────── */
+
+.ld-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24px var(--gutter);
+  background: #1a1a2e;
+  border-top: 1px solid rgba(177, 158, 239, 0.08);
+}
+
+.ld-footer-wordmark {
+  font-family: var(--px);
+  font-size: 11px;
+  color: var(--accent);
+  opacity: 0.5;
+  user-select: none;
+}
+
+.ld-footer-stack {
+  font-family: var(--px);
+  font-size: 10px;
+  color: rgba(245, 243, 240, 0.25);
+  letter-spacing: 0.06em;
+}
+
 /* ── Mobile ─────────────────────────── */
 
 @media (max-width: 640px) {
@@ -366,6 +504,11 @@ body {
   .ld-hero-sub br { display: none; }
 
   .ld-nav-link { display: none; }
+
+  .ld-story { padding: 64px var(--gutter); }
+  .ld-story-heading { margin-bottom: 40px; }
+  .ld-story-timeline { padding-left: 28px; gap: 32px; }
+  .ld-story-dot { left: -28px; }
 }
 
 /* Pipeline flowchart animations */

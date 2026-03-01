@@ -4,6 +4,7 @@ import { useUser } from "@clerk/nextjs";
 import Link from "next/link";
 import Image from "next/image";
 import dynamic from "next/dynamic";
+import StorySection from "@/components/landing/StorySection";
 
 const PixelBlast = dynamic(() => import("@/components/PixelBlast"), {
   ssr: false,
@@ -111,12 +112,13 @@ export default function LandingPage() {
         </Link>
       </section>
 
+      {/* ── Story ── */}
+      <StorySection />
+
       {/* ── Footer ── */}
-      <footer className="px-[--gutter] py-6 flex items-center justify-between">
-        <span className="font-[family-name:var(--px)] text-[11px] text-[var(--ink-light)]">
-          MistralVerse
-        </span>
-        <span className="font-[family-name:var(--px)] text-[10px] text-[var(--ink-light)] tracking-wider">
+      <footer className="ld-footer">
+        <span className="ld-footer-wordmark">MistralVerse</span>
+        <span className="ld-footer-stack">
           Convex&ensp;/&ensp;Three.js&ensp;/&ensp;Mistral
         </span>
       </footer>
