@@ -19,11 +19,14 @@ interface WorldState {
   convexUpdateTransform: ConvexUpdateFn | null;
   ownedBuildingIds: Set<string>;
   isDragging: boolean;
+  replayHiddenIds: Set<string>;
 
   setLayer: (layer: SceneLayer) => void;
   setConvexUpdateTransform: (fn: ConvexUpdateFn) => void;
   setOwnedBuildingIds: (ids: Set<string>) => void;
   setIsDragging: (dragging: boolean) => void;
+  setReplayHiddenIds: (ids: Set<string>) => void;
+  revealBuilding: (id: string) => void;
   addBuilding: (building: WorldBuilding, modelGroup: THREE.Group) => void;
   replaceGeometry: (id: string, newModelGroup: THREE.Group) => void;
   removeBuilding: (id: string) => void;
@@ -67,6 +70,7 @@ export const useWorldStore = create<WorldState>((set, get) => ({
   convexUpdateTransform: null,
   ownedBuildingIds: new Set(),
   isDragging: false,
+  replayHiddenIds: new Set(),
 
   setLayer: (layer) => {
     set({ layer });
@@ -84,6 +88,48 @@ export const useWorldStore = create<WorldState>((set, get) => ({
     set({ isDragging: dragging });
   },
 
+  setReplayHiddenIds: (ids) => {
+    set({ replayHiddenIds: ids });
+    // Hide containers that match the hidden set
+    const state = get();
+    for (const id of ids) {
+      const container = state.containers.get(id);
+      if (container) {
+        container.visible = false;
+        container.scale.set(0, 0, 0);
+      }
+    }
+    state.layer?.repaint();
+  },
+
+  revealBuilding: (id) => {
+    const state = get();
+    const container = state.containers.get(id);
+    const building = state.buildings.get(id);
+    if (!container || !building) return;
+
+    // Remove from hidden set
+    const newHidden = new Set(state.replayHiddenIds);
+    newHidden.delete(id);
+    set({ replayHiddenIds: newHidden });
+
+    // Animate scale 0→1 over 500ms (ease-out cubic)
+    container.visible = true;
+    const targetScale = building.scale;
+    const startTime = performance.now();
+    const duration = 500;
+    const animate = (now: number) => {
+      const elapsed = now - startTime;
+      const t = Math.min(1, elapsed / duration);
+      const eased = 1 - Math.pow(1 - t, 3);
+      const s = eased * targetScale;
+      container.scale.set(s, s, s);
+      state.layer?.repaint();
+      if (t < 1) requestAnimationFrame(animate);
+    };
+    requestAnimationFrame(animate);
+  },
+
   addBuilding: (building, modelGroup) => {
     const state = get();
     // Skip if already added
@@ -95,7 +141,14 @@ export const useWorldStore = create<WorldState>((set, get) => ({
     container.add(lod);
 
     applyTransforms(building, container);
-    container.visible = building.visible;
+
+    // If this building is hidden for replay, start invisible at scale 0
+    if (state.replayHiddenIds.has(building.id)) {
+      container.visible = false;
+      container.scale.set(0, 0, 0);
+    } else {
+      container.visible = building.visible;
+    }
 
     const newBuildings = new Map(state.buildings);
     newBuildings.set(building.id, building);
