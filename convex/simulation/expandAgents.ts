@@ -73,7 +73,7 @@ export const run = internalAction({
     const existingNames = new Set(existingAgents.map((a: any) => a.name));
 
     // Only expand if we have fewer than 55 agents
-    if (existingAgents.length >= 55) {
+    if (existingAgents.length >= 40) {
       console.log(
         `[expandAgents] Already ${existingAgents.length} agents, skipping`,
       );

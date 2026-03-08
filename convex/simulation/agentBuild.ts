@@ -5,47 +5,32 @@ import { internalAction } from "../_generated/server";
 import { internal } from "../_generated/api";
 import Replicate from "replicate";
 import { Jimp } from "jimp";
-import {
-  BedrockRuntimeClient,
-  InvokeModelCommand,
-} from "@aws-sdk/client-bedrock-runtime";
+import Anthropic from "@anthropic-ai/sdk";
 import { Mistral } from "@mistralai/mistralai";
 import { withRetry } from "./mistral_retry";
 
 /**
- * Call Bedrock Claude for text-only prompts (no images).
- * Reuses the same BedrockRuntimeClient + InvokeModelCommand pattern as the
- * image-based call at line ~203, but without image content blocks.
+ * Call Anthropic Claude for text-only prompts (no images).
  */
-async function callBedrockText(
+async function callAnthropicText(
   prompt: string,
   maxTokens = 8192,
 ): Promise<string> {
-  const client = new BedrockRuntimeClient({
-    region: process.env.AWS_DEFAULT_REGION || "us-west-2",
-    credentials: {
-      accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
-      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
-      sessionToken: process.env.AWS_SESSION_TOKEN,
-    },
+  const client = new Anthropic({
+    apiKey: process.env.ANTHROPIC_API_KEY!,
   });
 
-  const body = JSON.stringify({
-    anthropic_version: "bedrock-2023-05-31",
+  const response = await client.messages.create({
+    model: "claude-opus-4-6-20250625",
     max_tokens: maxTokens,
-    messages: [{ role: "user", content: [{ type: "text", text: prompt }] }],
+    messages: [{ role: "user", content: prompt }],
   });
 
-  const command = new InvokeModelCommand({
-    modelId: "us.anthropic.claude-opus-4-6-v1",
-    contentType: "application/json",
-    body: new TextEncoder().encode(body),
-  });
-
-  const response = await client.send(command);
-  const result = JSON.parse(new TextDecoder().decode(response.body));
-  const text: string | undefined = result.content?.[0]?.text;
-  if (!text) throw new Error("Bedrock Claude Opus 4.6 returned no content");
+  const textBlocks = response.content.filter(
+    (block): block is Anthropic.TextBlock => block.type === "text"
+  );
+  const text = textBlocks.map((b) => b.text).join("");
+  if (!text) throw new Error("Anthropic Claude Opus 4.6 returned no content");
   return text;
 }
 
@@ -271,8 +256,8 @@ Each view should:
         return;
       }
 
-      // 5. Call Claude Opus 4 via Bedrock for geometry code
-      console.log(`[agentBuild] Calling Claude Opus 4.6 (Bedrock) for geometry code...`);
+      // 5. Call Claude Opus 4.6 via Anthropic API for geometry code
+      console.log(`[agentBuild] Calling Claude Opus 4.6 (Anthropic) for geometry code...`);
 
       const geometryPrompt = `You are an expert Three.js developer. I'm showing you reference views of a building described as "${buildDescription}" (front, right, back, left elevations).
 
@@ -303,43 +288,33 @@ return group;
 
 Generate the code now for "${buildDescription}".`;
 
-      // Build Bedrock content array with 4 view images + prompt
-      const bedrockContent: Array<Record<string, unknown>> = [];
+      // Build Anthropic content array with 4 view images + prompt
+      const anthropicContent: Anthropic.MessageCreateParams["messages"][0]["content"] = [];
       for (const b64 of viewBase64) {
         // Strip data URI prefix to get raw base64
         const raw = b64.replace(/^data:image\/\w+;base64,/, "");
-        bedrockContent.push({
+        anthropicContent.push({
           type: "image",
           source: { type: "base64", media_type: "image/png", data: raw },
         });
       }
-      bedrockContent.push({ type: "text", text: geometryPrompt });
+      anthropicContent.push({ type: "text", text: geometryPrompt });
 
-      const bedrockClient = new BedrockRuntimeClient({
-        region: process.env.AWS_DEFAULT_REGION || "us-west-2",
-        credentials: {
-          accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
-          secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
-          sessionToken: process.env.AWS_SESSION_TOKEN,
-        },
+      const anthropicClient = new Anthropic({
+        apiKey: process.env.ANTHROPIC_API_KEY!,
       });
 
-      const bedrockBody = JSON.stringify({
-        anthropic_version: "bedrock-2023-05-31",
+      const anthropicResponse = await anthropicClient.messages.create({
+        model: "claude-opus-4-6-20250625",
         max_tokens: 16384,
-        messages: [{ role: "user", content: bedrockContent }],
+        messages: [{ role: "user", content: anthropicContent }],
       });
 
-      const bedrockCommand = new InvokeModelCommand({
-        modelId: "us.anthropic.claude-opus-4-6-v1",
-        contentType: "application/json",
-        body: new TextEncoder().encode(bedrockBody),
-      });
-
-      const bedrockResponse = await bedrockClient.send(bedrockCommand);
-      const bedrockResult = JSON.parse(new TextDecoder().decode(bedrockResponse.body));
-      const text: string | undefined = bedrockResult.content?.[0]?.text;
-      if (!text) throw new Error("Bedrock Opus 4 returned no content");
+      const textBlocks = anthropicResponse.content.filter(
+        (block): block is Anthropic.TextBlock => block.type === "text"
+      );
+      const text: string | undefined = textBlocks.map((b) => b.text).join("") || undefined;
+      if (!text) throw new Error("Anthropic Opus 4.6 returned no content");
 
       const codeMatch = text.match(/```(?:javascript|js)?\s*\n([\s\S]*?)```/);
       const code = codeMatch ? codeMatch[1].trim() : text.trim();
@@ -424,7 +399,7 @@ async function evaluateAndImprove(
       return currentCode;
     }
 
-    console.log(`[agentBuild] Score ${score} < 7.0, improving via Bedrock Claude Opus 4.6...`);
+    console.log(`[agentBuild] Score ${score} < 7.0, improving via Anthropic Claude Opus 4.6...`);
     currentCode = await improveAgentBuildCode(currentCode, buildDescription, score);
   }
 
@@ -494,20 +469,20 @@ Return ONLY the improved JavaScript function body (no markdown fences, no explan
 The code must create a THREE.Group and return it.`;
 
   try {
-    const text = await callBedrockText(prompt, 8192);
+    const text = await callAnthropicText(prompt, 8192);
 
     const codeMatch = text.match(/```(?:javascript|js)?\s*\n([\s\S]*?)```/);
     const improved = codeMatch ? codeMatch[1].trim() : text.trim();
     const validation = validateCode(improved);
     if (!validation.valid) {
-      console.warn(`[agentBuild] Improved code invalid (${validation.reason}), keeping original`);
+      console.warn(`[agentBuild] Improved code invalid (${validation.reason}), keeping original code`);
       return code;
     }
 
-    console.log(`[agentBuild] Improved code via Bedrock (${improved.length} chars)`);
+    console.log(`[agentBuild] Improved code via Anthropic (${improved.length} chars)`);
     return improved;
   } catch (err) {
-    console.warn(`[agentBuild] Bedrock improve failed, keeping original:`, err);
+    console.warn(`[agentBuild] Anthropic improve failed, keeping original:`, err);
     return code;
   }
 }
@@ -561,7 +536,7 @@ function validateCode(code: string): { valid: boolean; reason?: string } {
 
 /**
  * Takes existing procedural geometry code and adapts it for a new building description
- * using Bedrock Claude Opus 4.6 (text-only, no images needed).
+ * using Anthropic Claude Opus 4.6 (text-only, no images needed).
  */
 async function adaptExistingCode(
   proceduralCode: string,
@@ -585,7 +560,7 @@ Existing code:
 ${proceduralCode}
 \`\`\``;
 
-  const text = await callBedrockText(adaptPrompt, 8192);
+  const text = await callAnthropicText(adaptPrompt, 8192);
 
   // Extract code — handle both fenced and raw responses
   const codeMatch = text.match(/```(?:javascript|js)?\s*\n([\s\S]*?)```/);
@@ -597,6 +572,6 @@ ${proceduralCode}
     throw new Error(`Adapted code invalid: ${validation.reason}`);
   }
 
-  console.log(`[agentBuild] Adapted code via Bedrock (${code.length} chars)`);
+  console.log(`[agentBuild] Adapted code via Anthropic (${code.length} chars)`);
   return code;
 }

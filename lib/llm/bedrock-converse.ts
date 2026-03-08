@@ -1,37 +1,26 @@
-import {
-  BedrockRuntimeClient,
-  ConverseCommand,
-  type ContentBlock,
-  type Message,
-  type SystemContentBlock,
-} from "@aws-sdk/client-bedrock-runtime";
+import Anthropic from "@anthropic-ai/sdk";
 import type { ScoreBreakdown } from "@/lib/types";
 
 /* ------------------------------------------------------------------ */
 /*  Config                                                              */
 /* ------------------------------------------------------------------ */
 
-const MODEL_ID = "us.anthropic.claude-opus-4-6-v1";
-const ITERATION_MODEL_ID = "us.anthropic.claude-opus-4-6-v1";
+const MODEL_ID = "claude-opus-4-6-20250625";
+const ITERATION_MODEL_ID = "claude-opus-4-6-20250625";
 const SESSION_TTL_MS = 4 * 60 * 60 * 1000; // 4 hours
 const MAX_SESSIONS = 50;
 const SCORE_THRESHOLD = 8.0;
 const MAX_TOKENS = 16384;
 
 /* ------------------------------------------------------------------ */
-/*  Bedrock client singleton                                            */
+/*  Anthropic client singleton                                          */
 /* ------------------------------------------------------------------ */
 
-let _client: BedrockRuntimeClient | null = null;
-function getClient(): BedrockRuntimeClient {
+let _client: Anthropic | null = null;
+function getClient(): Anthropic {
   if (!_client) {
-    _client = new BedrockRuntimeClient({
-      region: process.env.AWS_DEFAULT_REGION || "us-west-2",
-      credentials: {
-        accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
-        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
-        sessionToken: process.env.AWS_SESSION_TOKEN,
-      },
+    _client = new Anthropic({
+      apiKey: process.env.ANTHROPIC_API_KEY!,
     });
   }
   return _client;
@@ -40,18 +29,6 @@ function getClient(): BedrockRuntimeClient {
 /** Reset the cached client so the next call picks up fresh credentials. */
 export function resetBedrockClient(): void {
   _client = null;
-}
-
-function isAuthError(err: unknown): boolean {
-  if (!(err instanceof Error)) return false;
-  const msg = err.message.toLowerCase();
-  return (
-    msg.includes("security token") ||
-    msg.includes("expired") ||
-    msg.includes("expiredtokenexception") ||
-    msg.includes("not authorized") ||
-    msg.includes("invalididentitytoken")
-  );
 }
 
 /* ------------------------------------------------------------------ */
@@ -134,8 +111,6 @@ If totalScore >= 8.0, set improvedCode to null (converged).`;
 /* ------------------------------------------------------------------ */
 
 interface ConverseSession {
-  messages: Message[];
-  system: SystemContentBlock[];
   buildingName: string;
   referenceImages: { front: string; right: string; back: string; left: string };
   createdAt: number;
@@ -171,58 +146,44 @@ function generateId(): string {
   return crypto.randomUUID();
 }
 
-type ImageFormat = "jpeg" | "png" | "gif" | "webp";
+type ImageMediaType = "image/jpeg" | "image/png" | "image/gif" | "image/webp";
 
 /**
- * Convert an image source to bytes. Handles both data: URLs and HTTP(S) URLs.
+ * Convert an image source to base64. Handles both data: URLs and HTTP(S) URLs.
  */
-export async function imageToBytes(
+export async function imageToBase64(
   src: string
-): Promise<{ bytes: Uint8Array; format: ImageFormat }> {
+): Promise<{ base64: string; mediaType: ImageMediaType }> {
   if (src.startsWith("data:")) {
-    // data URL — parse base64 inline
-    const match = src.match(/^data:image\/(jpeg|png|gif|webp);base64,(.+)$/);
+    const match = src.match(/^data:(image\/(?:jpeg|png|gif|webp));base64,(.+)$/);
     if (!match) {
       throw new Error("Invalid data URL format");
     }
-    const format = match[1] as ImageFormat;
-    const base64 = match[2];
-    const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
-    return { bytes, format };
+    return { base64: match[2], mediaType: match[1] as ImageMediaType };
   }
 
-  // HTTP(S) URL — fetch and read as arrayBuffer
   const res = await fetch(src);
   if (!res.ok) {
     throw new Error(`Failed to fetch image: ${res.status} ${res.statusText}`);
   }
   const contentType = res.headers.get("content-type") || "image/png";
   const formatMatch = contentType.match(/image\/(jpeg|png|gif|webp)/);
-  const format: ImageFormat = (formatMatch?.[1] as ImageFormat) || "png";
+  const mediaType: ImageMediaType = formatMatch
+    ? (`image/${formatMatch[1]}` as ImageMediaType)
+    : "image/png";
   const buffer = await res.arrayBuffer();
-  return { bytes: new Uint8Array(buffer), format };
+  const base64 = Buffer.from(buffer).toString("base64");
+  return { base64, mediaType };
 }
 
-async function imageBlock(src: string): Promise<ContentBlock> {
-  const { bytes, format } = await imageToBytes(src);
+async function imageBlock(
+  src: string
+): Promise<Anthropic.ImageBlockParam> {
+  const { base64, mediaType } = await imageToBase64(src);
   return {
-    image: {
-      format,
-      source: { bytes },
-    },
-  } as ContentBlock;
-}
-
-function cachePoint(): ContentBlock {
-  return {
-    cachePoint: { type: "default" },
-  } as ContentBlock;
-}
-
-function systemCachePoint(): SystemContentBlock {
-  return {
-    cachePoint: { type: "default" },
-  } as SystemContentBlock;
+    type: "image",
+    source: { type: "base64", media_type: mediaType, data: base64 },
+  };
 }
 
 function clampScore(val: unknown): number {
@@ -258,11 +219,6 @@ export interface IterationStepResult {
 /**
  * Create a new unified session AND generate the initial code (turn 1).
  *
- * Session structure:
- *   System: [unified prompt] + cachePoint
- *   messages[0] user: [4 reference images] + generation prompt + cachePoint
- *   messages[1] assistant: [generated code] ← actual Bedrock response
- *
  * Returns { sessionId, code } — the code is the generated Three.js code.
  */
 export async function createSessionAndGenerate(
@@ -273,11 +229,6 @@ export async function createSessionAndGenerate(
 
   const sessionId = generateId();
   const now = Date.now();
-
-  // System prompt
-  const system: SystemContentBlock[] = [
-    { text: SYSTEM_PROMPT } as SystemContentBlock,
-  ];
 
   // Build user message with reference images + generation prompt
   const [frontImg, rightImg, backImg, leftImg] = await Promise.all([
@@ -295,64 +246,41 @@ The description may be creative or fantastical (e.g. "a beaver-shaped building",
 
 Generate the code now for "${buildingName}". Wrap it in a \`\`\`javascript code block.`;
 
-  const userContent: ContentBlock[] = [
-    { text: generationPrompt } as ContentBlock,
-    frontImg,
-    rightImg,
-    backImg,
-    leftImg,
-  ];
-
-  const messages: Message[] = [{ role: "user", content: userContent }];
-
-  // Send to Bedrock
-  const command = new ConverseCommand({
-    modelId: MODEL_ID,
-    system,
-    messages,
-    inferenceConfig: { maxTokens: MAX_TOKENS },
+  const response = await getClient().messages.create({
+    model: MODEL_ID,
+    max_tokens: MAX_TOKENS,
+    system: SYSTEM_PROMPT,
+    messages: [
+      {
+        role: "user",
+        content: [
+          { type: "text", text: generationPrompt },
+          frontImg,
+          rightImg,
+          backImg,
+          leftImg,
+        ],
+      },
+    ],
   });
 
-  let response;
-  try {
-    response = await getClient().send(command);
-  } catch (err) {
-    if (isAuthError(err)) {
-      resetBedrockClient();
-      throw new Error("AWS session expired — please retry");
-    }
-    throw err;
-  }
-
-  // Log cache stats
+  // Log usage
   const usage = response.usage;
-  if (usage) {
-    console.log(
-      `[BedrockConverse] Session ${sessionId} (generate): ` +
-        `input=${usage.inputTokens}, output=${usage.outputTokens}, ` +
-        `cacheRead=${usage.cacheReadInputTokens ?? 0}, ` +
-        `cacheWrite=${usage.cacheWriteInputTokens ?? 0}`
-    );
-  }
-
-  // Extract assistant response
-  const outputContent = response.output;
-  if (
-    !outputContent ||
-    !("message" in outputContent) ||
-    !outputContent.message
-  ) {
-    throw new Error("Bedrock Converse returned no output message");
-  }
-
-  const assistantMessage = outputContent.message;
-  const textBlocks = assistantMessage.content?.filter(
-    (block): block is ContentBlock.TextMember => "text" in block
+  console.log(
+    `[Anthropic] Session ${sessionId} (generate): ` +
+      `input=${usage.input_tokens}, output=${usage.output_tokens}, ` +
+      `cache_read=${(usage as unknown as Record<string, unknown>).cache_read_input_tokens ?? 0}, ` +
+      `cache_write=${(usage as unknown as Record<string, unknown>).cache_creation_input_tokens ?? 0}`
   );
-  const rawText = textBlocks?.map((b) => b.text).join("") ?? "";
+
+  // Extract text
+  const textBlocks = response.content.filter(
+    (block): block is Anthropic.TextBlock => block.type === "text"
+  );
+  const rawText = textBlocks.map((b) => b.text).join("");
 
   if (!rawText) {
-    throw new Error("Bedrock Converse returned empty response");
+    throw new Error("Anthropic API returned empty response");
   }
 
   // Extract code from markdown code blocks
@@ -368,19 +296,15 @@ Generate the code now for "${buildingName}". Wrap it in a \`\`\`javascript code 
   const closes = (code.match(/\}/g) || []).length;
   if (opens !== closes) {
     console.warn(
-      `[BedrockConverse] Truncated code (braces: ${opens} open, ${closes} close)`
+      `[Anthropic] Truncated code (braces: ${opens} open, ${closes} close)`
     );
     throw new Error(
       "LLM returned truncated code (unbalanced braces). Try a simpler building or retry."
     );
   }
 
-  // Store session with [user msg, assistant msg]
-  messages.push(assistantMessage);
-
+  // Store session
   sessions.set(sessionId, {
-    messages,
-    system,
     buildingName,
     referenceImages,
     createdAt: now,
@@ -388,21 +312,19 @@ Generate the code now for "${buildingName}". Wrap it in a \`\`\`javascript code 
   });
 
   console.log(
-    `[BedrockConverse] Created unified session ${sessionId} for "${buildingName}" (code: ${code.length} chars)`
+    `[Anthropic] Created unified session ${sessionId} for "${buildingName}" (code: ${code.length} chars)`
   );
 
   return { sessionId, code };
 }
 
 /**
- * Run one iteration step using standalone Sonnet calls (no multi-turn accumulation).
+ * Run one iteration step using standalone calls (no multi-turn accumulation).
  *
  * Each call is stateless — builds a fresh message array with:
  *   - Reference images (from session store)
  *   - Current code + 4 render screenshots
- *   - System prompt reused from session
- *
- * Uses ITERATION_MODEL_ID (Sonnet) for ~3x faster iteration.
+ *   - System prompt
  */
 export async function runIterationStep(
   sessionId: string,
@@ -435,76 +357,56 @@ export async function runIterationStep(
       imageBlock(renderScreenshots.left),
     ]);
 
-  // Build a single user message with all context
-  const userContent: ContentBlock[] = [
-    {
-      text: `Building: "${session.buildingName}"\n\nHere are the 4 REFERENCE views (front, right, back, left):`,
-    } as ContentBlock,
-    refFront,
-    refRight,
-    refBack,
-    refLeft,
-    {
-      text: `Here are the 4 RENDER screenshots (front, right, back, left) of the current Three.js code:`,
-    } as ContentBlock,
-    renFront,
-    renRight,
-    renBack,
-    renLeft,
-    {
-      text: `Current Three.js code:\n\`\`\`javascript\n${currentCode}\n\`\`\`\n\nScore how well the renders match the reference images and provide improved code if needed. Respond with JSON only.`,
-    } as ContentBlock,
-  ];
-
-  const messages: Message[] = [{ role: "user", content: userContent }];
-
-  const command = new ConverseCommand({
-    modelId: ITERATION_MODEL_ID,
-    system: session.system,
-    messages,
-    inferenceConfig: { maxTokens: MAX_TOKENS },
+  const response = await getClient().messages.create({
+    model: ITERATION_MODEL_ID,
+    max_tokens: MAX_TOKENS,
+    system: SYSTEM_PROMPT,
+    messages: [
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: `Building: "${session.buildingName}"\n\nHere are the 4 REFERENCE views (front, right, back, left):`,
+          },
+          refFront,
+          refRight,
+          refBack,
+          refLeft,
+          {
+            type: "text",
+            text: `Here are the 4 RENDER screenshots (front, right, back, left) of the current Three.js code:`,
+          },
+          renFront,
+          renRight,
+          renBack,
+          renLeft,
+          {
+            type: "text",
+            text: `Current Three.js code:\n\`\`\`javascript\n${currentCode}\n\`\`\`\n\nScore how well the renders match the reference images and provide improved code if needed. Respond with JSON only.`,
+          },
+        ],
+      },
+    ],
   });
-
-  let response;
-  try {
-    response = await getClient().send(command);
-  } catch (err) {
-    if (isAuthError(err)) {
-      resetBedrockClient();
-      throw new Error("AWS session expired — please retry");
-    }
-    throw err;
-  }
 
   // Log token usage
   const usage = response.usage;
-  if (usage) {
-    console.log(
-      `[BedrockConverse] Iteration (Sonnet) session ${sessionId}: ` +
-        `input=${usage.inputTokens}, output=${usage.outputTokens}, ` +
-        `cacheRead=${usage.cacheReadInputTokens ?? 0}, ` +
-        `cacheWrite=${usage.cacheWriteInputTokens ?? 0}`
-    );
-  }
-
-  // Extract assistant response text
-  const outputContent = response.output;
-  if (
-    !outputContent ||
-    !("message" in outputContent) ||
-    !outputContent.message
-  ) {
-    throw new Error("Bedrock Converse returned no output message");
-  }
-
-  const assistantMessage = outputContent.message;
-  const textBlocks = assistantMessage.content?.filter(
-    (block): block is ContentBlock.TextMember => "text" in block
+  console.log(
+    `[Anthropic] Iteration session ${sessionId}: ` +
+      `input=${usage.input_tokens}, output=${usage.output_tokens}, ` +
+      `cache_read=${(usage as unknown as Record<string, unknown>).cache_read_input_tokens ?? 0}, ` +
+      `cache_write=${(usage as unknown as Record<string, unknown>).cache_creation_input_tokens ?? 0}`
   );
-  const rawText = textBlocks?.map((b) => b.text).join("") ?? "";
+
+  // Extract text
+  const textBlocks = response.content.filter(
+    (block): block is Anthropic.TextBlock => block.type === "text"
+  );
+  const rawText = textBlocks.map((b) => b.text).join("");
 
   if (!rawText) {
-    throw new Error("Bedrock Converse returned empty response");
+    throw new Error("Anthropic API returned empty response");
   }
 
   // Parse the JSON response — use balanced brace extraction
@@ -557,13 +459,7 @@ export function createIterationSession(
   const sessionId = generateId();
   const now = Date.now();
 
-  const system: SystemContentBlock[] = [
-    { text: SYSTEM_PROMPT } as SystemContentBlock,
-  ];
-
   sessions.set(sessionId, {
-    messages: [],
-    system,
     buildingName,
     referenceImages,
     createdAt: now,
@@ -571,7 +467,7 @@ export function createIterationSession(
   });
 
   console.log(
-    `[BedrockConverse] Created iteration session ${sessionId} for "${buildingName}"`
+    `[Anthropic] Created iteration session ${sessionId} for "${buildingName}"`
   );
 
   return sessionId;
@@ -582,5 +478,5 @@ export function createIterationSession(
  */
 export function destroySession(sessionId: string): void {
   sessions.delete(sessionId);
-  console.log(`[BedrockConverse] Destroyed session ${sessionId}`);
+  console.log(`[Anthropic] Destroyed session ${sessionId}`);
 }

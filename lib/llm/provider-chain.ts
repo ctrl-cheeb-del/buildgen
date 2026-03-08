@@ -1,149 +1,74 @@
-import {
-  BedrockRuntimeClient,
-  InvokeModelCommand,
-  ConverseCommand,
-  type ContentBlock,
-  type Message,
-} from "@aws-sdk/client-bedrock-runtime";
+import Anthropic from "@anthropic-ai/sdk";
 
-let _bedrock: BedrockRuntimeClient | null = null;
-function getBedrock(): BedrockRuntimeClient {
-  if (!_bedrock) {
-    _bedrock = new BedrockRuntimeClient({
-      region: process.env.AWS_DEFAULT_REGION || "us-west-2",
-      credentials: {
-        accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
-        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
-        sessionToken: process.env.AWS_SESSION_TOKEN,
-      },
+let _client: Anthropic | null = null;
+function getClient(): Anthropic {
+  if (!_client) {
+    _client = new Anthropic({
+      apiKey: process.env.ANTHROPIC_API_KEY!,
     });
   }
-  return _bedrock;
+  return _client;
 }
 
 /** Reset the cached client so the next call picks up fresh credentials. */
 export function resetProviderChainClient(): void {
-  _bedrock = null;
+  _client = null;
 }
 
-function isAuthError(err: unknown): boolean {
-  if (!(err instanceof Error)) return false;
-  const msg = err.message.toLowerCase();
-  return (
-    msg.includes("security token") ||
-    msg.includes("expired") ||
-    msg.includes("expiredtokenexception") ||
-    msg.includes("not authorized") ||
-    msg.includes("invalididentitytoken")
-  );
-}
-
-async function callBedrock(
+async function callAnthropic(
   modelId: string,
   prompt: string,
   imageUrls: string[]
 ): Promise<string> {
-  const content: Array<Record<string, unknown>> = [];
+  const content: Anthropic.MessageCreateParams["messages"][0]["content"] = [];
 
   for (const url of imageUrls) {
-    const res = await fetch(url);
-    const buf = Buffer.from(await res.arrayBuffer());
-    const mediaType = res.headers.get("content-type") || "image/png";
-    content.push({
-      type: "image",
-      source: { type: "base64", media_type: mediaType, data: buf.toString("base64") },
-    });
+    if (url.startsWith("data:")) {
+      const match = url.match(/^data:(image\/(?:jpeg|png|gif|webp));base64,(.+)$/);
+      if (match) {
+        content.push({
+          type: "image",
+          source: {
+            type: "base64",
+            media_type: match[1] as "image/jpeg" | "image/png" | "image/gif" | "image/webp",
+            data: match[2],
+          },
+        });
+      }
+    } else {
+      const res = await fetch(url);
+      const buf = Buffer.from(await res.arrayBuffer());
+      const contentType = res.headers.get("content-type") || "image/png";
+      const formatMatch = contentType.match(/image\/(jpeg|png|gif|webp)/);
+      const mediaType = formatMatch
+        ? (`image/${formatMatch[1]}` as "image/jpeg" | "image/png" | "image/gif" | "image/webp")
+        : ("image/png" as const);
+      content.push({
+        type: "image",
+        source: {
+          type: "base64",
+          media_type: mediaType,
+          data: buf.toString("base64"),
+        },
+      });
+    }
   }
 
   content.push({ type: "text", text: prompt });
 
-  const body = JSON.stringify({
-    anthropic_version: "bedrock-2023-05-31",
+  const response = await getClient().messages.create({
+    model: modelId,
     max_tokens: 16384,
     messages: [{ role: "user", content }],
   });
 
-  const command = new InvokeModelCommand({
-    modelId,
-    contentType: "application/json",
-    body: new TextEncoder().encode(body),
-  });
-
-  let response;
-  try {
-    response = await getBedrock().send(command);
-  } catch (err) {
-    if (isAuthError(err)) {
-      resetProviderChainClient();
-      throw new Error("AWS session expired — please retry");
-    }
-    throw err;
-  }
-  const result = JSON.parse(new TextDecoder().decode(response.body));
-  const text = result.content?.[0]?.text;
-  if (!text) throw new Error(`Bedrock ${modelId} returned no content`);
-  return text;
-}
-
-async function callBedrockConverse(
-  modelId: string,
-  prompt: string,
-  imageUrls: string[]
-): Promise<string> {
-  const content: ContentBlock[] = [];
-
-  for (const url of imageUrls) {
-    const res = await fetch(url);
-    const buf = new Uint8Array(await res.arrayBuffer());
-    const contentType = res.headers.get("content-type") || "image/png";
-    const formatMatch = contentType.match(/image\/(jpeg|png|gif|webp)/);
-    const format = (formatMatch?.[1] || "png") as "jpeg" | "png" | "gif" | "webp";
-    content.push({
-      image: {
-        format,
-        source: { bytes: buf },
-      },
-    } as ContentBlock);
-  }
-
-  content.push({ text: prompt } as ContentBlock);
-
-  const messages: Message[] = [{ role: "user", content }];
-
-  const command = new ConverseCommand({
-    modelId,
-    messages,
-    inferenceConfig: { maxTokens: 16384 },
-  });
-
-  let response;
-  try {
-    response = await getBedrock().send(command);
-  } catch (err) {
-    if (isAuthError(err)) {
-      resetProviderChainClient();
-      throw new Error("AWS session expired — please retry");
-    }
-    throw err;
-  }
-
-  const outputContent = response.output;
-  if (!outputContent || !("message" in outputContent) || !outputContent.message) {
-    throw new Error(`Bedrock Converse ${modelId} returned no output`);
-  }
-
-  const textBlocks = outputContent.message.content?.filter(
-    (block): block is ContentBlock.TextMember => "text" in block
+  const textBlocks = response.content.filter(
+    (block): block is Anthropic.TextBlock => block.type === "text"
   );
-  const text = textBlocks?.map((b) => b.text).join("") ?? "";
-  if (!text) throw new Error(`Bedrock Converse ${modelId} returned no content`);
+  const text = textBlocks.map((b) => b.text).join("");
+  if (!text) throw new Error(`Anthropic ${modelId} returned no content`);
   return text;
 }
-
-export type Provider = {
-  name: string;
-  call: (prompt: string, imageUrls: string[]) => Promise<string>;
-};
 
 export async function callOpenRouter(
   model: string,
@@ -182,16 +107,16 @@ export async function callOpenRouter(
   return text;
 }
 
+export type Provider = {
+  name: string;
+  call: (prompt: string, imageUrls: string[]) => Promise<string>;
+};
+
 export const providers: Provider[] = [
   {
-    name: "Bedrock (Claude Opus 4.6)",
+    name: "Anthropic (Claude Opus 4.6)",
     call: (prompt, imageUrls) =>
-      callBedrockConverse("us.anthropic.claude-opus-4-6-v1", prompt, imageUrls),
-  },
-  {
-    name: "Bedrock (Claude Opus 4.6 InvokeModel)",
-    call: (prompt, imageUrls) =>
-      callBedrock("us.anthropic.claude-opus-4-6-v1", prompt, imageUrls),
+      callAnthropic("claude-opus-4-6-20250625", prompt, imageUrls),
   },
   {
     name: "OpenRouter (Claude Opus 4.6)",
@@ -219,8 +144,8 @@ export async function callWithFallback(
     } catch (err) {
       const isRateLimit =
         err instanceof Error &&
-        (("statusCode" in err &&
-          (err as { statusCode: number }).statusCode === 429) ||
+        (("status" in err &&
+          (err as { status: number }).status === 429) ||
           err.message.includes("429") ||
           err.message.includes("rate_limit") ||
           err.message.includes("Rate limit"));

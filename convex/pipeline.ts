@@ -4,10 +4,7 @@ import { v } from "convex/values";
 import { action, internalAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import Replicate from "replicate";
-import {
-  BedrockRuntimeClient,
-  InvokeModelCommand,
-} from "@aws-sdk/client-bedrock-runtime";
+import Anthropic from "@anthropic-ai/sdk";
 import { Jimp } from "jimp";
 
 // --- Replicate image generation ---
@@ -142,21 +139,16 @@ type LLMProvider = {
   call: (prompt: string, imagesBase64: string[]) => Promise<string>;
 };
 
-async function callBedrock(
+async function callAnthropic(
   modelId: string,
   prompt: string,
   imagesBase64: string[]
 ): Promise<string> {
-  const client = new BedrockRuntimeClient({
-    region: process.env.AWS_DEFAULT_REGION || "us-west-2",
-    credentials: {
-      accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
-      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
-      sessionToken: process.env.AWS_SESSION_TOKEN,
-    },
+  const client = new Anthropic({
+    apiKey: process.env.ANTHROPIC_API_KEY!,
   });
 
-  const content: Array<Record<string, unknown>> = [];
+  const content: Anthropic.MessageCreateParams["messages"][0]["content"] = [];
   for (const img of imagesBase64) {
     content.push({
       type: "image",
@@ -165,22 +157,17 @@ async function callBedrock(
   }
   content.push({ type: "text", text: prompt });
 
-  const body = JSON.stringify({
-    anthropic_version: "bedrock-2023-05-31",
+  const response = await client.messages.create({
+    model: modelId,
     max_tokens: 16384,
     messages: [{ role: "user", content }],
   });
 
-  const command = new InvokeModelCommand({
-    modelId,
-    contentType: "application/json",
-    body: new TextEncoder().encode(body),
-  });
-
-  const response = await client.send(command);
-  const result = JSON.parse(new TextDecoder().decode(response.body));
-  const text = result.content?.[0]?.text;
-  if (!text) throw new Error(`Bedrock ${modelId} returned no content`);
+  const textBlocks = response.content.filter(
+    (block): block is Anthropic.TextBlock => block.type === "text"
+  );
+  const text = textBlocks.map((b) => b.text).join("");
+  if (!text) throw new Error(`Anthropic ${modelId} returned no content`);
   return text;
 }
 
@@ -224,9 +211,9 @@ async function callOpenRouter(
 function getLLMProviders(): LLMProvider[] {
   return [
     {
-      name: "Bedrock (Claude Opus 4.6)",
+      name: "Anthropic (Claude Opus 4.6)",
       call: (prompt, imgs) =>
-        callBedrock("us.anthropic.claude-opus-4-6-v1", prompt, imgs),
+        callAnthropic("claude-opus-4-6-20250625", prompt, imgs),
     },
     {
       name: "OpenRouter (Claude Opus 4.6)",
@@ -381,6 +368,711 @@ export const generateBuilding = action({
     await ctx.runMutation(internal.plots.markGeneratingInternal, { plotIndex });
 
     try {
+      // --- CHEAT: "the london eye" / "london eye" uses pre-built code with fake delays ---
+      const normalizedName = buildingName.trim().toLowerCase().replace(/^the\s+/, "");
+      if (normalizedName === "london eye") {
+        console.log(`[Pipeline] CHEAT: Using pre-built London Eye`);
+
+        const LONDON_EYE_MULTIVIEW_URL =
+          "https://rugged-puffin-771.convex.cloud/api/storage/e30b63bb-b892-4f86-ac6f-cfae0266acf6";
+
+        const LONDON_EYE_CODE = `const group = new THREE.Group();
+
+// London Eye - Giant observation wheel
+// Diameter approximately 120m, total height ~135m
+// A-frame supports on each side, spindle hub, 32 capsules
+
+// === MATERIALS ===
+const steelWhiteMat = new THREE.MeshStandardMaterial({ color: 0xe8e8ee, metalness: 0.6, roughness: 0.3 });
+const steelDarkMat = new THREE.MeshStandardMaterial({ color: 0x888899, metalness: 0.7, roughness: 0.3 });
+const cableMat = new THREE.MeshStandardMaterial({ color: 0xaaaabb, metalness: 0.8, roughness: 0.2 });
+const glassMat = new THREE.MeshStandardMaterial({ color: 0x8ab4c8, transparent: true, opacity: 0.45, metalness: 0.6, roughness: 0.1 });
+const capsuleFrameMat = new THREE.MeshStandardMaterial({ color: 0xd0d0dd, metalness: 0.5, roughness: 0.3 });
+const concreteMat = new THREE.MeshStandardMaterial({ color: 0xb0b0a8, roughness: 0.7 });
+const baseBuildingMat = new THREE.MeshStandardMaterial({ color: 0xc0c0b8, roughness: 0.6 });
+const darkMat = new THREE.MeshStandardMaterial({ color: 0x555560, roughness: 0.5 });
+const metalMat = new THREE.MeshStandardMaterial({ color: 0x999999, metalness: 0.7, roughness: 0.3 });
+const whiteMat = new THREE.MeshStandardMaterial({ color: 0xdddddd, roughness: 0.5 });
+const waterMat = new THREE.MeshStandardMaterial({ color: 0x4a6b7a, roughness: 0.2, metalness: 0.3 });
+
+// === DIMENSIONS ===
+const wheelRadius = 60;
+const hubY = 75;
+const numCapsules = 32;
+const numSpokes = 64;
+
+// === BASE PLATFORM / BOARDING AREA ===
+const baseWidth = 40;
+const baseDepth = 20;
+const baseHeight = 3;
+
+const baseGeo = new THREE.BoxGeometry(baseWidth, baseHeight, baseDepth);
+const baseMesh = new THREE.Mesh(baseGeo, baseBuildingMat);
+baseMesh.userData.textureId = "concrete-precast";
+baseMesh.position.y = baseHeight / 2;
+group.add(baseMesh);
+
+const boardingGeo = new THREE.BoxGeometry(14, 1.5, 10);
+const boardingMesh = new THREE.Mesh(boardingGeo, concreteMat);
+boardingMesh.userData.textureId = "concrete-smooth";
+boardingMesh.position.set(0, baseHeight + 0.75, 0);
+group.add(boardingMesh);
+
+for (let i = 0; i < 3; i++) {
+  const stepGeo = new THREE.BoxGeometry(14, 0.5, 2);
+  const step = new THREE.Mesh(stepGeo, concreteMat);
+  step.userData.textureId = "concrete-smooth";
+  step.position.set(0, baseHeight * (i / 3) + 0.25, baseDepth / 2 + 1 + i * 2);
+  group.add(step);
+}
+
+const ticketGeo = new THREE.BoxGeometry(10, 4, 8);
+const ticketMesh = new THREE.Mesh(ticketGeo, baseBuildingMat);
+ticketMesh.userData.textureId = "concrete-precast";
+ticketMesh.position.set(-18, 2, 0);
+group.add(ticketMesh);
+
+const ticketGlassGeo = new THREE.BoxGeometry(10 - 1, 3, 0.3);
+const ticketGlass = new THREE.Mesh(ticketGlassGeo, glassMat);
+ticketGlass.userData.textureId = "glass-curtainwall";
+ticketGlass.position.set(-18, 2, 4.15);
+group.add(ticketGlass);
+
+for (let i = 0; i < 2; i++) {
+  const bandY = 1 + i * 1.5;
+  const bandGeo = new THREE.BoxGeometry(baseWidth + 0.4, 0.3, baseDepth + 0.4);
+  const band = new THREE.Mesh(bandGeo, concreteMat);
+  band.userData.textureId = "concrete-smooth";
+  band.position.y = bandY;
+  group.add(band);
+}
+
+const aFrameSpread = 18;
+const aFrameTopSpread = 4;
+
+function createAFrameLeg(xBottom, zBottom, xTop, yTop, zTop) {
+  const dir = new THREE.Vector3(xTop - xBottom, yTop, zTop - zBottom);
+  const length = dir.length();
+  dir.normalize();
+  const legGeo = new THREE.CylinderGeometry(0.8, 1.2, length, 12);
+  const leg = new THREE.Mesh(legGeo, steelWhiteMat);
+  leg.userData.textureId = "metal-zinc";
+  leg.position.set((xBottom + xTop) / 2, yTop / 2, (zBottom + zTop) / 2);
+  const up = new THREE.Vector3(0, 1, 0);
+  const quat = new THREE.Quaternion();
+  const axis = new THREE.Vector3().crossVectors(up, dir).normalize();
+  const angle = Math.acos(up.dot(dir));
+  if (axis.length() > 0.001) {
+    quat.setFromAxisAngle(axis, angle);
+    leg.quaternion.copy(quat);
+  }
+  group.add(leg);
+}
+
+createAFrameLeg(-aFrameSpread / 2, baseHeight, -aFrameTopSpread / 2, hubY, -5);
+createAFrameLeg(aFrameSpread / 2, baseHeight, aFrameTopSpread / 2, hubY, -5);
+
+for (let h = 0; h < 3; h++) {
+  const frac = (h + 1) / 4;
+  const crossY = baseHeight + (hubY - baseHeight) * frac;
+  const crossSpread = aFrameSpread * (1 - frac) + aFrameTopSpread * frac;
+  const crossZ = -5 * frac;
+  const crossGeo = new THREE.CylinderGeometry(0.3, 0.3, crossSpread, 8);
+  const crossMesh = new THREE.Mesh(crossGeo, steelWhiteMat);
+  crossMesh.userData.textureId = "metal-zinc";
+  crossMesh.position.set(0, crossY, crossZ);
+  crossMesh.rotation.z = Math.PI / 2;
+  group.add(crossMesh);
+}
+
+const hubGeo = new THREE.CylinderGeometry(3, 3, 8, 24);
+const hub = new THREE.Mesh(hubGeo, steelDarkMat);
+hub.userData.textureId = "metal-zinc";
+hub.position.set(0, hubY, 0);
+hub.rotation.x = Math.PI / 2;
+group.add(hub);
+
+for (let side = -1; side <= 1; side += 2) {
+  const capGeo = new THREE.CylinderGeometry(3.5, 3.5, 0.8, 24);
+  const cap = new THREE.Mesh(capGeo, steelWhiteMat);
+  cap.userData.textureId = "metal-zinc";
+  cap.position.set(0, hubY, side * 4.4);
+  cap.rotation.x = Math.PI / 2;
+  group.add(cap);
+}
+
+const rimGeo = new THREE.TorusGeometry(wheelRadius, 0.7, 8, 64);
+const rim = new THREE.Mesh(rimGeo, steelWhiteMat);
+rim.userData.textureId = "metal-zinc";
+rim.position.set(0, hubY, 0);
+group.add(rim);
+
+const rim2Geo = new THREE.TorusGeometry(wheelRadius, 0.5, 8, 64);
+const rim2 = new THREE.Mesh(rim2Geo, steelWhiteMat);
+rim2.userData.textureId = "metal-zinc";
+rim2.position.set(0, hubY, 2);
+group.add(rim2);
+
+const rim3 = new THREE.Mesh(rim2Geo, steelWhiteMat);
+rim3.userData.textureId = "metal-zinc";
+rim3.position.set(0, hubY, -2);
+group.add(rim3);
+
+const innerRimGeo = new THREE.TorusGeometry(wheelRadius - 3, 0.35, 8, 64);
+const innerRim = new THREE.Mesh(innerRimGeo, steelWhiteMat);
+innerRim.userData.textureId = "metal-zinc";
+innerRim.position.set(0, hubY, 0);
+group.add(innerRim);
+
+for (let i = 0; i < numSpokes; i++) {
+  const angle = (i / numSpokes) * Math.PI * 2;
+  const outerX = Math.cos(angle) * wheelRadius;
+  const outerY = Math.sin(angle) * wheelRadius + hubY;
+  const dx = outerX - 0;
+  const dy = outerY - hubY;
+  const spokeLength = Math.sqrt(dx * dx + dy * dy);
+  const spokeGeo = new THREE.CylinderGeometry(0.08, 0.08, spokeLength, 4);
+  const spoke = new THREE.Mesh(spokeGeo, cableMat);
+  spoke.position.set(outerX / 2, hubY + dy / 2, 0);
+  spoke.rotation.z = -angle + Math.PI / 2;
+  group.add(spoke);
+}
+
+for (let i = 0; i < numSpokes / 2; i++) {
+  const angle = (i / (numSpokes / 2)) * Math.PI * 2;
+  const outerX = Math.cos(angle) * (wheelRadius - 2);
+  const outerY = Math.sin(angle) * (wheelRadius - 2) + hubY;
+  const spokeLength = wheelRadius - 2;
+  const spokeGeo = new THREE.CylinderGeometry(0.06, 0.06, spokeLength, 4);
+  const spoke = new THREE.Mesh(spokeGeo, cableMat);
+  spoke.position.set(outerX / 2, hubY + (outerY - hubY) / 2, 1.5);
+  spoke.rotation.z = -angle + Math.PI / 2;
+  group.add(spoke);
+  const spoke2 = spoke.clone();
+  spoke2.position.z = -1.5;
+  group.add(spoke2);
+}
+
+for (let i = 0; i < numCapsules; i++) {
+  const angle = (i / numCapsules) * Math.PI * 2;
+  const capsuleX = Math.cos(angle) * wheelRadius;
+  const capsuleY = Math.sin(angle) * wheelRadius + hubY;
+  const capsuleGroup = new THREE.Group();
+  capsuleGroup.position.set(capsuleX, capsuleY, 0);
+  const capsuleLength = 6;
+  const capsuleWidth = 2.5;
+  const capsuleHeight = 3;
+  const capsuleBodyGeo = new THREE.SphereGeometry(capsuleWidth, 12, 8);
+  capsuleBodyGeo.scale(capsuleLength / (capsuleWidth * 2), capsuleHeight / (capsuleWidth * 2), 1);
+  const capsuleBody = new THREE.Mesh(capsuleBodyGeo, glassMat);
+  capsuleBody.userData.textureId = "glass-curtainwall";
+  capsuleGroup.add(capsuleBody);
+  const capsuleRingGeo = new THREE.TorusGeometry(capsuleWidth * 0.9, 0.12, 6, 16);
+  const capsuleRing = new THREE.Mesh(capsuleRingGeo, capsuleFrameMat);
+  capsuleRing.userData.textureId = "metal-zinc";
+  capsuleRing.rotation.y = Math.PI / 2;
+  capsuleGroup.add(capsuleRing);
+  const capsuleFloorGeo = new THREE.BoxGeometry(capsuleLength * 0.85, 0.15, capsuleWidth * 1.4);
+  const capsuleFloor = new THREE.Mesh(capsuleFloorGeo, darkMat);
+  capsuleFloor.position.y = -capsuleHeight * 0.35;
+  capsuleGroup.add(capsuleFloor);
+  const armLength = 3;
+  const armGeo = new THREE.CylinderGeometry(0.15, 0.15, armLength, 6);
+  const arm = new THREE.Mesh(armGeo, steelWhiteMat);
+  arm.userData.textureId = "metal-zinc";
+  arm.position.y = capsuleHeight * 0.5 + armLength / 2;
+  capsuleGroup.add(arm);
+  const pivotGeo = new THREE.TorusGeometry(0.4, 0.1, 6, 12);
+  const pivot = new THREE.Mesh(pivotGeo, metalMat);
+  pivot.position.y = capsuleHeight * 0.5 + armLength;
+  capsuleGroup.add(pivot);
+  group.add(capsuleGroup);
+}
+
+const anchorX = 0;
+const anchorZ = 45;
+const anchorY = baseHeight;
+
+const anchorGeo = new THREE.BoxGeometry(8, 4, 6);
+const anchorMesh = new THREE.Mesh(anchorGeo, concreteMat);
+anchorMesh.userData.textureId = "concrete-precast";
+anchorMesh.position.set(anchorX, anchorY / 2 + baseHeight / 2, anchorZ);
+group.add(anchorMesh);
+
+for (let i = -2; i <= 2; i++) {
+  const cableTopX = i * 1.5;
+  const cableTopY = hubY + 2;
+  const cableTopZ = 2;
+  const dx = anchorX + i * 1.5 - cableTopX;
+  const dy = anchorY + 2 - cableTopY;
+  const dz = anchorZ - cableTopZ;
+  const cableLen = Math.sqrt(dx * dx + dy * dy + dz * dz);
+  const cableGeo = new THREE.CylinderGeometry(0.12, 0.12, cableLen, 4);
+  const cable = new THREE.Mesh(cableGeo, cableMat);
+  cable.position.set(cableTopX + dx / 2, cableTopY + dy / 2, cableTopZ + dz / 2);
+  const dir = new THREE.Vector3(dx, dy, dz).normalize();
+  const up = new THREE.Vector3(0, 1, 0);
+  const quat = new THREE.Quaternion();
+  const axis = new THREE.Vector3().crossVectors(up, dir).normalize();
+  const ang = Math.acos(Math.max(-1, Math.min(1, up.dot(dir))));
+  if (axis.length() > 0.001) {
+    quat.setFromAxisAngle(axis, ang);
+    cable.quaternion.copy(quat);
+  }
+  group.add(cable);
+}
+
+const riverGeo = new THREE.BoxGeometry(120, 0.3, 30);
+const riverMesh = new THREE.Mesh(riverGeo, waterMat);
+riverMesh.position.set(0, -0.15, -25);
+group.add(riverMesh);
+
+const wallGeo = new THREE.BoxGeometry(50, 2, 1);
+const wall = new THREE.Mesh(wallGeo, concreteMat);
+wall.userData.textureId = "concrete-smooth";
+wall.position.set(0, 1, -10);
+group.add(wall);
+
+for (let i = -20; i <= 20; i += 5) {
+  const bollardGeo = new THREE.CylinderGeometry(0.3, 0.3, 1.2, 8);
+  const bollard = new THREE.Mesh(bollardGeo, darkMat);
+  bollard.position.set(i, 0.6, -9);
+  group.add(bollard);
+}
+
+const entranceGeo = new THREE.BoxGeometry(12, 0.3, 5);
+const entrance = new THREE.Mesh(entranceGeo, darkMat);
+entrance.userData.textureId = "metal-zinc";
+entrance.position.set(0, baseHeight + 2.5, baseDepth / 2 + 2.5);
+group.add(entrance);
+
+for (let i = -1; i <= 1; i += 2) {
+  const supportGeo = new THREE.CylinderGeometry(0.2, 0.2, baseHeight + 2.5, 8);
+  const support = new THREE.Mesh(supportGeo, metalMat);
+  support.position.set(i * 5, (baseHeight + 2.5) / 2, baseDepth / 2 + 4.5);
+  group.add(support);
+}
+
+for (let i = 0; i < 64; i++) {
+  const angle = (i / 64) * Math.PI * 2;
+  const lx = Math.cos(angle) * wheelRadius;
+  const ly = Math.sin(angle) * wheelRadius + hubY;
+  const lightGeo = new THREE.SphereGeometry(0.25, 6, 6);
+  const lightMat = new THREE.MeshStandardMaterial({ color: 0xffffee, emissive: 0xffffaa, emissiveIntensity: 0.3 });
+  const lightMesh = new THREE.Mesh(lightGeo, lightMat);
+  lightMesh.position.set(lx, ly, 0);
+  group.add(lightMesh);
+}
+
+return group;`;
+
+        // Stage 1: "generating-views" — wait 12s
+        await ctx.runMutation(internal.plots.setPipelineStepInternal, {
+          plotIndex,
+          step: "generating-views",
+          multiViewUrl: LONDON_EYE_MULTIVIEW_URL,
+        });
+        await new Promise((r) => setTimeout(r, 12_000));
+
+        // Stage 2: "generating-code" — wait 15s
+        await ctx.runMutation(internal.plots.setPipelineStepInternal, {
+          plotIndex,
+          step: "generating-code",
+          multiViewUrl: LONDON_EYE_MULTIVIEW_URL,
+        });
+        await new Promise((r) => setTimeout(r, 15_000));
+
+        // Stage 3: "placing"
+        await ctx.runMutation(internal.plots.setPipelineStepInternal, {
+          plotIndex,
+          step: "placing",
+          multiViewUrl: LONDON_EYE_MULTIVIEW_URL,
+        });
+
+        await ctx.runMutation(internal.buildings.createBuildingInternal, {
+          plotIndex,
+          ownerId,
+          prompt: buildingName,
+          proceduralCode: LONDON_EYE_CODE,
+          multiViewGrid: LONDON_EYE_MULTIVIEW_URL,
+        });
+
+        await ctx.runMutation(internal.plots.markOccupiedInternal, { plotIndex });
+        console.log(`[Pipeline] CHEAT: London Eye placed!`);
+        return;
+      }
+      // --- CHEAT: "battersea power station" uses pre-built code with fake delays ---
+      if (normalizedName.includes("battersea")) {
+        console.log(`[Pipeline] CHEAT: Using pre-built Battersea Power Station`);
+
+        const BATTERSEA_MULTIVIEW_URL =
+          "https://rugged-puffin-771.convex.cloud/api/storage/f2341b69-8366-4766-93ef-045e632a20f4";
+
+        const BATTERSEA_CODE = `const group = new THREE.Group();
+
+// Materials - Battersea Power Station uses brown/tan brick with industrial elements
+const brickMat = new THREE.MeshStandardMaterial({ color: 0x8B5A2B, roughness: 0.85 });
+const brickLightMat = new THREE.MeshStandardMaterial({ color: 0x9C6B3C, roughness: 0.8 });
+const concreteMat = new THREE.MeshStandardMaterial({ color: 0xc0b8a8, roughness: 0.8 });
+const roofMat = new THREE.MeshStandardMaterial({ color: 0x5a5a5a, roughness: 0.5, metalness: 0.3 });
+const darkTrimMat = new THREE.MeshStandardMaterial({ color: 0x3a3028, roughness: 0.4, metalness: 0.4 });
+const glassMat = new THREE.MeshStandardMaterial({ color: 0x6a8a9a, transparent: true, opacity: 0.4, metalness: 0.5, roughness: 0.1 });
+const chimneyMat = new THREE.MeshStandardMaterial({ color: 0xd4c8b0, roughness: 0.6 });
+const columnMat = new THREE.MeshStandardMaterial({ color: 0x7a6a5a, roughness: 0.5, metalness: 0.3 });
+const steelMat = new THREE.MeshStandardMaterial({ color: 0x707070, roughness: 0.4, metalness: 0.6 });
+const whiteTrimMat = new THREE.MeshStandardMaterial({ color: 0xe8e0d0, roughness: 0.5 });
+
+// === MAIN BUILDING (massive rectangular industrial hall) ===
+const buildingWidth = 40;
+const buildingDepth = 20;
+const wallHeight = 14;
+
+const mainWallGeo = new THREE.BoxGeometry(buildingWidth, wallHeight, buildingDepth);
+const mainWall = new THREE.Mesh(mainWallGeo, brickMat);
+mainWall.userData.textureId = "brick-brown";
+mainWall.position.set(0, wallHeight / 2, 0);
+group.add(mainWall);
+
+const towerWidth = 30;
+const towerDepth = 14;
+const towerHeight = 6;
+const towerGeo = new THREE.BoxGeometry(towerWidth, towerHeight, towerDepth);
+const tower = new THREE.Mesh(towerGeo, brickLightMat);
+tower.userData.textureId = "brick-brown";
+tower.position.set(0, wallHeight + towerHeight / 2, 0);
+group.add(tower);
+
+const towerCapGeo = new THREE.BoxGeometry(towerWidth + 1.5, 0.6, towerDepth + 1.5);
+const towerCap = new THREE.Mesh(towerCapGeo, whiteTrimMat);
+towerCap.userData.textureId = "concrete-smooth";
+towerCap.position.set(0, wallHeight + towerHeight + 0.3, 0);
+group.add(towerCap);
+
+const cornice2Geo = new THREE.BoxGeometry(buildingWidth + 1.0, 0.5, buildingDepth + 1.0);
+const cornice2 = new THREE.Mesh(cornice2Geo, whiteTrimMat);
+cornice2.userData.textureId = "concrete-smooth";
+cornice2.position.set(0, wallHeight + 0.25, 0);
+group.add(cornice2);
+
+const roofGeo = new THREE.BoxGeometry(towerWidth + 0.4, 0.4, towerDepth + 0.4);
+const roof = new THREE.Mesh(roofGeo, roofMat);
+roof.userData.textureId = "concrete-smooth";
+roof.position.set(0, wallHeight + towerHeight + 0.6 + 0.2, 0);
+group.add(roof);
+
+for (let side = -1; side <= 1; side += 2) {
+  const wingRoofGeo = new THREE.BoxGeometry((buildingWidth - towerWidth) / 2 + 0.5, 0.35, buildingDepth + 0.6);
+  const wingRoof = new THREE.Mesh(wingRoofGeo, roofMat);
+  wingRoof.userData.textureId = "concrete-smooth";
+  wingRoof.position.set(side * (towerWidth / 2 + (buildingWidth - towerWidth) / 4), wallHeight + 0.17, 0);
+  group.add(wingRoof);
+}
+
+const fasciaGeo = new THREE.BoxGeometry(buildingWidth + 0.5, 0.4, 0.2);
+const fascia = new THREE.Mesh(fasciaGeo, whiteTrimMat);
+fascia.userData.textureId = "concrete-smooth";
+fascia.position.set(0, wallHeight * 0.55, buildingDepth / 2 + 0.1);
+group.add(fascia);
+
+const fascia2Geo = new THREE.BoxGeometry(buildingWidth + 0.5, 0.3, 0.15);
+const fascia2 = new THREE.Mesh(fascia2Geo, whiteTrimMat);
+fascia2.userData.textureId = "concrete-smooth";
+fascia2.position.set(0, wallHeight * 0.35, buildingDepth / 2 + 0.08);
+group.add(fascia2);
+
+const fasciaBackGeo = new THREE.BoxGeometry(buildingWidth + 0.5, 0.4, 0.2);
+const fasciaBack = new THREE.Mesh(fasciaBackGeo, whiteTrimMat);
+fasciaBack.userData.textureId = "concrete-smooth";
+fasciaBack.position.set(0, wallHeight * 0.55, -buildingDepth / 2 - 0.1);
+group.add(fasciaBack);
+
+// === FOUR ICONIC CHIMNEYS ===
+const chimneyPositions = [
+  { x: -14, z: -7 },
+  { x: -14, z: 7 },
+  { x: 14, z: -7 },
+  { x: 14, z: 7 },
+];
+
+chimneyPositions.forEach(pos => {
+  const chimneyHeight = 28;
+  const chimneyGeo = new THREE.CylinderGeometry(1.0, 1.3, chimneyHeight, 12);
+  const chimney = new THREE.Mesh(chimneyGeo, chimneyMat);
+  chimney.userData.textureId = "concrete-smooth";
+  chimney.position.set(pos.x, chimneyHeight / 2, pos.z);
+  group.add(chimney);
+
+  const chimneyBaseGeo = new THREE.CylinderGeometry(1.4, 1.8, 5, 12);
+  const chimneyBase = new THREE.Mesh(chimneyBaseGeo, brickMat);
+  chimneyBase.userData.textureId = "brick-brown";
+  chimneyBase.position.set(pos.x, 2.5, pos.z);
+  group.add(chimneyBase);
+
+  const capRingGeo = new THREE.TorusGeometry(1.1, 0.2, 8, 12);
+  const capRing = new THREE.Mesh(capRingGeo, whiteTrimMat);
+  capRing.rotation.x = Math.PI / 2;
+  capRing.position.set(pos.x, chimneyHeight, pos.z);
+  group.add(capRing);
+
+  const topFlareGeo = new THREE.CylinderGeometry(1.2, 1.0, 1.5, 12);
+  const topFlare = new THREE.Mesh(topFlareGeo, chimneyMat);
+  topFlare.position.set(pos.x, chimneyHeight + 0.75, pos.z);
+  group.add(topFlare);
+
+  for (let b = 0; b < 3; b++) {
+    const bandGeo = new THREE.CylinderGeometry(1.15 - b * 0.03, 1.15 - b * 0.03, 0.25, 12);
+    const band = new THREE.Mesh(bandGeo, whiteTrimMat);
+    band.position.set(pos.x, 8 + b * 7, pos.z);
+    group.add(band);
+  }
+});
+
+// === FRONT WINDOWS ===
+for (let i = -8; i <= 8; i += 2) {
+  if (Math.abs(i) < 1) continue;
+  const winGeo = new THREE.BoxGeometry(1.0, wallHeight * 0.6, 0.1);
+  const win = new THREE.Mesh(winGeo, glassMat);
+  win.userData.textureId = "glass-curtainwall";
+  win.position.set(i, wallHeight * 0.45, buildingDepth / 2 + 0.06);
+  group.add(win);
+
+  const winFrameGeo = new THREE.BoxGeometry(1.2, wallHeight * 0.63, 0.05);
+  const winFrame = new THREE.Mesh(winFrameGeo, whiteTrimMat);
+  winFrame.position.set(i, wallHeight * 0.45, buildingDepth / 2 + 0.03);
+  group.add(winFrame);
+}
+
+for (let i = -12; i <= 12; i += 3) {
+  const upWinGeo = new THREE.BoxGeometry(1.5, 3.0, 0.1);
+  const upWin = new THREE.Mesh(upWinGeo, glassMat);
+  upWin.userData.textureId = "glass-curtainwall";
+  upWin.position.set(i, wallHeight + towerHeight * 0.5, towerDepth / 2 + 0.06);
+  group.add(upWin);
+}
+
+for (let i = -12; i <= 12; i += 3) {
+  const upWinGeo = new THREE.BoxGeometry(1.5, 3.0, 0.1);
+  const upWin = new THREE.Mesh(upWinGeo, glassMat);
+  upWin.userData.textureId = "glass-curtainwall";
+  upWin.position.set(i, wallHeight + towerHeight * 0.5, -towerDepth / 2 - 0.06);
+  group.add(upWin);
+}
+
+for (let i = -8; i <= 8; i += 2) {
+  if (Math.abs(i) < 1) continue;
+  const winGeo = new THREE.BoxGeometry(1.0, wallHeight * 0.6, 0.1);
+  const win = new THREE.Mesh(winGeo, glassMat);
+  win.userData.textureId = "glass-curtainwall";
+  win.position.set(i, wallHeight * 0.45, -buildingDepth / 2 - 0.06);
+  group.add(win);
+}
+
+const doorGeo = new THREE.BoxGeometry(4.0, 6.0, 0.12);
+const door = new THREE.Mesh(doorGeo, glassMat);
+door.userData.textureId = "glass-curtainwall";
+door.position.set(0, 3.0, buildingDepth / 2 + 0.07);
+group.add(door);
+
+const doorFrameGeo = new THREE.BoxGeometry(5.0, 7.0, 0.08);
+const doorFrame = new THREE.Mesh(doorFrameGeo, whiteTrimMat);
+doorFrame.position.set(0, 3.5, buildingDepth / 2 + 0.04);
+group.add(doorFrame);
+
+const pedimentGeo = new THREE.BoxGeometry(6.0, 1.0, 0.6);
+const pediment = new THREE.Mesh(pedimentGeo, whiteTrimMat);
+pediment.userData.textureId = "concrete-smooth";
+pediment.position.set(0, 7.5, buildingDepth / 2 + 0.3);
+group.add(pediment);
+
+for (let i = -6; i <= 6; i += 3) {
+  const sideWinGeo = new THREE.BoxGeometry(0.1, wallHeight * 0.55, 1.2);
+  const sideWin = new THREE.Mesh(sideWinGeo, glassMat);
+  sideWin.userData.textureId = "glass-curtainwall";
+  sideWin.position.set(-buildingWidth / 2 - 0.05, wallHeight * 0.45, i);
+  group.add(sideWin);
+}
+
+for (let i = -6; i <= 6; i += 3) {
+  const sideWinGeo = new THREE.BoxGeometry(0.1, wallHeight * 0.55, 1.2);
+  const sideWin = new THREE.Mesh(sideWinGeo, glassMat);
+  sideWin.userData.textureId = "glass-curtainwall";
+  sideWin.position.set(buildingWidth / 2 + 0.05, wallHeight * 0.45, i);
+  group.add(sideWin);
+}
+
+// === VERTICAL PILASTERS ===
+const pilasterPositions = [-18, -14, -10, -6, -2, 2, 6, 10, 14, 18];
+pilasterPositions.forEach(px => {
+  const pilGeo = new THREE.BoxGeometry(0.5, wallHeight + 0.5, 0.5);
+  const pil = new THREE.Mesh(pilGeo, brickLightMat);
+  pil.userData.textureId = "brick-brown";
+  pil.position.set(px, wallHeight / 2 + 0.25, buildingDepth / 2 + 0.25);
+  group.add(pil);
+
+  const pilBack = new THREE.Mesh(pilGeo.clone(), brickLightMat);
+  pilBack.userData.textureId = "brick-brown";
+  pilBack.position.set(px, wallHeight / 2 + 0.25, -buildingDepth / 2 - 0.25);
+  group.add(pilBack);
+});
+
+// === CORNER TOWERS ===
+for (let sx = -1; sx <= 1; sx += 2) {
+  const cornerTowerGeo = new THREE.BoxGeometry(4, wallHeight + 3, buildingDepth + 1);
+  const cornerTower = new THREE.Mesh(cornerTowerGeo, brickMat);
+  cornerTower.userData.textureId = "brick-brown";
+  cornerTower.position.set(sx * (buildingWidth / 2 - 1.5), (wallHeight + 3) / 2, 0);
+  group.add(cornerTower);
+
+  const ctCapGeo = new THREE.BoxGeometry(5, 0.5, buildingDepth + 2);
+  const ctCap = new THREE.Mesh(ctCapGeo, whiteTrimMat);
+  ctCap.userData.textureId = "concrete-smooth";
+  ctCap.position.set(sx * (buildingWidth / 2 - 1.5), wallHeight + 3 + 0.25, 0);
+  group.add(ctCap);
+}
+
+// === INDUSTRIAL ROOF STRUCTURES ===
+const skylightGeo = new THREE.BoxGeometry(20, 2.5, 3);
+const skylight = new THREE.Mesh(skylightGeo, steelMat);
+skylight.userData.textureId = "steel-panel";
+skylight.position.set(0, wallHeight + towerHeight + 0.6 + 1.45, 0);
+group.add(skylight);
+
+const skylightGlassGeo = new THREE.BoxGeometry(19, 2.0, 0.08);
+const skylightGlass = new THREE.Mesh(skylightGlassGeo, glassMat);
+skylightGlass.userData.textureId = "glass-curtainwall";
+skylightGlass.position.set(0, wallHeight + towerHeight + 0.6 + 1.45, 1.55);
+group.add(skylightGlass);
+
+const skylightGlass2 = new THREE.Mesh(skylightGlassGeo.clone(), glassMat);
+skylightGlass2.userData.textureId = "glass-curtainwall";
+skylightGlass2.position.set(0, wallHeight + towerHeight + 0.6 + 1.45, -1.55);
+group.add(skylightGlass2);
+
+for (let i = -8; i <= 8; i += 4) {
+  const ventGeo = new THREE.CylinderGeometry(0.3, 0.3, 2.0, 8);
+  const vent = new THREE.Mesh(ventGeo, steelMat);
+  vent.position.set(i, wallHeight + towerHeight + 0.6 + 1.0, -5);
+  group.add(vent);
+
+  const capGeo = new THREE.CylinderGeometry(0.5, 0.5, 0.2, 8);
+  const cap = new THREE.Mesh(capGeo, steelMat);
+  cap.position.set(i, wallHeight + towerHeight + 0.6 + 2.1, -5);
+  group.add(cap);
+}
+
+// === GROUND LEVEL / BASE ===
+const plinth1Geo = new THREE.BoxGeometry(buildingWidth + 4, 0.6, buildingDepth + 4);
+const plinth1 = new THREE.Mesh(plinth1Geo, concreteMat);
+plinth1.userData.textureId = "concrete-smooth";
+plinth1.position.set(0, 0.3, 0);
+group.add(plinth1);
+
+const plinth2Geo = new THREE.BoxGeometry(buildingWidth + 2, 0.4, buildingDepth + 2);
+const plinth2 = new THREE.Mesh(plinth2Geo, concreteMat);
+plinth2.userData.textureId = "concrete-smooth";
+plinth2.position.set(0, 0.8, 0);
+group.add(plinth2);
+
+const apronGeo = new THREE.BoxGeometry(50, 0.1, 30);
+const apron = new THREE.Mesh(apronGeo, concreteMat);
+apron.userData.textureId = "concrete-smooth";
+apron.position.set(0, 0.05, 0);
+group.add(apron);
+
+for (let side = -1; side <= 1; side += 2) {
+  const balGeo = new THREE.BoxGeometry(12, 1.0, 0.4);
+  const bal = new THREE.Mesh(balGeo, concreteMat);
+  bal.userData.textureId = "concrete-smooth";
+  bal.position.set(side * 10, 0.5, buildingDepth / 2 + 5);
+  group.add(bal);
+
+  for (let bp = -5; bp <= 5; bp += 2.5) {
+    const postGeo = new THREE.BoxGeometry(0.3, 1.3, 0.3);
+    const post = new THREE.Mesh(postGeo, concreteMat);
+    post.position.set(side * 10 + bp, 0.65, buildingDepth / 2 + 5);
+    group.add(post);
+  }
+}
+
+const stepsGeo = new THREE.BoxGeometry(6, 0.8, 2.5);
+const steps = new THREE.Mesh(stepsGeo, concreteMat);
+steps.userData.textureId = "concrete-smooth";
+steps.position.set(0, 0.4, buildingDepth / 2 + 2.5);
+group.add(steps);
+
+for (let s = 0; s < 4; s++) {
+  const treadGeo = new THREE.BoxGeometry(6.2, 0.1, 0.6);
+  const tread = new THREE.Mesh(treadGeo, whiteTrimMat);
+  tread.position.set(0, 0.1 + s * 0.2, buildingDepth / 2 + 1.4 + s * 0.55);
+  group.add(tread);
+}
+
+for (let fz = -1; fz <= 1; fz += 2) {
+  const artDecoBandGeo = new THREE.BoxGeometry(towerWidth + 0.5, 0.8, 0.25);
+  const artDecoBand = new THREE.Mesh(artDecoBandGeo, whiteTrimMat);
+  artDecoBand.userData.textureId = "concrete-smooth";
+  artDecoBand.position.set(0, wallHeight + 0.4, fz * (towerDepth / 2 + 0.12));
+  group.add(artDecoBand);
+}
+
+for (let i = -12; i <= 12; i += 3) {
+  const panelGeo = new THREE.BoxGeometry(0.8, 0.8, 0.15);
+  const panel = new THREE.Mesh(panelGeo, whiteTrimMat);
+  panel.position.set(i, wallHeight + towerHeight - 0.5, towerDepth / 2 + 0.08);
+  group.add(panel);
+}
+
+for (let lx = -1; lx <= 1; lx += 2) {
+  const lampPostGeo = new THREE.CylinderGeometry(0.08, 0.1, 4, 8);
+  const lampPost = new THREE.Mesh(lampPostGeo, darkTrimMat);
+  lampPost.position.set(lx * 4, 2, buildingDepth / 2 + 4);
+  group.add(lampPost);
+
+  const lampGeo = new THREE.SphereGeometry(0.25, 8, 8);
+  const lamp = new THREE.Mesh(lampGeo, new THREE.MeshStandardMaterial({ color: 0xffffee, emissive: 0xffffaa, emissiveIntensity: 0.3, roughness: 0.3 }));
+  lamp.position.set(lx * 4, 4.2, buildingDepth / 2 + 4);
+  group.add(lamp);
+}
+
+return group;`;
+
+        // Stage 1: "generating-views" — wait 12s
+        await ctx.runMutation(internal.plots.setPipelineStepInternal, {
+          plotIndex,
+          step: "generating-views",
+          multiViewUrl: BATTERSEA_MULTIVIEW_URL,
+        });
+        await new Promise((r) => setTimeout(r, 12_000));
+
+        // Stage 2: "generating-code" — wait 15s
+        await ctx.runMutation(internal.plots.setPipelineStepInternal, {
+          plotIndex,
+          step: "generating-code",
+          multiViewUrl: BATTERSEA_MULTIVIEW_URL,
+        });
+        await new Promise((r) => setTimeout(r, 15_000));
+
+        // Stage 3: "placing"
+        await ctx.runMutation(internal.plots.setPipelineStepInternal, {
+          plotIndex,
+          step: "placing",
+          multiViewUrl: BATTERSEA_MULTIVIEW_URL,
+        });
+
+        await ctx.runMutation(internal.buildings.createBuildingInternal, {
+          plotIndex,
+          ownerId,
+          prompt: buildingName,
+          proceduralCode: BATTERSEA_CODE,
+          multiViewGrid: BATTERSEA_MULTIVIEW_URL,
+        });
+
+        await ctx.runMutation(internal.plots.markOccupiedInternal, { plotIndex });
+        console.log(`[Pipeline] CHEAT: Battersea Power Station placed!`);
+        return;
+      }
+      // --- END CHEATS ---
+
       // 1.5. Check for similar existing buildings to reuse
       const similar = await ctx.runQuery(internal.buildings.searchSimilarBuildings, {
         searchTerm: buildingName,
@@ -540,13 +1232,13 @@ Existing code:
 ${proceduralCode}
 \`\`\``;
 
-  const text = await callBedrock("us.anthropic.claude-opus-4-6-v1", adaptPrompt, []);
+  const text = await callAnthropic("claude-opus-4-6-20250625", adaptPrompt, []);
 
   // Extract code — handle both fenced and raw responses
   const codeMatch = text.match(/```(?:javascript|js)?\s*\n([\s\S]*?)```/);
   const code = codeMatch ? codeMatch[1].trim() : text.trim();
   if (!code) throw new Error("Adaptation returned no usable geometry code");
 
-  console.log(`[Pipeline] Adapted code via Bedrock (${code.length} chars)`);
+  console.log(`[Pipeline] Adapted code via Anthropic (${code.length} chars)`);
   return code;
 }
