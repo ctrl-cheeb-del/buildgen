@@ -1,12 +1,13 @@
 "use client";
 
-import { useSignIn, useUser } from "@clerk/nextjs";
+import { useSignIn, useSignUp, useUser } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import TiltedCard from "@/components/TiltedCard";
 
 export default function LoginPage() {
   const { signIn, isLoaded: signInLoaded } = useSignIn();
+  const { signUp, isLoaded: signUpLoaded } = useSignUp();
   const { isSignedIn, isLoaded: userLoaded } = useUser();
   const router = useRouter();
 
@@ -17,12 +18,22 @@ export default function LoginPage() {
   }, [userLoaded, isSignedIn, router]);
 
   const handleSignIn = async () => {
-    if (!signInLoaded) return;
-    await signIn.authenticateWithRedirect({
-      strategy: "oauth_x",
-      redirectUrl: "/sso-callback",
-      redirectUrlComplete: "/world",
-    });
+    if (!signInLoaded || !signUpLoaded) return;
+
+    try {
+      await signIn.authenticateWithRedirect({
+        strategy: "oauth_x",
+        redirectUrl: "/sso-callback",
+        redirectUrlComplete: "/world",
+      });
+    } catch {
+      // If sign-in fails (e.g. no account yet), try sign-up
+      await signUp.authenticateWithRedirect({
+        strategy: "oauth_x",
+        redirectUrl: "/sso-callback",
+        redirectUrlComplete: "/world",
+      });
+    }
   };
 
   if (!userLoaded || isSignedIn) return null;
@@ -44,7 +55,7 @@ export default function LoginPage() {
 
             <button
               onClick={handleSignIn}
-              disabled={!signInLoaded}
+              disabled={!signInLoaded || !signUpLoaded}
               className="login-btn group relative w-full flex items-center justify-center gap-3 px-8 py-4.5 bg-black text-white rounded-2xl font-medium text-lg active:scale-[0.98] transition-all duration-300 shadow-[0_2px_12px_rgba(0,0,0,0.15)] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer overflow-hidden"
             >
               <svg
