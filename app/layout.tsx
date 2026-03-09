@@ -30,7 +30,7 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} ${GeistPixelSquare.variable} antialiased`}
       >
-        <ClerkProvider dynamic signInUrl="/login" signUpUrl="/login" afterSignOutUrl="/login">
+        <ClerkProvider dynamic signInUrl="/login" signUpUrl="/signup" afterSignOutUrl="/login">
           <ConvexClientProvider>{children}</ConvexClientProvider>
         </ClerkProvider>
       </body>
