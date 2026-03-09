@@ -647,62 +647,9 @@ export const run = internalAction({
         }
       }
 
-      // Level 2 (tick 3+): FORCED BUILDING LIQUIDATION — sell cheapest agent building
-      if (consecutiveBankrupt >= 3 && allBuildings.length > 0) {
-        const buildingValues: Record<string, number> = {
-          residential: 800, commercial: 1200, industrial: 1500, office: 1400,
-          civic: 500, entertainment: 1000, luxury: 2500,
-        };
-        // Find cheapest agent building to liquidate
-        const agentBuildings = allBuildings.filter((b) => b.ownerId.startsWith("agent:"));
-        if (agentBuildings.length > 0) {
-          const sorted = [...agentBuildings].sort((a, b) =>
-            (buildingValues[a.category ?? "residential"] ?? 800) - (buildingValues[b.category ?? "residential"] ?? 800)
-          );
-          const victim = sorted[0];
-          const salePrice = buildingValues[victim.category ?? "residential"] ?? 800;
-          newTreasury += salePrice;
-
-          console.log(`[tick ${tickNumber}] FORCED SALE: Building on plot #${victim.plotIndex} sold for $${salePrice}`);
-
-          // Delete the building + reset the plot
-          await ctx.runMutation(internal.simulation._simBuildHelpers.liquidateBuilding, {
-            buildingId: victim._id,
-            plotIndex: victim.plotIndex,
-          });
-
-          // The agent who lost their building is FURIOUS
-          const victimAgent = agents.find((a) => a.plotIndex === victim.plotIndex);
-          if (victimAgent) {
-            await ctx.runMutation(internal.simulation.agents.update, {
-              agentId: victimAgent._id as any,
-              patch: {
-                satisfaction: Math.max(0, victimAgent.satisfaction - 30),
-                loyaltyToMayor: Math.max(-100, victimAgent.loyaltyToMayor - 40),
-                buildingCategory: undefined,
-                memoryBuffer: [...victimAgent.memoryBuffer, `Tick ${tickNumber}: MY BUILDING WAS SEIZED AND SOLD! I am devastated.`].slice(-5),
-              },
-            });
-
-            await ctx.runMutation(internal.simulation.agentMessages.create, {
-              senderPlotIndex: victimAgent.plotIndex,
-              senderName: victimAgent.name,
-              content: `They demolished my ${victim.category ?? "building"}! This mayor must go!`,
-              messageType: "protest" as const,
-              tickNumber,
-            });
-          }
-
-          if (mayor) {
-            await ctx.runMutation(internal.simulation.agentMessages.create, {
-              senderPlotIndex: mayor.plotIndex,
-              senderName: mayor.name,
-              content: `Emergency: Sold ${victimAgent?.name ?? "a citizen"}'s ${victim.category ?? "building"} for $${salePrice}`,
-              messageType: "announcement" as const,
-              tickNumber,
-            });
-          }
-        }
+      // Level 2 (tick 3+): Log bankruptcy warning (no longer liquidates buildings)
+      if (consecutiveBankrupt >= 3) {
+        console.log(`[tick ${tickNumber}] BANKRUPTCY level 2 (${consecutiveBankrupt} ticks) — no liquidation.`);
       }
 
       // Level 3 (tick 5): EMERGENCY ELECTION — mayor gets kicked
